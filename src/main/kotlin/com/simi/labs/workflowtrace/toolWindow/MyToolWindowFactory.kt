@@ -1,4 +1,4 @@
-package com.github.saidake.workflowtrace.toolWindow
+package com.simi.labs.workflowtrace.toolWindow
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
@@ -8,8 +8,8 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
-import com.github.saidake.workflowtrace.MyBundle
-import com.github.saidake.workflowtrace.services.MyProjectService
+import com.simi.labs.workflowtrace.MyBundle
+import com.simi.labs.workflowtrace.services.MyProjectService
 import javax.swing.JButton
 
 

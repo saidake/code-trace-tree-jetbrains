@@ -1,4 +1,4 @@
-package com.github.saidake.workflowtrace
+package com.simi.labs.workflowtrace
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls

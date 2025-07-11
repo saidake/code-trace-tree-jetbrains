@@ -1,9 +1,9 @@
-package com.github.saidake.workflowtrace.services
+package com.simi.labs.workflowtrace.services
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.github.saidake.workflowtrace.MyBundle
+import com.simi.labs.workflowtrace.MyBundle
 
 @Service(Service.Level.PROJECT)
 class MyProjectService(project: Project) {

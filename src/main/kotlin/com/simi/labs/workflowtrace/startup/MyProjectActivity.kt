@@ -1,4 +1,4 @@
-package com.github.saidake.workflowtrace.startup
+package com.simi.labs.workflowtrace.startup
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
