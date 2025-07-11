@@ -33,7 +33,7 @@ class TracePointService(private val project: Project) {
             }
             ApplicationManager.getApplication().invokeLater {
                 try {
-                    file.refresh(false, false) // Refresh file to ensure validity
+                    file.refresh(false, false)
                     FileEditorManager.getInstance(project).openFile(file, true)
                     val editor = FileEditorManager.getInstance(project).selectedTextEditor
                     if (editor == null) {
@@ -69,12 +69,12 @@ class TracePointService(private val project: Project) {
     private val tracePoints = mutableListOf<TracePoint>()
     private val listeners = mutableListOf<(List<TracePoint>) -> Unit>()
     private val highlighters = mutableMapOf<String, com.intellij.openapi.editor.markup.TextAttributes>()
+    private val selectedTracePoints = mutableSetOf<String>() // Track selected trace point IDs
 
     fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor) {
         val tracePoint = TracePoint(UUID.randomUUID().toString(), name, file, lineNumber, project)
         tracePoints.add(tracePoint)
 
-        // Add visual marker
         val textAttributes = com.intellij.openapi.editor.markup.TextAttributes()
         textAttributes.backgroundColor = java.awt.Color.YELLOW
         editor.markupModel.addLineHighlighter(lineNumber - 1, HighlighterLayer.WARNING, textAttributes)
@@ -89,6 +89,37 @@ class TracePointService(private val project: Project) {
     fun addTracePointListener(listener: (List<TracePoint>) -> Unit) {
         listeners.add(listener)
         listener(tracePoints)
+    }
+
+    fun selectTracePoint(tracePointId: String, isSelected: Boolean) {
+        if (isSelected) {
+            selectedTracePoints.add(tracePointId)
+        } else {
+            selectedTracePoints.remove(tracePointId)
+        }
+        notifyListeners()
+    }
+
+    fun selectTracePoints(tracePointIds: List<String>) {
+        selectedTracePoints.clear()
+        selectedTracePoints.addAll(tracePointIds)
+        notifyListeners()
+    }
+
+    fun toggleTracePointSelection(tracePointId: String) {
+        if (selectedTracePoints.contains(tracePointId)) {
+            selectedTracePoints.remove(tracePointId)
+        } else {
+            selectedTracePoints.add(tracePointId)
+        }
+        notifyListeners()
+    }
+
+    fun isTracePointSelected(tracePointId: String): Boolean = selectedTracePoints.contains(tracePointId)
+
+    fun clearSelectedTracePoints() {
+        selectedTracePoints.clear()
+        notifyListeners()
     }
 
     private fun notifyListeners() {
