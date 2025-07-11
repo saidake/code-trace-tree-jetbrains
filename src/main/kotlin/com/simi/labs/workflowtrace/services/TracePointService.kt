@@ -1,7 +1,10 @@
 package com.simi.labs.workflowtrace.services
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -23,13 +26,43 @@ class TracePointService(private val project: Project) {
     ) {
         val fileName: String get() = file.name
         fun navigateTo() {
-            FileEditorManager.getInstance(project).openFile(file, true)
-            val editor = FileEditorManager.getInstance(project).selectedTextEditor
-            val psiFile = PsiManager.getInstance(project).findFile(file)
-            editor?.caretModel?.moveToOffset(
-                psiFile?.let { PsiDocumentManager.getInstance(project).getDocument(it) }
-                    ?.getLineStartOffset(lineNumber - 1) ?: 0
-            )
+            thisLogger().info("Navigating to trace point: $name in ${file.name} at line $lineNumber")
+            if (!file.isValid) {
+                thisLogger().warn("VirtualFile is invalid: ${file.name}")
+                return
+            }
+            ApplicationManager.getApplication().invokeLater {
+                try {
+                    file.refresh(false, false) // Refresh file to ensure validity
+                    FileEditorManager.getInstance(project).openFile(file, true)
+                    val editor = FileEditorManager.getInstance(project).selectedTextEditor
+                    if (editor == null) {
+                        thisLogger().warn("No editor found for file: ${file.name}")
+                        return@invokeLater
+                    }
+                    val psiFile = PsiManager.getInstance(project).findFile(file)
+                    if (psiFile == null) {
+                        thisLogger().warn("PsiFile not found for: ${file.name}")
+                        return@invokeLater
+                    }
+                    val document = PsiDocumentManager.getInstance(project).getDocument(psiFile)
+                    if (document == null) {
+                        thisLogger().warn("Document not found for PsiFile: ${file.name}")
+                        return@invokeLater
+                    }
+                    val lineCount = document.lineCount
+                    if (lineNumber < 1 || lineNumber > lineCount) {
+                        thisLogger().warn("Invalid line number $lineNumber for file ${file.name} (line count: $lineCount)")
+                        return@invokeLater
+                    }
+                    val offset = document.getLineStartOffset(lineNumber - 1)
+                    editor.caretModel.moveToOffset(offset)
+                    editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+                    thisLogger().info("Navigation successful to offset $offset in ${file.name}")
+                } catch (e: Exception) {
+                    thisLogger().error("Error navigating to trace point: ${e.message}", e)
+                }
+            }
         }
     }
 
@@ -47,6 +80,7 @@ class TracePointService(private val project: Project) {
         editor.markupModel.addLineHighlighter(lineNumber - 1, HighlighterLayer.WARNING, textAttributes)
         highlighters[tracePoint.id] = textAttributes
 
+        thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber")
         notifyListeners()
     }
 
