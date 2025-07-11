@@ -1,4 +1,4 @@
-<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<!-- Plugin Configuration File -->
 <idea-plugin>
     <id>com.simi.labs.workflowtrace</id>
     <name>workflow-trace</name>
@@ -17,7 +17,15 @@
                 canCloseContent="false"
                 sideTool="false"
         />
-
         <postStartupActivity implementation="com.simi.labs.workflowtrace.startup.MyProjectActivity" />
     </extensions>
+
+    <actions>
+        <action id="com.simi.labs.workflowtrace.CreateTracePointAction"
+                class="com.simi.labs.workflowtrace.actions.CreateTracePointAction"
+                text="Create a workflow trace point"
+                description="Creates a workflow trace point at the current line">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>
