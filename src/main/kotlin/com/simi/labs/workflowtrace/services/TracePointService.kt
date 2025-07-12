@@ -115,6 +115,42 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
+    fun updateTracePoints(tracePointIdNamePairs: List<Pair<String, String>>, newFile: VirtualFile, newLineNumber: Int, editor: Editor) {
+        tracePointIdNamePairs.forEach { (id, name) ->
+            val tracePoint = tracePoints.find { it.id == id }
+            if (tracePoint != null) {
+                // Remove old highlighter
+                highlighters[id]?.let { highlighter ->
+                    val psiFile = PsiManager.getInstance(project).findFile(tracePoint.file)
+                    if (psiFile != null) {
+                        val document = PsiDocumentManager.getInstance(project).getDocument(psiFile)
+                        if (document != null) {
+                            FileEditorManager.getInstance(project).openTextEditor(
+                                com.intellij.openapi.fileEditor.OpenFileDescriptor(project, tracePoint.file), false
+                            )?.let { openEditor ->
+                                openEditor.markupModel.removeHighlighter(highlighter)
+                            }
+                        }
+                    }
+                    highlighters.remove(id)
+                }
+                // Update trace point
+                val newTracePoint = TracePoint(tracePoint.id, name, newFile, newLineNumber, project)
+                val index = tracePoints.indexOf(tracePoint)
+                tracePoints[index] = newTracePoint
+                // Add new highlighter
+                val textAttributes = TextAttributes()
+                textAttributes.backgroundColor = Color.YELLOW
+                val highlighter = editor.markupModel.addLineHighlighter(newLineNumber - 1, HighlighterLayer.WARNING, textAttributes)
+                highlighters[id] = highlighter
+                thisLogger().info("Updated trace point ${tracePoint.id} to $name in ${newFile.name} at line $newLineNumber")
+            } else {
+                thisLogger().warn("Trace point with ID $id not found for updating")
+            }
+        }
+        notifyListeners()
+    }
+
     fun deleteTracePoints(tracePointIds: List<String>) {
         tracePointIds.forEach { id ->
             val tracePoint = tracePoints.find { it.id == id }
@@ -209,7 +245,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             if (file != null && file.isValid) {
                 val tracePoint = TracePoint(data.id, data.name, file, data.lineNumber, project)
                 tracePoints.add(tracePoint)
-                // Reapply highlighter when editor is opened
                 ApplicationManager.getApplication().invokeLater {
                     val psiFile = PsiManager.getInstance(project).findFile(file)
                     if (psiFile != null) {
