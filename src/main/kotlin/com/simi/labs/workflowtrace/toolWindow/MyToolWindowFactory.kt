@@ -16,8 +16,12 @@ import java.awt.event.MouseEvent
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
+import javax.swing.JPopupMenu
+import javax.swing.JMenuItem
+import javax.swing.JTree
 import java.util.*
-import javax.swing.*
+import javax.swing.JComponent
+import javax.swing.TransferHandler
 
 class MyToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -76,9 +80,10 @@ class MyToolWindowFactory : ToolWindowFactory {
                 override fun canImport(support: TransferSupport): Boolean {
                     if (!support.isDrop || !support.isDataFlavorSupported(DataFlavor.stringFlavor)) return false
                     val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
-                    val dropNode = dropLocation.path?.lastPathComponent as? DefaultMutableTreeNode ?: return false
+                    val dropPath = dropLocation.path ?: return false
+                    val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                     val draggedTracePoint = draggedNode?.userObject as? TracePointService.TracePoint ?: return false
-                    val dropTracePoint = (dropNode.userObject as? TracePointService.TracePoint)
+                    val dropTracePoint = dropNode.userObject as? TracePointService.TracePoint
                     // Prevent dropping a node onto itself or its own descendants
                     if (dropTracePoint?.id == draggedTracePoint.id) return false
                     var node: DefaultMutableTreeNode? = dropNode
@@ -99,36 +104,80 @@ class MyToolWindowFactory : ToolWindowFactory {
                     val tracePointId = transferable.getTransferData(DataFlavor.stringFlavor) as String
                     val draggedTracePoint = service.getTracePoints().find { it.id == tracePointId } ?: return false
                     val draggedNode = findNodeByTracePointId(tracePointId) ?: return false
+                    val tree = support.component as? JTree ?: return false
 
                     try {
-                        // Compute insertion index
-                        val parentNode = if (dropNode.userObject is TracePointService.TracePoint) dropNode else dropNode.parent as? DefaultMutableTreeNode ?: rootNode
-                        val dropIndex = if (dropNode == parentNode) {
-                            parentNode.childCount
+                        // Determine if dropped on a node (make child) or between nodes (replace divider)
+                        val dropY = dropLocation.dropPoint.y
+                        val row = tree.getRowForPath(dropPath)
+                        val bounds = tree.getRowBounds(row)
+                        val isDropOnNode = if (bounds != null) {
+                            // Consider drop on node if within the middle 50% of node height
+                            val nodeHeight = bounds.height
+                            val relativeY = dropY - bounds.y
+                            relativeY >= nodeHeight * 0.25 && relativeY <= nodeHeight * 0.75
                         } else {
-                            val parent = dropNode.parent as? DefaultMutableTreeNode
-                            parent?.getIndex(dropNode)?.plus(1) ?: parentNode.childCount
+                            true // Default to on-node if bounds unavailable
                         }
-                        // Remove from current parent
+
+                        val parentNode: DefaultMutableTreeNode
+                        val dropIndex: Int
+                        val newParentId: String?
+
+                        if (isDropOnNode && dropNode.userObject is TracePointService.TracePoint) {
+                            // Dropped on a node: make dragged node a child of drop node
+                            parentNode = dropNode
+                            dropIndex = parentNode.childCount // Append as last child
+                            newParentId = (dropNode.userObject as TracePointService.TracePoint).id
+                        } else {
+                            // Dropped between nodes (on a divider)
+                            parentNode = if (dropNode.userObject is TracePointService.TracePoint) {
+                                dropNode.parent as? DefaultMutableTreeNode ?: rootNode
+                            } else {
+                                rootNode
+                            }
+                            dropIndex = if (dropNode.userObject is TracePointService.TracePoint) {
+                                val parentIndex = parentNode.getIndex(dropNode)
+                                if (bounds != null && dropY > bounds.y + bounds.height / 2) {
+                                    parentIndex + 1 // Insert after drop node
+                                } else {
+                                    parentIndex // Insert at drop node position
+                                }
+                            } else {
+                                parentNode.childCount // Append to end if dropped on root
+                            }
+                            newParentId = (parentNode.userObject as? TracePointService.TracePoint)?.id
+                        }
+
+                        // Remove dragged node from its current parent
                         (draggedNode.parent as? DefaultMutableTreeNode)?.remove(draggedNode)
-                        // Insert at new location
+
+                        // Insert dragged node at the new position
                         parentNode.insert(draggedNode, dropIndex)
-                        // Update parentId in TracePoint
-                        val newParentId = (parentNode.userObject as? TracePointService.TracePoint)?.id
-                        val newTracePoint = draggedTracePoint.copy(parentId = newParentId)
-                        val index = service.getTracePoints().indexOf(draggedTracePoint)
-                        if (index != -1) {
-                            val tracePoints = service.getTracePoints().toMutableList()
-                            tracePoints[index] = newTracePoint
-                            service.reorderTracePoints(tracePoints.map { it.id })
+
+                        // Update TracePoint parentId and order in the service
+                        val updatedTracePoints = mutableListOf<TracePointService.TracePoint>()
+                        traverseNodes(rootNode) { node ->
+                            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                            if (tracePoint != null) {
+                                val currentParentId = if (node.parent == rootNode) null else (node.parent as? DefaultMutableTreeNode)?.userObject?.let { it as? TracePointService.TracePoint }?.id
+                                updatedTracePoints.add(tracePoint.copy(parentId = currentParentId))
+                            }
+                            true
                         }
+
+                        // Update the service with the new order and parent relationships
+                        service.reorderTracePoints(updatedTracePoints.map { it.id })
+
+                        // Reload the tree model to reflect changes
                         treeModel.reload()
-                        // Update selection
+
+                        // Update selection to the dragged node
                         selectionPath = TreePath(draggedNode.path)
-                        thisLogger().info("Reordered trace point ${draggedTracePoint.name} to parent ${newParentId ?: "root"} at index $dropIndex")
+                        thisLogger().info("Moved trace point ${draggedTracePoint.name} to parent ${newParentId ?: "root"} at index $dropIndex (on node: $isDropOnNode)")
                         return true
                     } catch (e: Exception) {
-                        thisLogger().warn("Failed to reorder trace point: ${e.message}", e)
+                        thisLogger().warn("Failed to move trace point: ${e.message}", e)
                         return false
                     }
                 }

@@ -37,7 +37,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val project: Project,
         val lineContent: String,
         var isValid: Boolean = true,
-        // Adding parentId to support hierarchical structure
         val parentId: String? = null
     ) {
         val fileName: String get() = file.name
@@ -93,7 +92,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Attribute var filePath: String = "",
         @Attribute var lineNumber: Int = 0,
         @Attribute var lineContent: String = "",
-        // Adding parentId for persistence
         @Attribute var parentId: String? = null
     )
 
@@ -289,7 +287,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     }
                     highlighters.remove(id)
                 }
-                // Preserve parentId during update
                 val newTracePoint = TracePoint(tracePoint.id, name, newFile, newLineNumber, project, lineContent, parentId = tracePoint.parentId)
                 val index = tracePoints.indexOf(tracePoint)
                 tracePoints[index] = newTracePoint
@@ -332,17 +329,27 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 thisLogger().info("Deleted trace point: ${tracePoint.name} in ${tracePoint.fileName}")
             }
         }
-        // Remove trace points and their children
         tracePoints.removeIf { tracePointIds.contains(it.id) || tracePointIds.contains(it.parentId) }
         selectedTracePoints.removeAll(tracePointIds)
         notifyListeners()
     }
 
     fun reorderTracePoints(orderedIds: List<String>) {
+        // Create a map of trace points by ID for quick lookup
+        val tracePointMap = tracePoints.associateBy { it.id }.toMutableMap()
         val newTracePoints = mutableListOf<TracePoint>()
+
+        // Rebuild tracePoints list based on orderedIds, preserving parentId
         orderedIds.forEach { id ->
-            tracePoints.find { it.id == id }?.let { newTracePoints.add(it) }
+            tracePointMap[id]?.let { tracePoint ->
+                newTracePoints.add(tracePoint)
+                tracePointMap.remove(id) // Remove processed trace points
+            }
         }
+
+        // Add any remaining trace points (in case orderedIds is incomplete)
+        newTracePoints.addAll(tracePointMap.values)
+
         if (newTracePoints.size == tracePoints.size) {
             tracePoints.clear()
             tracePoints.addAll(newTracePoints)
