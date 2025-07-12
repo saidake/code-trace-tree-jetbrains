@@ -8,7 +8,10 @@ import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreeCellRenderer
 
-class TracePointTreeRenderer(private val service: TracePointService) : TreeCellRenderer {
+class TracePointTreeRenderer(
+    private val service: TracePointService,
+    private val myToolWindow: MyToolWindowFactory.MyToolWindow
+) : TreeCellRenderer {
     override fun getTreeCellRendererComponent(
         tree: JTree,
         value: Any?,
@@ -54,10 +57,44 @@ class TracePointTreeRenderer(private val service: TracePointService) : TreeCellR
         }
         label.isOpaque = true
 
-        // Add dividers: top divider for first visible node, bottom divider for last visible node, and between all nodes
+        // Get highlight state from MyToolWindow
+        val highlightedPath = myToolWindow.getHighlightedPath()
+        val isHighlightOnDivider = myToolWindow.isHighlightOnDivider()
+        val isHighlightedNode = highlightedPath?.lastPathComponent == node && !isHighlightOnDivider
+
+        // Add dividers and highlight
         panel.border = object : javax.swing.border.Border {
             override fun paintBorder(c: Component, g: Graphics, x: Int, y: Int, width: Int, height: Int) {
                 val g2d = g as Graphics2D
+                // Draw highlight if this node or divider is highlighted
+                if (isHighlightedNode) {
+                    g2d.color = Color(0, 153, 255) // Bright blue for node highlight
+                    g2d.stroke = BasicStroke(2f)
+                    g2d.drawRect(x, y, width - 1, height - 1)
+                } else if (isHighlightOnDivider && highlightedPath?.lastPathComponent == node) {
+                    // Highlight divider above or below based on drop position
+                    val dropPoint = myToolWindow.getDropPoint()
+                    val dropY = if (dropPoint != null) {
+                        val bounds = tree.getRowBounds(row)
+                        if (bounds != null) {
+                            val relativeY = dropPoint.y - bounds.y
+                            val nodeHeight = bounds.height
+                            relativeY < nodeHeight * 0.25 // Top divider if in top 25%
+                        } else {
+                            true // Default to top divider
+                        }
+                    } else {
+                        true // Default to top divider
+                    }
+                    g2d.color = Color(0, 153, 255) // Bright blue for divider highlight
+                    g2d.stroke = BasicStroke(2f)
+                    if (dropY) {
+                        g2d.drawLine(x, y, x + width, y) // Highlight top divider
+                    } else {
+                        g2d.drawLine(x, y + height - 1, x + width, y + height - 1) // Highlight bottom divider
+                    }
+                }
+                // Draw regular dividers
                 g2d.color = Color.GRAY
                 g2d.stroke = BasicStroke(1f)
 
@@ -74,9 +111,11 @@ class TracePointTreeRenderer(private val service: TracePointService) : TreeCellR
                     g2d.drawLine(x, y + height - 1, x + width, y + height - 1)
                 }
             }
+
             override fun getBorderInsets(c: Component): Insets = Insets(2, 0, 2, 0)
             override fun isBorderOpaque(): Boolean = true
         }
+
 
         panel.add(label, BorderLayout.CENTER)
         return panel

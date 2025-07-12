@@ -13,6 +13,7 @@ import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.Point
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
@@ -36,12 +37,15 @@ class MyToolWindowFactory : ToolWindowFactory {
         private val service = toolWindow.project.service<TracePointService>()
         private val treeModel = DefaultTreeModel(DefaultMutableTreeNode("Root"))
         private val rootNode get() = treeModel.root as DefaultMutableTreeNode
+        private var highlightedPath: TreePath? = null
+        private var isHighlightOnDivider: Boolean = false
+        private var dropPoint: Point? = null
 
         fun getContent() = Tree(treeModel).apply {
             isRootVisible = false
             selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
             service.addTracePointListener { tracePoints ->
-                thisLogger().info("Updating tool window with ${tracePoints.size} trace points")
+                println("Updating tool window with ${tracePoints.size} trace points")
                 updateTreeModel(tracePoints)
                 // Restore selection
                 val selectedIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
@@ -57,7 +61,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     selectionPaths = selectedPaths.toTypedArray()
                 }
             }
-            cellRenderer = TracePointTreeRenderer(service)
+            cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
             isEditable = false
             dragEnabled = true
             transferHandler = object : TransferHandler() {
@@ -92,6 +96,26 @@ class MyToolWindowFactory : ToolWindowFactory {
                         if (nodeTracePoint?.id == draggedTracePoint.id) return false
                         node = node.parent as? DefaultMutableTreeNode
                     }
+
+                    // Update highlight for drag-over feedback
+                    val tree = support.component as? JTree ?: return false
+                    val dropY = dropLocation.dropPoint.y
+                    val row = tree.getRowForPath(dropPath)
+                    val bounds = tree.getRowBounds(row)
+                    val newIsHighlightOnDivider = if (bounds != null) {
+                        val nodeHeight = bounds.height
+                        val relativeY = dropY - bounds.y
+                        !(relativeY >= nodeHeight * 0.25 && relativeY <= nodeHeight * 0.75)
+                    } else {
+                        false
+                    }
+                    if (highlightedPath != dropPath || isHighlightOnDivider != newIsHighlightOnDivider || dropPoint != dropLocation.dropPoint) {
+                        highlightedPath = dropPath
+                        isHighlightOnDivider = newIsHighlightOnDivider
+                        dropPoint = dropLocation.dropPoint
+                        tree.repaint()
+                    }
+
                     return true
                 }
 
@@ -120,6 +144,12 @@ class MyToolWindowFactory : ToolWindowFactory {
                             true // Default to on-node if bounds unavailable
                         }
 
+                        // Clear highlight after drop
+                        highlightedPath = null
+                        isHighlightOnDivider = false
+                        dropPoint = null
+                        tree.repaint()
+
                         val parentNode: DefaultMutableTreeNode
                         val dropIndex: Int
                         val newParentId: String?
@@ -136,9 +166,9 @@ class MyToolWindowFactory : ToolWindowFactory {
                             } else {
                                 rootNode
                             }
-                            dropIndex = if (dropNode.userObject is TracePointService.TracePoint) {
+                            dropIndex = if (bounds != null && dropNode.userObject is TracePointService.TracePoint) {
                                 val parentIndex = parentNode.getIndex(dropNode)
-                                if (bounds != null && dropY > bounds.y + bounds.height / 2) {
+                                if (dropY > bounds.y + bounds.height / 2) {
                                     parentIndex + 1 // Insert after drop node
                                 } else {
                                     parentIndex // Insert at drop node position
@@ -174,7 +204,7 @@ class MyToolWindowFactory : ToolWindowFactory {
 
                         // Update selection to the dragged node
                         selectionPath = TreePath(draggedNode.path)
-                        thisLogger().info("Moved trace point ${draggedTracePoint.name} to parent ${newParentId ?: "root"} at index $dropIndex (on node: $isDropOnNode)")
+                        println("Moved trace point ${draggedTracePoint.name} to parent ${newParentId ?: "root"} at index $dropIndex (on node: $isDropOnNode)")
                         return true
                     } catch (e: Exception) {
                         thisLogger().warn("Failed to move trace point: ${e.message}", e)
@@ -188,7 +218,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     val path = tree.getPathForLocation(e.x, e.y) ?: return
                     val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                     val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
-                    thisLogger().info("Mouse clicked on trace point: ${tracePoint.name} in ${tracePoint.fileName} at line ${tracePoint.lineNumber}")
+                    println("Mouse clicked on trace point: ${tracePoint.name} in ${tracePoint.fileName} at line ${tracePoint.lineNumber}")
 
                     if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
                         if (e.isShiftDown) {
@@ -231,7 +261,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                             service.selectTracePoints(listOf(tracePoint.id))
                         }
                     } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
-                        thisLogger().info("Double-clicked trace point: ${tracePoint.name}")
+                        println("Double-clicked trace point: ${tracePoint.name}")
                         tracePoint.navigateTo()
                         service.selectTracePoints(listOf(tracePoint.id))
                     }
@@ -310,6 +340,10 @@ class MyToolWindowFactory : ToolWindowFactory {
                 }
             })
         }
+
+        fun getHighlightedPath(): TreePath? = highlightedPath
+        fun isHighlightOnDivider(): Boolean = isHighlightOnDivider
+        fun getDropPoint(): Point? = dropPoint
 
         private fun updateTreeModel(tracePoints: List<TracePointService.TracePoint>) {
             rootNode.removeAllChildren()

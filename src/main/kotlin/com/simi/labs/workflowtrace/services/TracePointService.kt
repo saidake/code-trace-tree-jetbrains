@@ -41,7 +41,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     ) {
         val fileName: String get() = file.name
         fun navigateTo() {
-            thisLogger().info("Navigating to trace point: $name in ${file.name} at line $lineNumber")
+            println("Navigating to trace point: $name in ${file.name} at line $lineNumber")
             if (!file.isValid) {
                 thisLogger().warn("VirtualFile is invalid: ${file.name}")
                 return
@@ -73,7 +73,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     val offset = document.getLineStartOffset(lineNumber - 1)
                     editor.caretModel.moveToOffset(offset)
                     editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
-                    thisLogger().info("Navigation successful to offset $offset in ${file.name}")
+                    println("Navigation successful to offset $offset in ${file.name}")
                 } catch (e: Exception) {
                     thisLogger().error("Error navigating to trace point: ${e.message}", e)
                 }
@@ -125,7 +125,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             }
         })
         monitoredDocuments[file] = document
-        thisLogger().info("Added document listener for file: ${file.name}")
+        println("Added document listener for file: ${file.name}")
     }
 
     private fun updateTracePointsForFile(file: VirtualFile) {
@@ -168,7 +168,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                     highlighters[tracePoint.id] = newHighlighter
                                 }
                             }
-                            thisLogger().info("Updated line number for trace point ${tracePoint.name} to ${matchingLines[0]} in ${file.name}")
+                            println("Updated line number for trace point ${tracePoint.name} to ${matchingLines[0]} in ${file.name}")
                         }
                         else -> {
                             val newTracePoint = tracePoint.copy(isValid = false)
@@ -202,7 +202,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                 highlighters[tracePoint.id] = highlighter
                             }
                         }
-                        thisLogger().info("Restored validity for trace point ${tracePoint.name} in ${file.name}")
+                        println("Restored validity for trace point ${tracePoint.name} in ${file.name}")
                     }
                 }
             } else {
@@ -246,7 +246,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             }
         }
 
-        thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber with content '$lineContent' and parentId $parentId")
+        println("Added trace point: $name in ${file.name} at line $lineNumber with content '$lineContent' and parentId $parentId")
         notifyListeners()
     }
 
@@ -254,7 +254,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val tracePoint = tracePoints.find { it.id == tracePointId }
         if (tracePoint != null) {
             tracePoint.name = newName
-            thisLogger().info("Renamed trace point ${tracePoint.id} to $newName")
+            println("Renamed trace point ${tracePoint.id} to $newName")
             notifyListeners()
         } else {
             thisLogger().warn("Trace point with ID $tracePointId not found for renaming")
@@ -300,7 +300,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         setupDocumentListener(newFile, doc)
                     }
                 }
-                thisLogger().info("Updated trace point ${tracePoint.id} to $name in ${newFile.name} at line $newLineNumber with content '$lineContent'")
+                println("Updated trace point ${tracePoint.id} to $name in ${newFile.name} at line $newLineNumber with content '$lineContent'")
             } else {
                 thisLogger().warn("Trace point with ID $id not found for updating")
             }
@@ -326,7 +326,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     }
                 }
                 highlighters.remove(id)
-                thisLogger().info("Deleted trace point: ${tracePoint.name} in ${tracePoint.fileName}")
+                println("Deleted trace point: ${tracePoint.name} in ${tracePoint.fileName}")
             }
         }
         tracePoints.removeIf { tracePointIds.contains(it.id) || tracePointIds.contains(it.parentId) }
@@ -353,7 +353,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         if (newTracePoints.size == tracePoints.size) {
             tracePoints.clear()
             tracePoints.addAll(newTracePoints)
-            thisLogger().info("Reordered trace points: ${orderedIds.joinToString()}")
+            println("Reordered trace points: ${orderedIds.joinToString()}")
             notifyListeners()
         } else {
             thisLogger().warn("Failed to reorder trace points: invalid IDs provided")
@@ -416,7 +416,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 )
             )
         }
-        thisLogger().info("Saving state with ${state.tracePoints.size} trace points")
+        println("Saving state with ${state.tracePoints.size} trace points")
         return state
     }
 
@@ -452,7 +452,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                 when (matchingLines.size) {
                                     1 -> {
                                         lineNumber = matchingLines[0]
-                                        thisLogger().info("Updated line number for trace point ${data.name} to $lineNumber in ${file.name}")
+                                        println("Updated line number for trace point ${data.name} to $lineNumber in ${file.name}")
                                     }
                                     else -> {
                                         isValid = false
@@ -501,7 +501,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 thisLogger().warn("Failed to load trace point: ${data.name}, file not found: ${data.filePath}")
             }
         }
-        thisLogger().info("Loaded state with ${tracePoints.size} trace points")
+        println("Loaded state with ${tracePoints.size} trace points")
         notifyListeners()
     }
 }
