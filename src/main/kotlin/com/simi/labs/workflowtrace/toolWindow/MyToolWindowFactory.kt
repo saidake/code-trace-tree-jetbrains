@@ -52,6 +52,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private var highlightedPath: TreePath? = null
         private var isUpdatingTree = false
         private lateinit var tree: JTree
+        private var anchorPath: TreePath? = null // Fixed anchor for Shift selection
 
         fun getContent(): JComponent {
             tree = Tree(treeModel).apply {
@@ -206,31 +207,28 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             // Handle selection
                             val selectedIds = mutableListOf<String>()
                             if (e.isShiftDown) {
-                                val selectedPaths = tree.selectionPaths?.toList() ?: emptyList()
-                                if (selectedPaths.isNotEmpty()) {
+                                // Mimic Project view Shift selection: select all visible nodes between anchor and clicked node
+                                val currentRow = tree.getRowForPath(path)
+                                val anchor = anchorPath ?: tree.selectionPaths?.firstOrNull()
+                                if (anchor != null) {
+                                    val anchorRow = tree.getRowForPath(anchor)
+                                    val startRow = minOf(anchorRow, currentRow)
+                                    val endRow = maxOf(anchorRow, currentRow)
                                     val newSelectedPaths = mutableListOf<TreePath>()
-                                    val paths = mutableListOf<TreePath>()
-                                    traverseNodes(rootNode) { node ->
-                                        if ((node as? DefaultMutableTreeNode)?.userObject is TracePointService.TracePoint) {
-                                            paths.add(TreePath(node.path))
-                                        }
-                                        true
-                                    }
-                                    val startIndex = paths.indexOfFirst { it.lastPathComponent == selectedPaths.minByOrNull { paths.indexOf(it) }?.lastPathComponent }
-                                    val endIndex = paths.indexOf(path)
-                                    val rangeStart = minOf(startIndex, endIndex)
-                                    val rangeEnd = maxOf(startIndex, endIndex)
-                                    for (i in rangeStart..rangeEnd) {
-                                        val p = paths.getOrNull(i) ?: continue
-                                        if ((p.lastPathComponent as? DefaultMutableTreeNode)?.userObject is TracePointService.TracePoint) {
-                                            newSelectedPaths.add(p)
+                                    for (row in startRow..endRow) {
+                                        val rowPath = tree.getPathForRow(row) ?: continue
+                                        val rowNode = rowPath.lastPathComponent as? DefaultMutableTreeNode ?: continue
+                                        if (rowNode.userObject is TracePointService.TracePoint) {
+                                            newSelectedPaths.add(rowPath)
                                         }
                                     }
                                     tree.selectionPaths = newSelectedPaths.toTypedArray()
                                     selectedIds.addAll(newSelectedPaths.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }.map { it.id })
                                 } else {
+                                    // No anchor, set as anchor and select single node
                                     tree.selectionPath = path
                                     selectedIds.add(tracePoint.id)
+                                    anchorPath = path
                                 }
                             } else if (e.isControlDown) {
                                 if (tree.isPathSelected(path)) {
@@ -242,9 +240,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     service.toggleTracePointSelection(tracePoint.id)
                                     selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }?.map { it.id } ?: emptyList())
                                 }
+                                anchorPath = null // Reset anchor on Control-click
                             } else {
                                 tree.selectionPath = path
                                 selectedIds.add(tracePoint.id)
+                                anchorPath = path // Set anchor on single click
                             }
                             isUpdatingTree = true
                             service.selectTracePoints(selectedIds)
@@ -255,6 +255,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             isUpdatingTree = true
                             service.selectTracePoints(listOf(tracePoint.id))
                             isUpdatingTree = false
+                            anchorPath = path // Set anchor on double-click
                         }
                     }
 
@@ -280,6 +281,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             isUpdatingTree = true
                             service.selectTracePoints(listOf(tracePoint.id))
                             isUpdatingTree = false
+                            anchorPath = path // Set anchor on popup selection
                         }
                         val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint } ?: emptyList()
                         val popupMenu = JPopupMenu()
@@ -430,9 +432,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
         private fun updateTreeModel(tracePoints: List<TracePointService.TracePoint>, tree: JTree, expandedIds: List<String>) {
             isUpdatingTree = true
-            // Store current selection
             val selectedIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
-            // Build new tree
             rootNode.removeAllChildren()
             val nodeMap = mutableMapOf<String, DefaultMutableTreeNode>()
             tracePoints.forEach { tracePoint ->
@@ -454,7 +454,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
             }
             treeModel.reload()
-            // Restore expanded state
             val pathsToExpand = mutableSetOf<TreePath>()
             traverseNodes(rootNode) { node ->
                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
@@ -466,13 +465,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             pathsToExpand.forEach { path ->
                 tree.expandPath(path)
             }
-            // Restore selection
             val selectedPaths = mutableListOf<TreePath>()
             traverseNodes(rootNode) { node ->
                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
                 if (tracePoint != null && selectedIds.contains(tracePoint.id)) {
                     val nodePath = TreePath(node.path)
-                    if (tree.isVisible(nodePath)) { // Only select visible nodes
+                    if (tree.isVisible(nodePath)) {
                         selectedPaths.add(nodePath)
                     }
                 }
