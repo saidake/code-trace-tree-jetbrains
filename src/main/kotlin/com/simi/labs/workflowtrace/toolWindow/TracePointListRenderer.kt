@@ -4,6 +4,7 @@ import com.intellij.ui.components.JBList
 import com.simi.labs.workflowtrace.services.TracePointService
 import java.awt.Color
 import java.awt.Component
+import java.awt.Font
 import javax.swing.JLabel
 import javax.swing.JList
 import javax.swing.ListCellRenderer
@@ -25,6 +26,12 @@ class TracePointListRenderer(private val service: TracePointService) : ListCellR
         } else {
             label.background = list.background
             label.foreground = list.foreground
+        }
+        // Apply strikethrough for invalid trace points
+        if (!value.isValid) {
+            val font = label.font
+            label.font = font.deriveFont(font.style or Font.ITALIC)
+            label.text = "<html><strike>${label.text}</strike></html>"
         }
         label.isOpaque = true
         return label

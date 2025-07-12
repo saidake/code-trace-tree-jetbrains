@@ -29,8 +29,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val id: String,
         var name: String,
         val file: VirtualFile,
-        val lineNumber: Int,
-        val project: Project
+        var lineNumber: Int,
+        val project: Project,
+        val lineContent: String,
+        var isValid: Boolean = true
     ) {
         val fileName: String get() = file.name
         fun navigateTo() {
@@ -83,7 +85,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Attribute var id: String = "",
         @Attribute var name: String = "",
         @Attribute var filePath: String = "",
-        @Attribute var lineNumber: Int = 0
+        @Attribute var lineNumber: Int = 0,
+        @Attribute var lineContent: String = ""
     )
 
     private val tracePoints = mutableListOf<TracePoint>()
@@ -92,7 +95,15 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val selectedTracePoints = mutableSetOf<String>()
 
     fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor) {
-        val tracePoint = TracePoint(UUID.randomUUID().toString(), name, file, lineNumber, project)
+        val document = editor.document
+        val lineContent = if (lineNumber <= document.lineCount) {
+            val lineStartOffset = document.getLineStartOffset(lineNumber - 1)
+            val lineEndOffset = document.getLineEndOffset(lineNumber - 1)
+            document.getText(com.intellij.openapi.util.TextRange(lineStartOffset, lineEndOffset)).trimEnd()
+        } else {
+            ""
+        }
+        val tracePoint = TracePoint(UUID.randomUUID().toString(), name, file, lineNumber, project, lineContent)
         tracePoints.add(tracePoint)
 
         val textAttributes = TextAttributes()
@@ -100,7 +111,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val highlighter = editor.markupModel.addLineHighlighter(lineNumber - 1, HighlighterLayer.WARNING, textAttributes)
         highlighters[tracePoint.id] = highlighter
 
-        thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber")
+        thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber with content '$lineContent'")
         notifyListeners()
     }
 
@@ -116,6 +127,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     fun updateTracePoints(tracePointIdNamePairs: List<Pair<String, String>>, newFile: VirtualFile, newLineNumber: Int, editor: Editor) {
+        val document = editor.document
+        val lineContent = if (newLineNumber <= document.lineCount) {
+            val lineStartOffset = document.getLineStartOffset(newLineNumber - 1)
+            val lineEndOffset = document.getLineEndOffset(newLineNumber - 1)
+            document.getText(com.intellij.openapi.util.TextRange(lineStartOffset, lineEndOffset)).trimEnd()
+        } else {
+            ""
+        }
         tracePointIdNamePairs.forEach { (id, name) ->
             val tracePoint = tracePoints.find { it.id == id }
             if (tracePoint != null) {
@@ -135,7 +154,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     highlighters.remove(id)
                 }
                 // Update trace point
-                val newTracePoint = TracePoint(tracePoint.id, name, newFile, newLineNumber, project)
+                val newTracePoint = TracePoint(tracePoint.id, name, newFile, newLineNumber, project, lineContent)
                 val index = tracePoints.indexOf(tracePoint)
                 tracePoints[index] = newTracePoint
                 // Add new highlighter
@@ -143,7 +162,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 textAttributes.backgroundColor = Color.YELLOW
                 val highlighter = editor.markupModel.addLineHighlighter(newLineNumber - 1, HighlighterLayer.WARNING, textAttributes)
                 highlighters[id] = highlighter
-                thisLogger().info("Updated trace point ${tracePoint.id} to $name in ${newFile.name} at line $newLineNumber")
+                thisLogger().info("Updated trace point ${tracePoint.id} to $name in ${newFile.name} at line $newLineNumber with content '$lineContent'")
             } else {
                 thisLogger().warn("Trace point with ID $id not found for updating")
             }
@@ -242,7 +261,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     id = tracePoint.id,
                     name = tracePoint.name,
                     filePath = tracePoint.file.path,
-                    lineNumber = tracePoint.lineNumber
+                    lineNumber = tracePoint.lineNumber,
+                    lineContent = tracePoint.lineContent
                 )
             )
         }
@@ -258,27 +278,72 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         state.tracePoints.forEach { data ->
             val file = VirtualFileManager.getInstance().findFileByUrl("file://${data.filePath}")
             if (file != null && file.isValid) {
-                val tracePoint = TracePoint(data.id, data.name, file, data.lineNumber, project)
-                tracePoints.add(tracePoint)
-                ApplicationManager.getApplication().invokeLater {
-                    val psiFile = PsiManager.getInstance(project).findFile(file)
-                    if (psiFile != null) {
-                        val document = PsiDocumentManager.getInstance(project).getDocument(psiFile)
-                        if (document != null && data.lineNumber <= document.lineCount) {
-                            FileEditorManager.getInstance(project).openTextEditor(
-                                com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
-                            )?.let { editor ->
-                                val textAttributes = TextAttributes()
-                                textAttributes.backgroundColor = Color.YELLOW
-                                val highlighter = editor.markupModel.addLineHighlighter(
-                                    data.lineNumber - 1,
-                                    HighlighterLayer.WARNING,
-                                    textAttributes
-                                )
-                                highlighters[data.id] = highlighter
+                val psiFile = PsiManager.getInstance(project).findFile(file)
+                if (psiFile != null) {
+                    val document = PsiDocumentManager.getInstance(project).getDocument(psiFile)
+                    if (document != null) {
+                        var lineNumber = data.lineNumber
+                        var isValid = true
+                        if (lineNumber <= document.lineCount) {
+                            // Check if line content matches
+                            val lineStartOffset = document.getLineStartOffset(lineNumber - 1)
+                            val lineEndOffset = document.getLineEndOffset(lineNumber - 1)
+                            val currentLineContent = document.getText(com.intellij.openapi.util.TextRange(lineStartOffset, lineEndOffset)).trimEnd()
+                            if (currentLineContent != data.lineContent) {
+                                // Search for the line content in the file
+                                val matchingLines = mutableListOf<Int>()
+                                for (line in 0 until document.lineCount) {
+                                    val startOffset = document.getLineStartOffset(line)
+                                    val endOffset = document.getLineEndOffset(line)
+                                    val lineText = document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trimEnd()
+                                    if (lineText == data.lineContent) {
+                                        matchingLines.add(line + 1)
+                                    }
+                                }
+                                when (matchingLines.size) {
+                                    1 -> {
+                                        lineNumber = matchingLines[0]
+                                        thisLogger().info("Updated line number for trace point ${data.name} to $lineNumber in ${file.name}")
+                                    }
+                                    else -> {
+                                        isValid = false
+                                        thisLogger().warn("Trace point ${data.name} in ${file.name} is invalid: ${matchingLines.size} matches found for line content '${data.lineContent}'")
+                                    }
+                                }
+                            }
+                        } else {
+                            isValid = false
+                            thisLogger().warn("Trace point ${data.name} in ${file.name} is invalid: line number $lineNumber exceeds document line count ${document.lineCount}")
+                        }
+                        val tracePoint = TracePoint(data.id, data.name, file, lineNumber, project, data.lineContent, isValid)
+                        tracePoints.add(tracePoint)
+                        if (isValid) {
+                            ApplicationManager.getApplication().invokeLater {
+                                val psiFileCheck = PsiManager.getInstance(project).findFile(file)
+                                if (psiFileCheck != null) {
+                                    val docCheck = PsiDocumentManager.getInstance(project).getDocument(psiFileCheck)
+                                    if (docCheck != null && lineNumber <= docCheck.lineCount) {
+                                        FileEditorManager.getInstance(project).openTextEditor(
+                                            com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
+                                        )?.let { editor ->
+                                            val textAttributes = TextAttributes()
+                                            textAttributes.backgroundColor = Color.YELLOW
+                                            val highlighter = editor.markupModel.addLineHighlighter(
+                                                lineNumber - 1,
+                                                HighlighterLayer.WARNING,
+                                                textAttributes
+                                            )
+                                            highlighters[data.id] = highlighter
+                                        }
+                                    }
+                                }
                             }
                         }
+                    } else {
+                        thisLogger().warn("PsiFile not found for: ${data.filePath}")
                     }
+                } else {
+                    thisLogger().warn("PsiFile not found for: ${data.filePath}")
                 }
             } else {
                 thisLogger().warn("Failed to load trace point: ${data.name}, file not found: ${data.filePath}")
