@@ -5,10 +5,14 @@ import com.intellij.openapi.components.*
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.editor.markup.TextAttributes
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -93,6 +97,136 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val listeners = mutableListOf<(List<TracePoint>) -> Unit>()
     private val highlighters = mutableMapOf<String, RangeHighlighter>()
     private val selectedTracePoints = mutableSetOf<String>()
+    private val monitoredDocuments = mutableMapOf<VirtualFile, com.intellij.openapi.editor.Document>()
+
+    init {
+        // Register FileEditorManagerListener to monitor opened files
+        project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
+            override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                if (tracePoints.any { it.file == file }) {
+                    val document = FileDocumentManager.getInstance().getDocument(file)
+                    if (document != null && !monitoredDocuments.containsKey(file)) {
+                        setupDocumentListener(file, document)
+                    }
+                }
+            }
+
+            override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
+                monitoredDocuments.remove(file)
+            }
+        })
+    }
+
+    private fun setupDocumentListener(file: VirtualFile, document: com.intellij.openapi.editor.Document) {
+        document.addDocumentListener(object : DocumentListener {
+            override fun documentChanged(event: DocumentEvent) {
+                updateTracePointsForFile(file)
+            }
+        })
+        monitoredDocuments[file] = document
+        thisLogger().info("Added document listener for file: ${file.name}")
+    }
+
+    private fun updateTracePointsForFile(file: VirtualFile) {
+        val document = FileDocumentManager.getInstance().getDocument(file) ?: return
+        val affectedTracePoints = tracePoints.filter { it.file == file }
+        if (affectedTracePoints.isEmpty()) return
+
+        affectedTracePoints.forEach { tracePoint ->
+            val index = tracePoints.indexOf(tracePoint)
+            if (tracePoint.lineNumber <= document.lineCount) {
+                val lineStartOffset = document.getLineStartOffset(tracePoint.lineNumber - 1)
+                val lineEndOffset = document.getLineEndOffset(tracePoint.lineNumber - 1)
+                val currentLineContent = document.getText(com.intellij.openapi.util.TextRange(lineStartOffset, lineEndOffset)).trimEnd()
+                if (currentLineContent != tracePoint.lineContent) {
+                    // Line content changed, search for new location
+                    val matchingLines = mutableListOf<Int>()
+                    for (line in 0 until document.lineCount) {
+                        val startOffset = document.getLineStartOffset(line)
+                        val endOffset = document.getLineEndOffset(line)
+                        val lineText = document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trimEnd()
+                        if (lineText == tracePoint.lineContent) {
+                            matchingLines.add(line + 1)
+                        }
+                    }
+                    when (matchingLines.size) {
+                        1 -> {
+                            // Update line number and ensure validity
+                            val newTracePoint = tracePoint.copy(lineNumber = matchingLines[0], isValid = true)
+                            tracePoints[index] = newTracePoint
+                            // Update highlighter
+                            highlighters[tracePoint.id]?.let { highlighter ->
+                                FileEditorManager.getInstance(project).openTextEditor(
+                                    com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
+                                )?.let { editor ->
+                                    editor.markupModel.removeHighlighter(highlighter)
+                                    val textAttributes = TextAttributes()
+                                    textAttributes.backgroundColor = Color.YELLOW
+                                    val newHighlighter = editor.markupModel.addLineHighlighter(
+                                        matchingLines[0] - 1,
+                                        HighlighterLayer.WARNING,
+                                        textAttributes
+                                    )
+                                    highlighters[tracePoint.id] = newHighlighter
+                                }
+                            }
+                            thisLogger().info("Updated line number for trace point ${tracePoint.name} to ${matchingLines[0]} in ${file.name}")
+                        }
+                        else -> {
+                            // Mark as invalid
+                            val newTracePoint = tracePoint.copy(isValid = false)
+                            tracePoints[index] = newTracePoint
+                            highlighters[tracePoint.id]?.let { highlighter ->
+                                FileEditorManager.getInstance(project).openTextEditor(
+                                    com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
+                                )?.let { editor ->
+                                    editor.markupModel.removeHighlighter(highlighter)
+                                }
+                                highlighters.remove(tracePoint.id)
+                            }
+                            thisLogger().warn("Trace point ${tracePoint.name} in ${file.name} is invalid: ${matchingLines.size} matches found for line content '${tracePoint.lineContent}'")
+                        }
+                    }
+                } else {
+                    // Line content unchanged, ensure validity
+                    if (!tracePoint.isValid) {
+                        val newTracePoint = tracePoint.copy(isValid = true)
+                        tracePoints[index] = newTracePoint
+                        // Reapply highlighter if needed
+                        if (!highlighters.containsKey(tracePoint.id)) {
+                            FileEditorManager.getInstance(project).openTextEditor(
+                                com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
+                            )?.let { editor ->
+                                val textAttributes = TextAttributes()
+                                textAttributes.backgroundColor = Color.YELLOW
+                                val highlighter = editor.markupModel.addLineHighlighter(
+                                    tracePoint.lineNumber - 1,
+                                    HighlighterLayer.WARNING,
+                                    textAttributes
+                                )
+                                highlighters[tracePoint.id] = highlighter
+                            }
+                        }
+                        thisLogger().info("Restored validity for trace point ${tracePoint.name} in ${file.name}")
+                    }
+                }
+            } else {
+                // Line number out of bounds, mark as invalid
+                val newTracePoint = tracePoint.copy(isValid = false)
+                tracePoints[index] = newTracePoint
+                highlighters[tracePoint.id]?.let { highlighter ->
+                    FileEditorManager.getInstance(project).openTextEditor(
+                        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
+                    )?.let { editor ->
+                        editor.markupModel.removeHighlighter(highlighter)
+                    }
+                    highlighters.remove(tracePoint.id)
+                }
+                thisLogger().warn("Trace point ${tracePoint.name} in ${file.name} is invalid: line number ${tracePoint.lineNumber} exceeds document line count ${document.lineCount}")
+            }
+        }
+        notifyListeners()
+    }
 
     fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor) {
         val document = editor.document
@@ -110,6 +244,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         textAttributes.backgroundColor = Color.YELLOW
         val highlighter = editor.markupModel.addLineHighlighter(lineNumber - 1, HighlighterLayer.WARNING, textAttributes)
         highlighters[tracePoint.id] = highlighter
+
+        // Setup document listener if not already monitored
+        if (!monitoredDocuments.containsKey(file)) {
+            val doc = FileDocumentManager.getInstance().getDocument(file)
+            if (doc != null) {
+                setupDocumentListener(file, doc)
+            }
+        }
 
         thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber with content '$lineContent'")
         notifyListeners()
@@ -162,6 +304,13 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 textAttributes.backgroundColor = Color.YELLOW
                 val highlighter = editor.markupModel.addLineHighlighter(newLineNumber - 1, HighlighterLayer.WARNING, textAttributes)
                 highlighters[id] = highlighter
+                // Setup document listener if not already monitored
+                if (!monitoredDocuments.containsKey(newFile)) {
+                    val doc = FileDocumentManager.getInstance().getDocument(newFile)
+                    if (doc != null) {
+                        setupDocumentListener(newFile, doc)
+                    }
+                }
                 thisLogger().info("Updated trace point ${tracePoint.id} to $name in ${newFile.name} at line $newLineNumber with content '$lineContent'")
             } else {
                 thisLogger().warn("Trace point with ID $id not found for updating")
@@ -274,6 +423,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         tracePoints.clear()
         highlighters.clear()
         selectedTracePoints.clear()
+        monitoredDocuments.clear()
 
         state.tracePoints.forEach { data ->
             val file = VirtualFileManager.getInstance().findFileByUrl("file://${data.filePath}")
@@ -338,6 +488,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                     }
                                 }
                             }
+                        }
+                        // Setup document listener for the file
+                        if (!monitoredDocuments.containsKey(file)) {
+                            setupDocumentListener(file, document)
                         }
                     } else {
                         thisLogger().warn("PsiFile not found for: ${data.filePath}")
