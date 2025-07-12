@@ -14,6 +14,7 @@ class CreateTracePointAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
+        val service = project.service<TracePointService>()
 
         val tracePointName = Messages.showInputDialog(
             project,
@@ -22,7 +23,15 @@ class CreateTracePointAction : AnAction() {
             null
         ) ?: return
 
-        project.service<TracePointService>().addTracePoint(tracePointName, file, lineNumber, editor)
+        // Check selected trace points to determine if the new trace point should have a parent
+        val selectedTracePoints = service.getTracePoints().filter { service.isTracePointSelected(it.id) }
+        val parentId = if (selectedTracePoints.size == 1) {
+            selectedTracePoints.first().id
+        } else {
+            null
+        }
+
+        service.addTracePoint(tracePointName, file, lineNumber, editor, parentId)
     }
 
     override fun update(e: AnActionEvent) {

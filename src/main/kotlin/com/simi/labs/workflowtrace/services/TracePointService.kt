@@ -36,7 +36,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var lineNumber: Int,
         val project: Project,
         val lineContent: String,
-        var isValid: Boolean = true
+        var isValid: Boolean = true,
+        // Adding parentId to support hierarchical structure
+        val parentId: String? = null
     ) {
         val fileName: String get() = file.name
         fun navigateTo() {
@@ -90,7 +92,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Attribute var name: String = "",
         @Attribute var filePath: String = "",
         @Attribute var lineNumber: Int = 0,
-        @Attribute var lineContent: String = ""
+        @Attribute var lineContent: String = "",
+        // Adding parentId for persistence
+        @Attribute var parentId: String? = null
     )
 
     private val tracePoints = mutableListOf<TracePoint>()
@@ -100,7 +104,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val monitoredDocuments = mutableMapOf<VirtualFile, com.intellij.openapi.editor.Document>()
 
     init {
-        // Register FileEditorManagerListener to monitor opened files
         project.messageBus.connect().subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
             override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
                 if (tracePoints.any { it.file == file }) {
@@ -139,7 +142,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 val lineEndOffset = document.getLineEndOffset(tracePoint.lineNumber - 1)
                 val currentLineContent = document.getText(com.intellij.openapi.util.TextRange(lineStartOffset, lineEndOffset)).trimEnd()
                 if (currentLineContent != tracePoint.lineContent) {
-                    // Line content changed, search for new location
                     val matchingLines = mutableListOf<Int>()
                     for (line in 0 until document.lineCount) {
                         val startOffset = document.getLineStartOffset(line)
@@ -151,10 +153,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     }
                     when (matchingLines.size) {
                         1 -> {
-                            // Update line number and ensure validity
                             val newTracePoint = tracePoint.copy(lineNumber = matchingLines[0], isValid = true)
                             tracePoints[index] = newTracePoint
-                            // Update highlighter
                             highlighters[tracePoint.id]?.let { highlighter ->
                                 FileEditorManager.getInstance(project).openTextEditor(
                                     com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
@@ -173,7 +173,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             thisLogger().info("Updated line number for trace point ${tracePoint.name} to ${matchingLines[0]} in ${file.name}")
                         }
                         else -> {
-                            // Mark as invalid
                             val newTracePoint = tracePoint.copy(isValid = false)
                             tracePoints[index] = newTracePoint
                             highlighters[tracePoint.id]?.let { highlighter ->
@@ -188,11 +187,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         }
                     }
                 } else {
-                    // Line content unchanged, ensure validity
                     if (!tracePoint.isValid) {
                         val newTracePoint = tracePoint.copy(isValid = true)
                         tracePoints[index] = newTracePoint
-                        // Reapply highlighter if needed
                         if (!highlighters.containsKey(tracePoint.id)) {
                             FileEditorManager.getInstance(project).openTextEditor(
                                 com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file), false
@@ -211,7 +208,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     }
                 }
             } else {
-                // Line number out of bounds, mark as invalid
                 val newTracePoint = tracePoint.copy(isValid = false)
                 tracePoints[index] = newTracePoint
                 highlighters[tracePoint.id]?.let { highlighter ->
@@ -228,7 +224,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         notifyListeners()
     }
 
-    fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor) {
+    fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor, parentId: String? = null) {
         val document = editor.document
         val lineContent = if (lineNumber <= document.lineCount) {
             val lineStartOffset = document.getLineStartOffset(lineNumber - 1)
@@ -237,7 +233,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         } else {
             ""
         }
-        val tracePoint = TracePoint(UUID.randomUUID().toString(), name, file, lineNumber, project, lineContent)
+        val tracePoint = TracePoint(UUID.randomUUID().toString(), name, file, lineNumber, project, lineContent, parentId = parentId)
         tracePoints.add(tracePoint)
 
         val textAttributes = TextAttributes()
@@ -245,7 +241,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val highlighter = editor.markupModel.addLineHighlighter(lineNumber - 1, HighlighterLayer.WARNING, textAttributes)
         highlighters[tracePoint.id] = highlighter
 
-        // Setup document listener if not already monitored
         if (!monitoredDocuments.containsKey(file)) {
             val doc = FileDocumentManager.getInstance().getDocument(file)
             if (doc != null) {
@@ -253,7 +248,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             }
         }
 
-        thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber with content '$lineContent'")
+        thisLogger().info("Added trace point: $name in ${file.name} at line $lineNumber with content '$lineContent' and parentId $parentId")
         notifyListeners()
     }
 
@@ -280,7 +275,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         tracePointIdNamePairs.forEach { (id, name) ->
             val tracePoint = tracePoints.find { it.id == id }
             if (tracePoint != null) {
-                // Remove old highlighter
                 highlighters[id]?.let { highlighter ->
                     val psiFile = PsiManager.getInstance(project).findFile(tracePoint.file)
                     if (psiFile != null) {
@@ -295,16 +289,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     }
                     highlighters.remove(id)
                 }
-                // Update trace point
-                val newTracePoint = TracePoint(tracePoint.id, name, newFile, newLineNumber, project, lineContent)
+                // Preserve parentId during update
+                val newTracePoint = TracePoint(tracePoint.id, name, newFile, newLineNumber, project, lineContent, parentId = tracePoint.parentId)
                 val index = tracePoints.indexOf(tracePoint)
                 tracePoints[index] = newTracePoint
-                // Add new highlighter
                 val textAttributes = TextAttributes()
                 textAttributes.backgroundColor = Color.YELLOW
                 val highlighter = editor.markupModel.addLineHighlighter(newLineNumber - 1, HighlighterLayer.WARNING, textAttributes)
                 highlighters[id] = highlighter
-                // Setup document listener if not already monitored
                 if (!monitoredDocuments.containsKey(newFile)) {
                     val doc = FileDocumentManager.getInstance().getDocument(newFile)
                     if (doc != null) {
@@ -340,7 +332,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 thisLogger().info("Deleted trace point: ${tracePoint.name} in ${tracePoint.fileName}")
             }
         }
-        tracePoints.removeIf { tracePointIds.contains(it.id) }
+        // Remove trace points and their children
+        tracePoints.removeIf { tracePointIds.contains(it.id) || tracePointIds.contains(it.parentId) }
         selectedTracePoints.removeAll(tracePointIds)
         notifyListeners()
     }
@@ -411,7 +404,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     name = tracePoint.name,
                     filePath = tracePoint.file.path,
                     lineNumber = tracePoint.lineNumber,
-                    lineContent = tracePoint.lineContent
+                    lineContent = tracePoint.lineContent,
+                    parentId = tracePoint.parentId
                 )
             )
         }
@@ -435,12 +429,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         var lineNumber = data.lineNumber
                         var isValid = true
                         if (lineNumber <= document.lineCount) {
-                            // Check if line content matches
                             val lineStartOffset = document.getLineStartOffset(lineNumber - 1)
                             val lineEndOffset = document.getLineEndOffset(lineNumber - 1)
                             val currentLineContent = document.getText(com.intellij.openapi.util.TextRange(lineStartOffset, lineEndOffset)).trimEnd()
                             if (currentLineContent != data.lineContent) {
-                                // Search for the line content in the file
                                 val matchingLines = mutableListOf<Int>()
                                 for (line in 0 until document.lineCount) {
                                     val startOffset = document.getLineStartOffset(line)
@@ -465,7 +457,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             isValid = false
                             thisLogger().warn("Trace point ${data.name} in ${file.name} is invalid: line number $lineNumber exceeds document line count ${document.lineCount}")
                         }
-                        val tracePoint = TracePoint(data.id, data.name, file, lineNumber, project, data.lineContent, isValid)
+                        val tracePoint = TracePoint(data.id, data.name, file, lineNumber, project, data.lineContent, isValid, data.parentId)
                         tracePoints.add(tracePoint)
                         if (isValid) {
                             ApplicationManager.getApplication().invokeLater {
@@ -489,7 +481,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                 }
                             }
                         }
-                        // Setup document listener for the file
                         if (!monitoredDocuments.containsKey(file)) {
                             setupDocumentListener(file, document)
                         }
