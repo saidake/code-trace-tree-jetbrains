@@ -22,7 +22,6 @@ import javax.swing.JTree
 import java.util.*
 import javax.swing.JComponent
 import javax.swing.TransferHandler
-import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.wm.ToolWindowFactory
 import javax.swing.event.TreeExpansionListener
@@ -137,6 +136,19 @@ class MyToolWindowFactory : ToolWindowFactory {
                     val tree = support.component as? JTree ?: return false
 
                     try {
+                        // Capture current expanded paths
+                        val expandedPaths = mutableSetOf<TreePath>()
+                        traverseNodes(rootNode) { node ->
+                            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                            if (tracePoint != null) {
+                                val nodePath = TreePath(node.path)
+                                if (tree.isExpanded(nodePath)) {
+                                    expandedPaths.add(nodePath)
+                                }
+                            }
+                            true
+                        }
+
                         // Determine if dropped on a node (make child) or between nodes (replace divider)
                         val dropY = dropLocation.dropPoint.y
                         val row = tree.getRowForPath(dropPath)
@@ -207,6 +219,23 @@ class MyToolWindowFactory : ToolWindowFactory {
                         // Reload the tree model to reflect changes
                         treeModel.reload()
 
+                        // Restore expanded state
+                        val pathsToExpand = mutableSetOf<TreePath>()
+                        val expandedIds = service.getExpandedTracePointIds()
+                        traverseNodes(rootNode) { node ->
+                            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                            if (tracePoint != null) {
+                                val nodePath = TreePath(node.path)
+                                if (expandedPaths.any { it.lastPathComponent == node } || expandedIds.contains(tracePoint.id)) {
+                                    pathsToExpand.add(nodePath)
+                                }
+                            }
+                            true
+                        }
+                        pathsToExpand.forEach { path ->
+                            tree.expandPath(path)
+                        }
+
                         // Update selection to the dragged node
                         selectionPath = TreePath(draggedNode.path)
                         println("Moved trace point ${draggedTracePoint.name} to parent ${newParentId ?: "root"} at index $dropIndex (on node: $isDropOnNode)")
@@ -229,7 +258,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
                         val bounds = tree.getPathBounds(path)
                         if (bounds != null && node.childCount > 0) {
-                            val handleWidth = tree.toggleClickCount * 10 // Approximate handle width
+                            val handleWidth = 20 // Fixed handle width for expand/collapse arrow
                             if (e.x < bounds.x + handleWidth) {
                                 if (tree.isExpanded(path)) {
                                     tree.collapsePath(path)

@@ -1,6 +1,8 @@
 package com.simi.labs.workflowtrace.toolWindow
 
 import com.simi.labs.workflowtrace.services.TracePointService
+import com.intellij.ui.JBColor
+import com.intellij.util.ui.UIUtil
 import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics
@@ -33,12 +35,12 @@ class TracePointTreeRenderer(
             }
             else -> userObject?.toString() ?: ""
         }
-        background = if (selected) Color.LIGHT_GRAY else Color.WHITE
+        background = if (selected) JBColor.LIGHT_GRAY else JBColor.WHITE
         foreground = if ((value as? DefaultMutableTreeNode)?.userObject is TracePointService.TracePoint &&
             service.isTracePointSelected((value.userObject as TracePointService.TracePoint).id)) {
-            Color.BLUE
+            UIUtil.getTreeSelectionForeground()
         } else {
-            Color.BLACK
+            UIUtil.getTreeForeground()
         }
         isOpaque = true
         return this
@@ -56,7 +58,7 @@ class TracePointTreeRenderer(
         if (highlightedPath != null && isHighlightOnDivider && dropPoint != null) {
             val pathBounds = tree?.getPathBounds(highlightedPath)
             if (pathBounds != null) {
-                g.color = Color.BLUE
+                g.color = JBColor.BLUE
                 val y = if (dropPoint.y > pathBounds.y + pathBounds.height / 2) {
                     pathBounds.y + pathBounds.height
                 } else {
