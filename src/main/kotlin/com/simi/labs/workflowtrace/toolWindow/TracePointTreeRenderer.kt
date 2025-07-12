@@ -3,14 +3,11 @@ package com.simi.labs.workflowtrace.toolWindow
 import com.simi.labs.workflowtrace.services.TracePointService
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.UIUtil
-import java.awt.Color
 import java.awt.Component
-import java.awt.Graphics
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreeCellRenderer
 import javax.swing.JLabel
-import javax.swing.tree.TreePath
 
 class TracePointTreeRenderer(
     private val service: TracePointService,
@@ -44,28 +41,5 @@ class TracePointTreeRenderer(
         }
         isOpaque = true
         return this
-    }
-
-    override fun getPreferredSize() = super.getPreferredSize().apply {
-        height += 2 // Add 2 pixels for transparent divider
-    }
-
-    override fun paintComponent(g: Graphics) {
-        super.paintComponent(g)
-        val highlightedPath = toolWindow.getHighlightedPath()
-        val isHighlightOnDivider = toolWindow.isHighlightOnDivider()
-        val dropPoint = toolWindow.getDropPoint()
-        if (highlightedPath != null && isHighlightOnDivider && dropPoint != null) {
-            val pathBounds = tree?.getPathBounds(highlightedPath)
-            if (pathBounds != null) {
-                g.color = JBColor.BLUE
-                val y = if (dropPoint.y > pathBounds.y + pathBounds.height / 2) {
-                    pathBounds.y + pathBounds.height
-                } else {
-                    pathBounds.y
-                }
-                g.fillRect(0, y - 1, width, 2) // Draw 2-pixel high transparent divider highlight
-            }
-        }
     }
 }
