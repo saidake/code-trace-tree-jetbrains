@@ -151,19 +151,18 @@ class MyToolWindowFactory : ToolWindowFactory {
                         // Insert dragged node as child
                         parentNode.insert(draggedNode, dropIndex)
 
-                        // Update TracePoint parentId in the service
-                        val updatedTracePoints = mutableListOf<TracePointService.TracePoint>()
-                        traverseNodes(rootNode) { node ->
-                            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                            if (tracePoint != null) {
-                                val currentParentId = if (node.parent == rootNode) null else (node.parent as? DefaultMutableTreeNode)?.userObject?.let { it as? TracePointService.TracePoint }?.id
-                                updatedTracePoints.add(tracePoint.copy(parentId = currentParentId))
+                        // Update TracePoint parentId in the service without reordering
+                        val currentTracePoints = service.getTracePoints()
+                        val updatedTracePoints = currentTracePoints.map { tracePoint ->
+                            if (tracePoint.id == draggedTracePoint.id) {
+                                tracePoint.copy(parentId = newParentId)
+                            } else {
+                                tracePoint
                             }
-                            true
                         }
 
-                        // Update the service with the new parent relationships
-                        service.reorderTracePoints(updatedTracePoints.map { it.id })
+                        // Update the service with the new parent relationships, preserving order
+                        service.updateTracePoints(updatedTracePoints)
 
                         // Reload the tree model to reflect changes
                         treeModel.reload()

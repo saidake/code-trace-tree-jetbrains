@@ -5,37 +5,47 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
-import com.intellij.openapi.ui.Messages
 import com.simi.labs.workflowtrace.services.TracePointService
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.vfs.VirtualFile
 
 class UpdateTracePointAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        val service = project.service<TracePointService>()
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
-        val service = project.service<TracePointService>()
 
+        // Get selected trace points from the service
         val selectedTracePoints = service.getTracePoints().filter { service.isTracePointSelected(it.id) }
-
         if (selectedTracePoints.isEmpty()) {
-            Messages.showErrorDialog(
-                project,
-                "No trace points selected in the WorkflowTrace tool window.",
-                "Update Trace Point"
-            )
-            return
+            return // No selected trace points to update
         }
 
-        service.updateTracePoints(selectedTracePoints.map { it.id to it.name }, file, lineNumber, editor)
+        // Update the fileName and lineNumber of selected trace points
+        val updatedTracePoints = service.getTracePoints().map { tracePoint ->
+            if (selectedTracePoints.any { it.id == tracePoint.id }) {
+                tracePoint.copy(
+                    fileName = file.path,
+                    lineNumber = lineNumber
+                )
+            } else {
+                tracePoint
+            }
+        }
+
+        // Update the service with the modified trace points
+        service.updateTracePoints(updatedTracePoints)
     }
 
     override fun update(e: AnActionEvent) {
+        // Enable the action only if a project, editor, and file are available, and there are selected trace points
+        val project = e.project
         val editor = e.getData(CommonDataKeys.EDITOR)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        val project = e.project
         val hasSelectedTracePoints = project?.service<TracePointService>()?.getTracePoints()?.any { project.service<TracePointService>().isTracePointSelected(it.id) } ?: false
-        e.presentation.isEnabled = editor != null && file != null && hasSelectedTracePoints
+        e.presentation.isEnabled = project != null && editor != null && file != null && hasSelectedTracePoints
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {
