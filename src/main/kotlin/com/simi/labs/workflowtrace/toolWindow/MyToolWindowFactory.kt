@@ -15,6 +15,7 @@ import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.ui.components.JBPanel
 import java.awt.BorderLayout
 import java.awt.datatransfer.DataFlavor
@@ -28,13 +29,12 @@ import javax.swing.JPopupMenu
 import javax.swing.JMenuItem
 import javax.swing.JTree
 import java.util.*
-import javax.swing.JComponent
-import javax.swing.TransferHandler
-import com.intellij.openapi.fileEditor.FileEditorManager
 import javax.swing.event.TreeExpansionListener
 import javax.swing.event.TreeExpansionEvent
 import com.intellij.ui.components.JBScrollPane
 import java.awt.Point
+import javax.swing.JComponent
+import javax.swing.TransferHandler
 
 class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -50,29 +50,18 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private val treeModel = DefaultTreeModel(DefaultMutableTreeNode("Root"))
         private val rootNode get() = treeModel.root as DefaultMutableTreeNode
         private var highlightedPath: TreePath? = null
-        private lateinit var tree: JTree // Store JTree instance for action access
+        private var isUpdatingTree = false
+        private lateinit var tree: JTree
 
         fun getContent(): JComponent {
             tree = Tree(treeModel).apply {
                 isRootVisible = false
                 selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
-                // Disable default toggle behavior
                 toggleClickCount = 0
                 service.addTracePointListener { tracePoints, expandedIds ->
-                    println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
-                    updateTreeModel(tracePoints, this, expandedIds)
-                    // Restore selection
-                    val selectedIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
-                    val selectedPaths = mutableListOf<TreePath>()
-                    traverseNodes(rootNode) { node ->
-                        val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                        if (tracePoint != null && selectedIds.contains(tracePoint.id)) {
-                            selectedPaths.add(TreePath(node.path))
-                        }
-                        true
-                    }
-                    if (selectedPaths.isNotEmpty()) {
-                        selectionPaths = selectedPaths.toTypedArray()
+                    if (!isUpdatingTree) {
+                        println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
+                        updateTreeModel(tracePoints, this, expandedIds)
                     }
                 }
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
@@ -102,7 +91,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                         val draggedTracePoint = draggedNode?.userObject as? TracePointService.TracePoint ?: return false
                         val dropTracePoint = dropNode.userObject as? TracePointService.TracePoint ?: return false
-                        // Prevent dropping a node onto itself, its descendants, or the root
                         if (dropTracePoint.id == draggedTracePoint.id) return false
                         var node: DefaultMutableTreeNode? = dropNode
                         while (node != null && node != rootNode) {
@@ -110,15 +98,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             if (nodeTracePoint?.id == draggedTracePoint.id) return false
                             node = node.parent as? DefaultMutableTreeNode
                         }
-                        // Only allow dropping onto a trace point node
                         if (dropNode.userObject !is TracePointService.TracePoint) return false
-
-                        // Update highlight for drag-over feedback
-                        if (highlightedPath != dropPath) {
-                            highlightedPath = dropPath
-                            (support.component as? JTree)?.repaint()
-                        }
-
+                        highlightedPath = dropPath
+                        (support.component as? JTree)?.repaint()
                         return true
                     }
 
@@ -134,7 +116,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val tree = support.component as? JTree ?: return false
 
                         try {
-                            // Capture current expanded paths
                             val expandedPaths = mutableSetOf<TreePath>()
                             traverseNodes(rootNode) { node ->
                                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
@@ -146,23 +127,13 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 }
                                 true
                             }
-
-                            // Clear highlight after drop
                             highlightedPath = null
                             tree.repaint()
-
-                            // Make dragged node the last child of the drop node
                             val parentNode = dropNode
-                            val dropIndex = parentNode.childCount // Append as last child
+                            val dropIndex = parentNode.childCount
                             val newParentId = (dropNode.userObject as TracePointService.TracePoint).id
-
-                            // Remove dragged node from its current parent
                             (draggedNode.parent as? DefaultMutableTreeNode)?.remove(draggedNode)
-
-                            // Insert dragged node as last child
                             parentNode.insert(draggedNode, dropIndex)
-
-                            // Update TracePoint parentId in the service without reordering
                             val currentTracePoints = service.getTracePoints()
                             val updatedTracePoints = currentTracePoints.map { tracePoint ->
                                 if (tracePoint.id == draggedTracePoint.id) {
@@ -171,21 +142,15 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     tracePoint
                                 }
                             }
-
-                            // Update the service with the new parent relationships, preserving order
                             service.updateTracePoints(updatedTracePoints)
-
-                            // Reload the tree model to reflect changes
                             treeModel.reload()
-
-                            // Restore expanded state
                             val pathsToExpand = mutableSetOf<TreePath>()
                             val expandedIds = service.getExpandedTracePointIds()
                             traverseNodes(rootNode) { node ->
                                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
                                 if (tracePoint != null) {
                                     val nodePath = TreePath(node.path)
-                                    if (expandedPaths.any { it.lastPathComponent == node } || expandedIds.contains(tracePoint.id)) {
+                                    if (expandedIds.contains(tracePoint.id)) {
                                         pathsToExpand.add(nodePath)
                                     }
                                 }
@@ -194,8 +159,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             pathsToExpand.forEach { path ->
                                 tree.expandPath(path)
                             }
-
-                            // Update selection to the dragged node
                             selectionPath = TreePath(draggedNode.path)
                             println("Moved trace point ${draggedTracePoint.name} to parent $newParentId as last child")
                             return true
@@ -213,21 +176,35 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
                         println("Mouse clicked on trace point: ${tracePoint.name} in ${tracePoint.fileName} at line ${tracePoint.lineNumber}")
 
-                        // Handle expand/collapse only if clicking on the handle
                         if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
                             val bounds = tree.getPathBounds(path)
                             if (bounds != null && node.childCount > 0) {
-                                val handleWidth = 20 // Fixed handle width for expand/collapse arrow
+                                val handleWidth = 20
                                 if (e.x < bounds.x + handleWidth) {
+                                    val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
                                     if (tree.isExpanded(path)) {
                                         tree.collapsePath(path)
+                                        if (currentExpandedIds.contains(tracePoint.id)) {
+                                            currentExpandedIds.remove(tracePoint.id)
+                                            isUpdatingTree = true
+                                            service.setExpandedTracePointIds(currentExpandedIds)
+                                            isUpdatingTree = false
+                                        }
                                     } else {
                                         tree.expandPath(path)
+                                        if (!currentExpandedIds.contains(tracePoint.id)) {
+                                            currentExpandedIds.add(tracePoint.id)
+                                            isUpdatingTree = true
+                                            service.setExpandedTracePointIds(currentExpandedIds)
+                                            isUpdatingTree = false
+                                        }
                                     }
-                                    return // Prevent selection change when clicking handle
+                                    return
                                 }
                             }
 
+                            // Handle selection
+                            val selectedIds = mutableListOf<String>()
                             if (e.isShiftDown) {
                                 val selectedPaths = tree.selectionPaths?.toList() ?: emptyList()
                                 if (selectedPaths.isNotEmpty()) {
@@ -250,27 +227,34 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                         }
                                     }
                                     tree.selectionPaths = newSelectedPaths.toTypedArray()
-                                    service.selectTracePoints(newSelectedPaths.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }.map { it.id })
+                                    selectedIds.addAll(newSelectedPaths.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }.map { it.id })
                                 } else {
                                     tree.selectionPath = path
-                                    service.selectTracePoints(listOf(tracePoint.id))
+                                    selectedIds.add(tracePoint.id)
                                 }
                             } else if (e.isControlDown) {
                                 if (tree.isPathSelected(path)) {
                                     tree.removeSelectionPath(path)
                                     service.toggleTracePointSelection(tracePoint.id)
+                                    selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }?.map { it.id } ?: emptyList())
                                 } else {
                                     tree.addSelectionPath(path)
                                     service.toggleTracePointSelection(tracePoint.id)
+                                    selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }?.map { it.id } ?: emptyList())
                                 }
                             } else {
                                 tree.selectionPath = path
-                                service.selectTracePoints(listOf(tracePoint.id))
+                                selectedIds.add(tracePoint.id)
                             }
+                            isUpdatingTree = true
+                            service.selectTracePoints(selectedIds)
+                            isUpdatingTree = false
                         } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
                             println("Double-clicked trace point: ${tracePoint.name}")
                             tracePoint.navigateTo()
+                            isUpdatingTree = true
                             service.selectTracePoints(listOf(tracePoint.id))
+                            isUpdatingTree = false
                         }
                     }
 
@@ -293,7 +277,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
                         if (!tree.isPathSelected(path)) {
                             tree.selectionPath = path
+                            isUpdatingTree = true
                             service.selectTracePoints(listOf(tracePoint.id))
+                            isUpdatingTree = false
                         }
                         val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint } ?: emptyList()
                         val popupMenu = JPopupMenu()
@@ -313,7 +299,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             popupMenu.add(deleteItem)
                         } else {
-                            // Add child point
                             val addChildItem = JMenuItem("Add a child point")
                             addChildItem.addActionListener {
                                 val editor = FileEditorManager.getInstance(toolWindow.project).selectedTextEditor
@@ -339,7 +324,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             popupMenu.add(addChildItem)
 
-                            // Rename
                             val renameItem = JMenuItem("Rename")
                             renameItem.addActionListener {
                                 val newName = Messages.showInputDialog(
@@ -356,7 +340,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             popupMenu.add(renameItem)
 
-                            // Delete
                             val deleteItem = JMenuItem("Delete")
                             deleteItem.addActionListener {
                                 val confirm = Messages.showYesNoDialog(
@@ -374,35 +357,39 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         popupMenu.show(this@apply, e.x, e.y)
                     }
                 })
-                // Add TreeExpansionListener to track expand/collapse events
                 addTreeExpansionListener(object : TreeExpansionListener {
                     override fun treeExpanded(event: TreeExpansionEvent) {
+                        if (isUpdatingTree) return
                         val path = event.path
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
                         val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
                         if (!currentExpandedIds.contains(tracePoint.id)) {
                             currentExpandedIds.add(tracePoint.id)
+                            isUpdatingTree = true
                             service.setExpandedTracePointIds(currentExpandedIds)
+                            isUpdatingTree = false
                             println("Expanded trace point: ${tracePoint.id}")
                         }
                     }
 
                     override fun treeCollapsed(event: TreeExpansionEvent) {
+                        if (isUpdatingTree) return
                         val path = event.path
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
                         val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
                         if (currentExpandedIds.contains(tracePoint.id)) {
                             currentExpandedIds.remove(tracePoint.id)
+                            isUpdatingTree = true
                             service.setExpandedTracePointIds(currentExpandedIds)
+                            isUpdatingTree = false
                             println("Collapsed trace point: ${tracePoint.id}")
                         }
                     }
                 })
             }
 
-            // Create toolbar with actions
             val actionGroup = DefaultActionGroup().apply {
                 add(MoveUpTracePointAction(this@MyToolWindow))
                 add(MoveDownTracePointAction(this@MyToolWindow))
@@ -417,7 +404,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             actionToolbar.setTargetComponent(tree)
             actionToolbar.component.isOpaque = false
 
-            // Create panel to hold toolbar and tree
             val panel = JBPanel<JBPanel<*>>().apply {
                 layout = BorderLayout()
                 add(actionToolbar.component, BorderLayout.NORTH)
@@ -427,11 +413,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             return panel
         }
 
-        fun getTree(): JTree = tree // Provide access to JTree for actions
+        fun getTree(): JTree = tree
 
         fun getHighlightedPath(): TreePath? = highlightedPath
-        fun isHighlightOnDivider(): Boolean = false // Always false, as dividers are removed
-        fun getDropPoint(): Point? = null // Always null, as dividers are removed
+        fun isHighlightOnDivider(): Boolean = false
+        fun getDropPoint(): Point? = null
 
         internal fun traverseNodes(node: DefaultMutableTreeNode, visitor: (DefaultMutableTreeNode) -> Boolean): Boolean {
             if (!visitor(node)) return false
@@ -443,20 +429,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         }
 
         private fun updateTreeModel(tracePoints: List<TracePointService.TracePoint>, tree: JTree, expandedIds: List<String>) {
-            // Capture current expanded paths
-            val expandedPaths = mutableSetOf<TreePath>()
-            traverseNodes(rootNode) { node ->
-                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                if (tracePoint != null) {
-                    val nodePath = TreePath(node.path)
-                    if (tree.isExpanded(nodePath)) {
-                        expandedPaths.add(nodePath)
-                    }
-                }
-                true
-            }
-
-            // Update tree model
+            isUpdatingTree = true
+            // Store current selection
+            val selectedIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
+            // Build new tree
             rootNode.removeAllChildren()
             val nodeMap = mutableMapOf<String, DefaultMutableTreeNode>()
             tracePoints.forEach { tracePoint ->
@@ -478,22 +454,36 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
             }
             treeModel.reload()
-
-            // Restore expanded state from previous paths and persisted IDs
+            // Restore expanded state
             val pathsToExpand = mutableSetOf<TreePath>()
             traverseNodes(rootNode) { node ->
                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                if (tracePoint != null) {
-                    val nodePath = TreePath(node.path)
-                    if (expandedPaths.any { it.lastPathComponent == node } || expandedIds.contains(tracePoint.id)) {
-                        pathsToExpand.add(nodePath)
-                    }
+                if (tracePoint != null && expandedIds.contains(tracePoint.id)) {
+                    pathsToExpand.add(TreePath(node.path))
                 }
                 true
             }
             pathsToExpand.forEach { path ->
                 tree.expandPath(path)
             }
+            // Restore selection
+            val selectedPaths = mutableListOf<TreePath>()
+            traverseNodes(rootNode) { node ->
+                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                if (tracePoint != null && selectedIds.contains(tracePoint.id)) {
+                    val nodePath = TreePath(node.path)
+                    if (tree.isVisible(nodePath)) { // Only select visible nodes
+                        selectedPaths.add(nodePath)
+                    }
+                }
+                true
+            }
+            if (selectedPaths.isNotEmpty()) {
+                tree.selectionPaths = selectedPaths.toTypedArray()
+            } else {
+                tree.clearSelection()
+            }
+            isUpdatingTree = false
         }
 
         private fun findNodeByTracePointId(tracePointId: String): DefaultMutableTreeNode? {
@@ -502,9 +492,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
                 if (tracePoint?.id == tracePointId) {
                     result = node
-                    false // Stop traversal
+                    false
                 } else {
-                    true // Continue traversal
+                    true
                 }
             }
             return result

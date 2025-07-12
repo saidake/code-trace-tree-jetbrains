@@ -6,8 +6,9 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.PsiManager
+import com.intellij.util.xmlb.annotations.Attribute
+import com.intellij.util.xmlb.annotations.Property
+import com.intellij.util.xmlb.annotations.Tag
 import java.util.UUID
 
 @Service(Service.Level.PROJECT)
@@ -19,35 +20,54 @@ class TracePointService(project: Project) : PersistentStateComponent<TracePointS
     private var state = State()
     private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
 
+    @Tag("TracePoint")
     data class TracePoint(
-        val id: String,
-        val name: String,
-        val fileName: String,
-        val lineNumber: Int,
-        val parentId: String? = null,
-        val isValid: Boolean = true
+        @Attribute("id") val id: String = "",
+        @Attribute("name") val name: String = "",
+        @Attribute("fileName") val fileName: String = "",
+        @Attribute("lineNumber") val lineNumber: Int = 0,
+        @Attribute("parentId") val parentId: String? = null,
+        @Attribute("isValid") val isValid: Boolean = true
     ) {
         fun navigateTo() {
             val project = ProjectManager.getInstance().openProjects.find { it.isInitialized && !it.isDisposed } ?: return
             val file = com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(fileName) ?: return
             FileEditorManager.getInstance(project).openFile(file, true)
-            val psiFile = PsiManager.getInstance(project).findFile(file) ?: return
-            val document = PsiDocumentManager.getInstance(project).getDocument(psiFile) ?: return
+            val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return
+            val document = editor.document
             val offset = document.getLineStartOffset(lineNumber - 1)
-            FileEditorManager.getInstance(project).selectedTextEditor?.caretModel?.moveToOffset(offset)
+            editor.caretModel.moveToOffset(offset)
         }
     }
 
+    @Tag("WorkflowTraceState")
     data class State(
-        var tracePoints: List<TracePoint> = emptyList(),
-        var selectedTracePointIds: List<String> = emptyList(),
-        var expandedTracePointIds: List<String> = emptyList()
+        @Property @Tag("tracePoints") var tracePoints: List<TracePoint> = emptyList(),
+        @Property @Tag("selectedTracePointIds") var selectedTracePointIds: List<String> = emptyList(),
+        @Property @Tag("expandedTracePointIds") var expandedTracePointIds: List<String> = emptyList()
     )
 
     override fun getState(): State = state
 
     override fun loadState(state: State) {
-        this.state = state
+        val validTracePoints = state.tracePoints.filter { tracePoint ->
+            if (tracePoint.id.isEmpty()) {
+                thisLogger().warn("Invalid TracePoint: id is empty")
+                false
+            } else if (tracePoint.name.isEmpty()) {
+                thisLogger().warn("Invalid TracePoint: name is empty for id ${tracePoint.id}")
+                false
+            } else if (tracePoint.fileName.isEmpty()) {
+                thisLogger().warn("Invalid TracePoint: fileName is empty for id ${tracePoint.id}")
+                false
+            } else if (tracePoint.lineNumber < 0) {
+                thisLogger().warn("Invalid TracePoint: lineNumber is negative for id ${tracePoint.id}")
+                false
+            } else {
+                true
+            }
+        }
+        this.state = state.copy(tracePoints = validTracePoints)
         notifyListeners()
     }
 
@@ -55,7 +75,7 @@ class TracePointService(project: Project) : PersistentStateComponent<TracePointS
         val newTracePoint = TracePoint(
             id = UUID.randomUUID().toString(),
             name = name,
-            fileName = file.path,
+            fileName = file.name,
             lineNumber = lineNumber,
             parentId = parentId
         )
@@ -85,7 +105,7 @@ class TracePointService(project: Project) : PersistentStateComponent<TracePointS
         val tracePointMap = state.tracePoints.associateBy { it.id }
         val orderedTracePoints = orderedIds.mapNotNull { id ->
             tracePointMap[id]?.let { tracePoint ->
-                tracePoint.copy(parentId = tracePointMap[id]?.parentId) // Preserve parentId
+                tracePoint.copy(parentId = tracePointMap[id]?.parentId)
             }
         }
         state = state.copy(tracePoints = orderedTracePoints)
@@ -98,8 +118,10 @@ class TracePointService(project: Project) : PersistentStateComponent<TracePointS
     }
 
     fun selectTracePoints(ids: List<String>) {
-        state = state.copy(selectedTracePointIds = ids)
-        notifyListeners()
+        if (state.selectedTracePointIds != ids) {
+            state = state.copy(selectedTracePointIds = ids)
+            notifyListeners()
+        }
     }
 
     fun toggleTracePointSelection(id: String) {
@@ -108,13 +130,17 @@ class TracePointService(project: Project) : PersistentStateComponent<TracePointS
         } else {
             state.selectedTracePointIds + id
         }
-        state = state.copy(selectedTracePointIds = newSelectedIds)
-        notifyListeners()
+        if (state.selectedTracePointIds != newSelectedIds) {
+            state = state.copy(selectedTracePointIds = newSelectedIds)
+            notifyListeners()
+        }
     }
 
     fun setExpandedTracePointIds(expandedIds: List<String>) {
-        state = state.copy(expandedTracePointIds = expandedIds)
-        notifyListeners()
+        if (state.expandedTracePointIds != expandedIds) {
+            state = state.copy(expandedTracePointIds = expandedIds)
+            notifyListeners()
+        }
     }
 
     fun getTracePoints(): List<TracePoint> = state.tracePoints
