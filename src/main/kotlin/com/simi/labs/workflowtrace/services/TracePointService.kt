@@ -83,7 +83,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     data class State(
         @XCollection(elementTypes = [TracePointData::class])
-        val tracePoints: MutableList<TracePointData> = mutableListOf()
+        val tracePoints: MutableList<TracePointData> = mutableListOf(),
+        @XCollection
+        val expandedTracePointIds: MutableList<String> = mutableListOf()
     )
 
     data class TracePointData(
@@ -96,9 +98,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     )
 
     private val tracePoints = mutableListOf<TracePoint>()
-    private val listeners = mutableListOf<(List<TracePoint>) -> Unit>()
+    private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
     private val highlighters = mutableMapOf<String, RangeHighlighter>()
     private val selectedTracePoints = mutableSetOf<String>()
+    private val expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, com.intellij.openapi.editor.Document>()
 
     init {
@@ -331,6 +334,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
         tracePoints.removeIf { tracePointIds.contains(it.id) || tracePointIds.contains(it.parentId) }
         selectedTracePoints.removeAll(tracePointIds)
+        expandedTracePointIds.removeAll(tracePointIds)
         notifyListeners()
     }
 
@@ -362,9 +366,17 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun getTracePoints(): List<TracePoint> = tracePoints.toList()
 
-    fun addTracePointListener(listener: (List<TracePoint>) -> Unit) {
+    fun getExpandedTracePointIds(): List<String> = expandedTracePointIds.toList()
+
+    fun setExpandedTracePointIds(ids: List<String>) {
+        expandedTracePointIds.clear()
+        expandedTracePointIds.addAll(ids)
+        notifyListeners()
+    }
+
+    fun addTracePointListener(listener: (List<TracePoint>, List<String>) -> Unit) {
         listeners.add(listener)
-        listener(tracePoints)
+        listener(tracePoints, expandedTracePointIds.toList())
     }
 
     fun selectTracePoint(tracePointId: String, isSelected: Boolean) {
@@ -399,7 +411,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     private fun notifyListeners() {
-        listeners.forEach { it(tracePoints) }
+        listeners.forEach { it(tracePoints, expandedTracePointIds.toList()) }
     }
 
     override fun getState(): State {
@@ -416,7 +428,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 )
             )
         }
-        println("Saving state with ${state.tracePoints.size} trace points")
+        state.expandedTracePointIds.addAll(expandedTracePointIds)
+        println("Saving state with ${state.tracePoints.size} trace points and ${state.expandedTracePointIds.size} expanded IDs")
         return state
     }
 
@@ -424,6 +437,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         tracePoints.clear()
         highlighters.clear()
         selectedTracePoints.clear()
+        expandedTracePointIds.clear()
         monitoredDocuments.clear()
 
         state.tracePoints.forEach { data ->
@@ -501,7 +515,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 thisLogger().warn("Failed to load trace point: ${data.name}, file not found: ${data.filePath}")
             }
         }
-        println("Loaded state with ${tracePoints.size} trace points")
+        expandedTracePointIds.addAll(state.expandedTracePointIds)
+        println("Loaded state with ${tracePoints.size} trace points and ${expandedTracePointIds.size} expanded IDs")
         notifyListeners()
     }
 }

@@ -9,6 +9,7 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.treeStructure.Tree
 import com.simi.labs.workflowtrace.services.TracePointService
 import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.Transferable
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.Point
@@ -24,7 +25,8 @@ import javax.swing.TransferHandler
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.wm.ToolWindowFactory
-import java.awt.datatransfer.Transferable
+import javax.swing.event.TreeExpansionListener
+import javax.swing.event.TreeExpansionEvent
 
 class MyToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -46,9 +48,9 @@ class MyToolWindowFactory : ToolWindowFactory {
         fun getContent() = Tree(treeModel).apply {
             isRootVisible = false
             selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
-            service.addTracePointListener { tracePoints ->
-                println("Updating tool window with ${tracePoints.size} trace points")
-                updateTreeModel(tracePoints)
+            service.addTracePointListener { tracePoints, expandedIds ->
+                println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
+                updateTreeModel(tracePoints, this, expandedIds)
                 // Restore selection
                 val selectedIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
                 val selectedPaths = mutableListOf<TreePath>()
@@ -369,13 +371,53 @@ class MyToolWindowFactory : ToolWindowFactory {
                     popupMenu.show(this@apply, e.x, e.y)
                 }
             })
+            // Add TreeExpansionListener to track expand/collapse events
+            addTreeExpansionListener(object : TreeExpansionListener {
+                override fun treeExpanded(event: TreeExpansionEvent) {
+                    val path = event.path
+                    val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
+                    val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
+                    val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
+                    if (!currentExpandedIds.contains(tracePoint.id)) {
+                        currentExpandedIds.add(tracePoint.id)
+                        service.setExpandedTracePointIds(currentExpandedIds)
+                        println("Expanded trace point: ${tracePoint.id}")
+                    }
+                }
+
+                override fun treeCollapsed(event: TreeExpansionEvent) {
+                    val path = event.path
+                    val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
+                    val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
+                    val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
+                    if (currentExpandedIds.contains(tracePoint.id)) {
+                        currentExpandedIds.remove(tracePoint.id)
+                        service.setExpandedTracePointIds(currentExpandedIds)
+                        println("Collapsed trace point: ${tracePoint.id}")
+                    }
+                }
+            })
         }
 
         fun getHighlightedPath(): TreePath? = highlightedPath
         fun isHighlightOnDivider(): Boolean = isHighlightOnDivider
         fun getDropPoint(): Point? = dropPoint
 
-        private fun updateTreeModel(tracePoints: List<TracePointService.TracePoint>) {
+        private fun updateTreeModel(tracePoints: List<TracePointService.TracePoint>, tree: JTree, expandedIds: List<String>) {
+            // Capture current expanded paths
+            val expandedPaths = mutableSetOf<TreePath>()
+            traverseNodes(rootNode) { node ->
+                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                if (tracePoint != null) {
+                    val nodePath = TreePath(node.path)
+                    if (tree.isExpanded(nodePath)) {
+                        expandedPaths.add(nodePath)
+                    }
+                }
+                true
+            }
+
+            // Update tree model
             rootNode.removeAllChildren()
             val nodeMap = mutableMapOf<String, DefaultMutableTreeNode>()
             tracePoints.forEach { tracePoint ->
@@ -397,6 +439,22 @@ class MyToolWindowFactory : ToolWindowFactory {
                 }
             }
             treeModel.reload()
+
+            // Restore expanded state from previous paths and persisted IDs
+            val pathsToExpand = mutableSetOf<TreePath>()
+            traverseNodes(rootNode) { node ->
+                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                if (tracePoint != null) {
+                    val nodePath = TreePath(node.path)
+                    if (expandedPaths.any { it.lastPathComponent == node } || expandedIds.contains(tracePoint.id)) {
+                        pathsToExpand.add(nodePath)
+                    }
+                }
+                true
+            }
+            pathsToExpand.forEach { path ->
+                tree.expandPath(path)
+            }
         }
 
         private fun findNodeByTracePointId(tracePointId: String): DefaultMutableTreeNode? {
