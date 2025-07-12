@@ -48,6 +48,8 @@ class MyToolWindowFactory : ToolWindowFactory {
         fun getContent() = Tree(treeModel).apply {
             isRootVisible = false
             selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
+            // Disable default toggle behavior
+            toggleClickCount = 0
             service.addTracePointListener { tracePoints, expandedIds ->
                 println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
                 updateTreeModel(tracePoints, this, expandedIds)
@@ -140,7 +142,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                         val row = tree.getRowForPath(dropPath)
                         val bounds = tree.getRowBounds(row)
                         val isDropOnNode = if (bounds != null) {
-                            // Consider drop on node if within the middle 50% of node height
                             val nodeHeight = bounds.height
                             val relativeY = dropY - bounds.y
                             relativeY >= nodeHeight * 0.25 && relativeY <= nodeHeight * 0.75
@@ -164,7 +165,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                             dropIndex = parentNode.childCount // Append as last child
                             newParentId = (dropNode.userObject as TracePointService.TracePoint).id
                         } else {
-                            // Dropped between nodes (on a divider)
+                            // Dropped on a divider: insert at the divider position
                             parentNode = if (dropNode.userObject is TracePointService.TracePoint) {
                                 dropNode.parent as? DefaultMutableTreeNode ?: rootNode
                             } else {
@@ -224,7 +225,21 @@ class MyToolWindowFactory : ToolWindowFactory {
                     val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
                     println("Mouse clicked on trace point: ${tracePoint.name} in ${tracePoint.fileName} at line ${tracePoint.lineNumber}")
 
+                    // Handle expand/collapse only if clicking on the handle
                     if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
+                        val bounds = tree.getPathBounds(path)
+                        if (bounds != null && node.childCount > 0) {
+                            val handleWidth = tree.toggleClickCount * 10 // Approximate handle width
+                            if (e.x < bounds.x + handleWidth) {
+                                if (tree.isExpanded(path)) {
+                                    tree.collapsePath(path)
+                                } else {
+                                    tree.expandPath(path)
+                                }
+                                return // Prevent selection change when clicking handle
+                            }
+                        }
+
                         if (e.isShiftDown) {
                             val selectedPaths = tree.selectionPaths?.toList() ?: emptyList()
                             if (selectedPaths.isNotEmpty()) {
