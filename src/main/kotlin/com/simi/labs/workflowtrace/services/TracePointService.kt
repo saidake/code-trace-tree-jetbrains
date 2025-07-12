@@ -177,6 +177,21 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         notifyListeners()
     }
 
+    fun reorderTracePoints(orderedIds: List<String>) {
+        val newTracePoints = mutableListOf<TracePoint>()
+        orderedIds.forEach { id ->
+            tracePoints.find { it.id == id }?.let { newTracePoints.add(it) }
+        }
+        if (newTracePoints.size == tracePoints.size) {
+            tracePoints.clear()
+            tracePoints.addAll(newTracePoints)
+            thisLogger().info("Reordered trace points: ${orderedIds.joinToString()}")
+            notifyListeners()
+        } else {
+            thisLogger().warn("Failed to reorder trace points: invalid IDs provided")
+        }
+    }
+
     fun getTracePoints(): List<TracePoint> = tracePoints.toList()
 
     fun addTracePointListener(listener: (List<TracePoint>) -> Unit) {

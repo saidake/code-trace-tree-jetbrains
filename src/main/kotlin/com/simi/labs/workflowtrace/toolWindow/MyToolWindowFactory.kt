@@ -9,12 +9,11 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBList
 import com.intellij.ui.content.ContentFactory
 import com.simi.labs.workflowtrace.services.TracePointService
+import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.Transferable
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.DefaultListModel
-import javax.swing.JPopupMenu
-import javax.swing.ListSelectionModel
-import javax.swing.JMenuItem
+import javax.swing.*
 import kotlin.math.max
 import kotlin.math.min
 
@@ -46,6 +45,59 @@ class MyToolWindowFactory : ToolWindowFactory {
                 }
             }
             cellRenderer = TracePointListRenderer(service)
+            // Enable drag-and-drop reordering
+            dragEnabled = true
+            transferHandler = object : TransferHandler() {
+                private var draggedIndex = -1
+
+                override fun createTransferable(c: JComponent): Transferable? {
+                    val list = c as? JList<*> ?: return null
+                    draggedIndex = list.selectedIndex
+                    if (draggedIndex < 0) return null
+                    val tracePoint = listModel.getElementAt(draggedIndex)
+                    return object : Transferable {
+                        override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(DataFlavor.stringFlavor)
+                        override fun isDataFlavorSupported(flavor: DataFlavor?): Boolean = flavor == DataFlavor.stringFlavor
+                        override fun getTransferData(flavor: DataFlavor?): Any = tracePoint.id
+                    }
+                }
+
+                override fun getSourceActions(c: JComponent): Int = MOVE
+
+                override fun canImport(support: TransferSupport): Boolean {
+                    return support.isDrop && support.isDataFlavorSupported(DataFlavor.stringFlavor)
+                }
+
+                override fun importData(support: TransferSupport): Boolean {
+                    if (!canImport(support)) return false
+                    val dropLocation = support.dropLocation as? JList.DropLocation ?: return false
+                    val dropIndex = dropLocation.index
+                    if (dropIndex < 0 || dropIndex >= listModel.size()) return false
+                    if (draggedIndex < 0 || draggedIndex >= listModel.size()) return false
+
+                    try {
+                        val transferable = support.transferable
+                        val tracePointId = transferable.getTransferData(DataFlavor.stringFlavor) as String
+                        val tracePoint = listModel.elements().toList().find { it.id == tracePointId } ?: return false
+
+                        // Reorder in listModel
+                        listModel.remove(draggedIndex)
+                        listModel.add(dropIndex, tracePoint)
+
+                        // Update TracePointService
+                        val tracePoints = listModel.elements().toList()
+                        service.reorderTracePoints(tracePoints.map { it.id })
+
+                        // Update selection
+                        setSelectedIndex(dropIndex)
+                        thisLogger().info("Reordered trace point ${tracePoint.name} from index $draggedIndex to $dropIndex")
+                        return true
+                    } catch (e: Exception) {
+                        thisLogger().warn("Failed to reorder trace point: ${e.message}", e)
+                        return false
+                    }
+                }
+            }
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent) {
                     val index = locationToIndex(e.point)
@@ -56,7 +108,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
                         if (e.isShiftDown) {
                             // Shift+click: Select range from nearest selected item
-                            val selectedIndices = selectedIndices
+                            val  selectedIndices = selectedIndices
                             if (selectedIndices.isNotEmpty()) {
                                 val minSelectedIndex = selectedIndices.minOrNull() ?: index
                                 val maxSelectedIndex = selectedIndices.maxOrNull() ?: index
