@@ -1,4 +1,3 @@
-<!-- Plugin Configuration File -->
 <idea-plugin>
     <id>com.simi.labs.workflowtrace</id>
     <name>workflow-trace</name>
@@ -18,6 +17,9 @@
                 sideTool="false"
         />
         <postStartupActivity implementation="com.simi.labs.workflowtrace.startup.MyProjectActivity" />
+        <projectService
+                serviceImplementation="com.simi.labs.workflowtrace.services.TracePointService"
+        />
     </extensions>
 
     <actions>
