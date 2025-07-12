@@ -13,6 +13,18 @@ class CreateTracePointAction : AnAction() {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+
+        // Check if there is at least one valid caret
+        val carets = editor.caretModel.getCaretsAndSelections()
+        if (carets.isEmpty() || !editor.caretModel.currentCaret.isValid) {
+            Messages.showWarningDialog(
+                project,
+                "No valid caret position found in the editor.",
+                "Create Trace Point"
+            )
+            return
+        }
+
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
         val service = project.service<TracePointService>()
 
@@ -23,15 +35,8 @@ class CreateTracePointAction : AnAction() {
             null
         ) ?: return
 
-        // Check selected trace points to determine if the new trace point should have a parent
-        val selectedTracePoints = service.getTracePoints().filter { service.isTracePointSelected(it.id) }
-        val parentId = if (selectedTracePoints.size == 1) {
-            selectedTracePoints.first().id
-        } else {
-            null
-        }
-
-        service.addTracePoint(tracePointName, file, lineNumber, editor, parentId)
+        // Always add as a root trace point (no parent)
+        service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = null)
     }
 
     override fun update(e: AnActionEvent) {

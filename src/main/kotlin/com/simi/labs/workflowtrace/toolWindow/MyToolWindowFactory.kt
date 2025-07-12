@@ -5,12 +5,10 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindow
-import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.treeStructure.Tree
 import com.simi.labs.workflowtrace.services.TracePointService
 import java.awt.datatransfer.DataFlavor
-import java.awt.datatransfer.Transferable
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.Point
@@ -23,6 +21,10 @@ import javax.swing.JTree
 import java.util.*
 import javax.swing.JComponent
 import javax.swing.TransferHandler
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.wm.ToolWindowFactory
+import java.awt.datatransfer.Transferable
 
 class MyToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -306,6 +308,33 @@ class MyToolWindowFactory : ToolWindowFactory {
                         }
                         popupMenu.add(deleteItem)
                     } else {
+                        // Add child point
+                        val addChildItem = JMenuItem("Add a child point")
+                        addChildItem.addActionListener {
+                            val editor = FileEditorManager.getInstance(toolWindow.project).selectedTextEditor
+                            val file = FileEditorManager.getInstance(toolWindow.project).selectedFiles.firstOrNull()
+                            if (editor == null || file == null || editor.caretModel.getCaretsAndSelections().isEmpty() || !editor.caretModel.currentCaret.isValid) {
+                                Messages.showWarningDialog(
+                                    toolWindow.project,
+                                    "No valid caret position found in the editor.",
+                                    "Add Child Trace Point"
+                                )
+                                return@addActionListener
+                            }
+                            val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
+                            val tracePointName = Messages.showInputDialog(
+                                toolWindow.project,
+                                "Enter name for the child trace point:",
+                                "Add Child Trace Point",
+                                null
+                            )
+                            if (!tracePointName.isNullOrBlank()) {
+                                service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = tracePoint.id)
+                            }
+                        }
+                        popupMenu.add(addChildItem)
+
+                        // Rename
                         val renameItem = JMenuItem("Rename")
                         renameItem.addActionListener {
                             val newName = Messages.showInputDialog(
@@ -322,6 +351,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                         }
                         popupMenu.add(renameItem)
 
+                        // Delete
                         val deleteItem = JMenuItem("Delete")
                         deleteItem.addActionListener {
                             val confirm = Messages.showYesNoDialog(
