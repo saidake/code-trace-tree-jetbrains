@@ -1,10 +1,12 @@
 package com.simi.labs.workflowtrace.services
 
+import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.components.*
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.application.ApplicationManager
@@ -14,11 +16,14 @@ import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.VirtualFileManagerListener
-import com.intellij.openapi.util.TextRange
 import com.intellij.util.xmlb.annotations.Property
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
 import com.intellij.util.xmlb.XmlSerializerUtil
+import com.intellij.openapi.editor.markup.TextAttributes
+import com.intellij.openapi.editor.markup.HighlighterTargetArea
+import com.intellij.openapi.editor.markup.HighlighterLayer
+import java.awt.Color
 import java.util.*
 
 @Service(Service.Level.PROJECT)
@@ -73,14 +78,16 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val selectedTracePointIds = mutableSetOf<String>()
     private val expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
+    private val highlighters = mutableMapOf<VirtualFile, MutableList<com.intellij.openapi.editor.markup.RangeHighlighter>>()
 
     init {
-        // Listen for file openings to attach DocumentListener
+        // Listen for file openings to attach DocumentListener and apply highlights
         ApplicationManager.getApplication().messageBus.connect(project).subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
                     attachDocumentListener(file)
+                    highlightTracePointsInFile(file)
                 }
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
@@ -88,6 +95,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         monitoredDocuments.remove(file)?.let { listener ->
                             FileDocumentManager.getInstance().getDocument(file)?.removeDocumentListener(listener)
                         }
+                        removeHighlights(file)
                     }
                 }
             }
@@ -106,6 +114,51 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 }
             }
         }, project)
+    }
+
+    private fun highlightTracePointsInFile(file: VirtualFile) {
+        ApplicationManager.getApplication().runReadAction {
+            // Remove existing highlighters for this file
+            removeHighlights(file)
+
+            val filePath = file.path.removePrefix(project.basePath + "/")
+            val relevantTracePoints = tracePoints.filter { it.fileName == filePath && it.isValid }
+            val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
+            val editorManager = FileEditorManager.getInstance(project)
+            val editors = editorManager.getEditors(file).filterIsInstance<TextEditor>()
+            if (editors.isEmpty()) return@runReadAction
+
+            val textAttributes = TextAttributes().apply {
+                backgroundColor = Color(255, 255, 200) // Light yellow background
+            }
+
+            val newHighlighters = mutableListOf<com.intellij.openapi.editor.markup.RangeHighlighter>()
+            for (tracePoint in relevantTracePoints) {
+                if (tracePoint.lineNumber <= document.lineCount) {
+                    val startOffset = document.getLineStartOffset(tracePoint.lineNumber - 1)
+                    val endOffset = document.getLineEndOffset(tracePoint.lineNumber - 1)
+                    editors.forEach { textEditor ->
+                        val editor = textEditor.editor
+                        val highlighter = editor.markupModel.addRangeHighlighter(
+                            startOffset,
+                            endOffset,
+                            HighlighterLayer.SELECTION - 1,
+                            textAttributes,
+                            HighlighterTargetArea.LINES_IN_RANGE
+                        )
+                        newHighlighters.add(highlighter)
+                    }
+                }
+            }
+            highlighters[file] = newHighlighters
+        }
+    }
+
+    private fun removeHighlights(file: VirtualFile) {
+        ApplicationManager.getApplication().runReadAction {
+            highlighters[file]?.forEach { it.dispose() }
+            highlighters.remove(file)
+        }
     }
 
     private fun attachDocumentListener(file: VirtualFile) {
@@ -151,6 +204,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             }
                             tracePoints.clear()
                             tracePoints.addAll(updatedTracePoints)
+                            // Reapply highlights for the updated file
+                            highlightTracePointsInFile(docFile)
                             notifyListeners()
                         }
                     }
@@ -178,19 +233,17 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     if (line.trim() == tracePoint.lineContent.trim()) index + 1 else null
                 }.filterNotNull()
                 when {
-                    matchingLines.size == 1 -> {
-                        val newLineNumber = matchingLines[0]
-                        if (newLineNumber != tracePoint.lineNumber) {
-                            tracePoint.copy(lineNumber = newLineNumber, isValid = true)
-                        } else {
-                            tracePoint
-                        }
-                    }
+                    matchingLines.isEmpty() -> tracePoint.copy(isValid = false)
+                    matchingLines.contains(tracePoint.lineNumber) -> tracePoint // Keep valid if line number matches
                     else -> tracePoint.copy(isValid = false)
                 }
             }
             tracePoints.clear()
             tracePoints.addAll(updatedTracePoints)
+            // Reapply highlights for all open files
+            FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                highlightTracePointsInFile(file)
+            }
             notifyListeners()
         }
     }
@@ -216,8 +269,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 isValid = true
             )
             tracePoints.add(tracePoint)
-            // Attach DocumentListener for the file if not already monitored
+            // Attach DocumentListener and highlight for the file
             attachDocumentListener(file)
+            highlightTracePointsInFile(file)
             notifyListeners()
         }
     }
@@ -234,9 +288,21 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun deleteTracePoints(ids: List<String>) {
         ApplicationManager.getApplication().runReadAction {
+            // Collect files affected by deleted trace points
+            val deletedFiles = tracePoints.filter { it.id in ids }.map { it.fileName }.distinct()
             tracePoints.removeAll { it.id in ids }
             selectedTracePointIds.removeAll(ids)
             expandedTracePointIds.removeAll(ids)
+
+            // Remove highlights for affected files and reapply for remaining trace points
+            deletedFiles.forEach { fileName ->
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+                if (file != null) {
+                    removeHighlights(file) // Remove all highlights for the file
+                    highlightTracePointsInFile(file) // Reapply highlights for remaining trace points
+                }
+            }
+
             notifyListeners()
         }
     }
@@ -245,11 +311,12 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             tracePoints.clear()
             tracePoints.addAll(newTracePoints)
-            // Re-attach DocumentListeners for all relevant files
+            // Re-attach DocumentListeners and reapply highlights
             tracePoints.map { it.fileName }.distinct().forEach { fileName ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
                 if (file != null) {
                     attachDocumentListener(file)
+                    highlightTracePointsInFile(file)
                 }
             }
             notifyListeners()
@@ -290,7 +357,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     fun getExpandedTracePointIds(): List<String> {
-        return ApplicationManager.getApplication().runReadAction< List<String>> { expandedTracePointIds.toList() }
+        return ApplicationManager.getApplication().runReadAction<List<String>> { expandedTracePointIds.toList() }
     }
 
     fun addTracePointListener(listener: (List<TracePoint>, List<String>) -> Unit) {
@@ -326,11 +393,12 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             selectedTracePointIds.addAll(state.selectedTracePointIds)
             expandedTracePointIds.clear()
             expandedTracePointIds.addAll(state.expandedTracePointIds)
-            // Re-attach DocumentListeners for all relevant files
+            // Re-attach DocumentListeners and apply highlights
             tracePoints.map { it.fileName }.distinct().forEach { fileName ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
                 if (file != null) {
                     attachDocumentListener(file)
+                    highlightTracePointsInFile(file)
                 }
             }
             notifyListeners()

@@ -12,6 +12,8 @@ import com.simi.labs.workflowtrace.actions.MoveUpTracePointAction
 import com.simi.labs.workflowtrace.actions.MoveDownTracePointAction
 import com.simi.labs.workflowtrace.actions.ExpandSelectedTracePointAction
 import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
+import com.simi.labs.workflowtrace.actions.ExportTracePointsAction
+import com.simi.labs.workflowtrace.actions.ImportTracePointsAction
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -401,6 +403,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 add(MoveDownTracePointAction(this@MyToolWindow))
                 add(ExpandSelectedTracePointAction(this@MyToolWindow))
                 add(CollapseAllTracePointAction(this@MyToolWindow))
+                add(ExportTracePointsAction())
+                add(ImportTracePointsAction())
             }
             val actionToolbar = ActionManager.getInstance().createActionToolbar(
                 ActionPlaces.TOOLWINDOW_TITLE,

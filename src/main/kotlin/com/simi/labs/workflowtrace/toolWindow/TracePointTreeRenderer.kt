@@ -28,7 +28,8 @@ class TracePointTreeRenderer(
         val userObject = (value as? DefaultMutableTreeNode)?.userObject
         text = when (userObject) {
             is TracePointService.TracePoint -> {
-                val title = "${userObject.name} (${userObject.fileName}: ${userObject.lineNumber})"
+                val fileName = userObject.fileName.substringAfterLast('/')
+                val title = "${userObject.name}($fileName: ${userObject.lineNumber})"
                 if (!userObject.isValid) "<html><strike>$title</strike></html>" else title
             }
             else -> userObject?.toString() ?: ""
