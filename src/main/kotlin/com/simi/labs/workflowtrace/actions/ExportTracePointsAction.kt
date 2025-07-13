@@ -8,6 +8,7 @@ import com.intellij.openapi.components.service
 import com.simi.labs.workflowtrace.services.TracePointService
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.ui.Messages
 import com.intellij.util.xmlb.XmlSerializer
 import org.jdom.output.XMLOutputter
 import org.jdom.output.Format
@@ -17,15 +18,41 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = project.service<TracePointService>()
-        val descriptor = FileChooserDescriptor(false, false, false, false, false, false)
-            .withFileFilter { it.extension == "xml" }
-            .withTitle("Export Trace Points")
-        FileChooser.chooseFile(descriptor, project, null) { file ->
+        val defaultFileName = "workflowTrace.xml"
+
+        // Prompt for file name first
+        val fileName = Messages.showInputDialog(
+            project,
+            "Enter file name for trace points export:",
+            "Export Trace Points",
+            null,
+            defaultFileName,
+            null
+        )?.trim()
+
+        if (fileName.isNullOrBlank()) {
+            Messages.showWarningDialog(
+                project,
+                "File name cannot be empty.",
+                "Export Trace Points"
+            )
+            return
+        }
+
+        // Ensure the file has .xml extension
+        val finalFileName = if (fileName.endsWith(".xml", ignoreCase = true)) fileName else "$fileName.xml"
+
+        // Then prompt for directory
+        val descriptor = FileChooserDescriptor(false, true, false, false, false, false)
+            .withTitle("Export Trace Points - Select Directory")
+            .withDescription("Choose a directory to save the trace points file")
+        FileChooser.chooseFile(descriptor, project, null) { directory ->
+            val filePath = "${directory.path}/$finalFileName"
             val state = service.getState()
             val element = XmlSerializer.serialize(state)
             val xmlOutput = XMLOutputter(Format.getPrettyFormat())
             val xmlString = xmlOutput.outputString(element)
-            File(file.path).writeText(xmlString)
+            File(filePath).writeText(xmlString)
         }
     }
 
