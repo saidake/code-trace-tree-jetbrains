@@ -1,62 +1,76 @@
 package com.simi.labs.workflowtrace.actions
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
 import com.simi.labs.workflowtrace.services.TracePointService
 import com.simi.labs.workflowtrace.toolWindow.MyToolWindowFactory
-import com.intellij.icons.AllIcons
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 
-class MoveDownTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(null, "Move Down", AllIcons.Actions.MoveDown) {
+class MoveDownTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
+    null,
+    "Move Down",
+    AllIcons.Actions.MoveDown
+) {
     override fun actionPerformed(e: AnActionEvent) {
+        val tree = myToolWindow.getTree()
+        val selectedPaths = tree.selectionPaths ?: return
         val project = e.project ?: return
         val service = project.service<TracePointService>()
-        val tree = myToolWindow.getTree()
-        val selectedPath = tree.selectionPath ?: return
-        val selectedNode = selectedPath.lastPathComponent as? DefaultMutableTreeNode ?: return
-        val tracePoint = selectedNode.userObject as? TracePointService.TracePoint ?: return
-        val parentNode = selectedNode.parent as? DefaultMutableTreeNode ?: return
-        val index = parentNode.getIndex(selectedNode)
-        if (index >= parentNode.childCount - 1) return // Already at the bottom
+        val tracePoints = service.getTracePoints()
+        val selectedIds = selectedPaths.mapNotNull { path ->
+            (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+        }.map { it.id }.toSet()
+        val nodesToMove = selectedPaths.mapNotNull { path ->
+            (path.lastPathComponent as? DefaultMutableTreeNode)?.let { node ->
+                Pair(node, (node.userObject as? TracePointService.TracePoint)?.id)
+            }
+        }.filter { it.second != null }
 
-        // Remove and reinsert node at new position
-        parentNode.remove(selectedNode)
-        parentNode.insert(selectedNode, index + 1)
-
-        // Update TracePointService with new order
-        val updatedTracePoints = service.getTracePoints().toMutableList()
-        val tracePointIndex = updatedTracePoints.indexOfFirst { it.id == tracePoint.id }
-        if (tracePointIndex >= 0 && tracePointIndex < updatedTracePoints.size - 1) {
-            val sibling = updatedTracePoints.filter { it.parentId == tracePoint.parentId }
-            val siblingIndex = sibling.indexOfFirst { it.id == tracePoint.id }
-            if (siblingIndex < sibling.size - 1) {
-                val swapIndex = updatedTracePoints.indexOf(sibling[siblingIndex + 1])
-                updatedTracePoints[tracePointIndex] = updatedTracePoints[swapIndex].copy()
-                updatedTracePoints[swapIndex] = tracePoint.copy()
+        val updatedTracePoints = tracePoints.toMutableList()
+        nodesToMove.reversed().forEach { (node, id) ->
+            val parent = node.parent as? DefaultMutableTreeNode ?: return@forEach
+            val index = parent.getIndex(node)
+            if (index < parent.childCount - 1) {
+                val siblingTracePoints = tracePoints.filter {
+                    it.parentId == (node.userObject as TracePointService.TracePoint).parentId
+                }.sortedBy { tracePoints.indexOf(it) }
+                val currentIndex = siblingTracePoints.indexOfFirst { it.id == id }
+                if (currentIndex < siblingTracePoints.size - 1) {
+                    val currentGlobalIndex = updatedTracePoints.indexOfFirst { it.id == id }
+                    val nextSibling = siblingTracePoints[currentIndex + 1]
+                    val nextGlobalIndex = updatedTracePoints.indexOfFirst { it.id == nextSibling.id }
+                    updatedTracePoints[currentGlobalIndex] = updatedTracePoints[nextGlobalIndex].also {
+                        updatedTracePoints[nextGlobalIndex] = updatedTracePoints[currentGlobalIndex]
+                    }
+                }
             }
         }
-        service.updateTracePoints(updatedTracePoints)
 
-        // Update selection
-        tree.selectionPath = TreePath(selectedNode.path)
+        service.updateTracePoints(updatedTracePoints)
+        // Restore selection after moving
+        service.selectTracePoints(selectedIds.toList())
     }
 
     override fun update(e: AnActionEvent) {
-        val project = e.project
         val tree = myToolWindow.getTree()
-        val selectedPath = tree.selectionPath
-        val isEnabled = project != null &&
-                selectedPath != null &&
-                tree.selectionCount == 1 &&
-                (selectedPath.lastPathComponent as? DefaultMutableTreeNode)?.userObject is TracePointService.TracePoint &&
-                (selectedPath.lastPathComponent as DefaultMutableTreeNode).let { node ->
-                    val parent = node.parent as? DefaultMutableTreeNode
-                    parent != null && parent.getIndex(node) < parent.childCount - 1
-                }
-        e.presentation.isEnabled = isEnabled
+        val selectedPaths = tree.selectionPaths ?: run {
+            e.presentation.isEnabled = false
+            return
+        }
+        var canMoveDown = false
+        for (path in selectedPaths) {
+            val node = path.lastPathComponent as? DefaultMutableTreeNode ?: continue
+            val parent = node.parent as? DefaultMutableTreeNode ?: continue
+            if (parent.getIndex(node) < parent.childCount - 1) {
+                canMoveDown = true
+                break
+            }
+        }
+        e.presentation.isEnabled = canMoveDown
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {

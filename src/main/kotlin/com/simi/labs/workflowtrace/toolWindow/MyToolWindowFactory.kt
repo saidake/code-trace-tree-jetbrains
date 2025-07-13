@@ -6,7 +6,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.ui.content.ContentFactory
-import com.intellij.ui.treeStructure.Tree
 import com.simi.labs.workflowtrace.services.TracePointService
 import com.simi.labs.workflowtrace.actions.MoveUpTracePointAction
 import com.simi.labs.workflowtrace.actions.MoveDownTracePointAction
@@ -36,6 +35,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.ui.treeStructure.Tree
 import java.awt.Point
 import javax.swing.JComponent
 import javax.swing.TransferHandler
