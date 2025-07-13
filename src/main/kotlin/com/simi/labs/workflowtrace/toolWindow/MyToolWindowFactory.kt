@@ -40,14 +40,14 @@ import javax.swing.TransferHandler
 
 class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val myToolWindow = MyToolWindow(toolWindow)
+        val myToolWindow = MyToolWindow(toolWindow, project)
         val content = ContentFactory.getInstance().createContent(myToolWindow.getContent(), null, false)
         toolWindow.contentManager.addContent(content)
     }
 
     override fun shouldBeAvailable(project: Project) = true
 
-    class MyToolWindow(private val toolWindow: ToolWindow) {
+    class MyToolWindow(private val toolWindow: ToolWindow, private val project: Project) {
         private val service = toolWindow.project.service<TracePointService>()
         private val treeModel = DefaultTreeModel(DefaultMutableTreeNode("Root"))
         private val rootNode get() = treeModel.root as DefaultMutableTreeNode
@@ -254,7 +254,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
                             println("Double-clicked trace point: ${tracePoint.name}")
                             ApplicationManager.getApplication().invokeLater {
-                                tracePoint.navigateTo()
+                                tracePoint.navigateTo(project)
                                 isUpdatingTree = true
                                 service.selectTracePoints(listOf(tracePoint.id))
                                 isUpdatingTree = false

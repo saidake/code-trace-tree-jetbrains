@@ -1,6 +1,6 @@
 package com.simi.labs.workflowtrace.services
 
-import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.*
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
@@ -13,25 +13,34 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFileManagerListener
+import com.intellij.openapi.util.TextRange
+import com.intellij.util.xmlb.annotations.Property
+import com.intellij.util.xmlb.annotations.Tag
+import com.intellij.util.xmlb.annotations.XCollection
+import com.intellij.util.xmlb.XmlSerializerUtil
 import java.util.*
 
 @Service(Service.Level.PROJECT)
-class TracePointService(private val project: Project) {
+@State(
+    name = "TracePointService",
+    storages = [Storage("workflowTrace.xml")]
+)
+class TracePointService(private val project: Project) : PersistentStateComponent<TracePointService.TracePointState> {
+    @Tag("TracePoint")
     data class TracePoint(
-        val id: String,
-        val name: String,
-        val fileName: String,
-        val lineNumber: Int,
-        val parentId: String? = null,
-        val project: Project,
-        val lineContent: String? = null,
-        val isValid: Boolean = true
+        @Property val id: String = "",
+        @Property val name: String = "",
+        @Property val fileName: String = "",
+        @Property val lineNumber: Int = 0,
+        @Property val parentId: String? = null,
+        @Property val projectPath: String = "",
+        @Property val lineContent: String? = null,
+        @Property val isValid: Boolean = true
     ) {
-        fun navigateTo() {
+        fun navigateTo(project: Project) {
             ApplicationManager.getApplication().runReadAction {
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///$projectPath/$fileName")
                 if (file == null) {
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showErrorDialog(
@@ -52,6 +61,13 @@ class TracePointService(private val project: Project) {
         }
     }
 
+    @Tag("TracePointState")
+    data class TracePointState(
+        @Property @XCollection(elementName = "TracePoint") var tracePoints: List<TracePoint> = emptyList(),
+        @Property @XCollection var selectedTracePointIds: List<String> = emptyList(),
+        @Property @XCollection var expandedTracePointIds: List<String> = emptyList()
+    )
+
     private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
     private val tracePoints = mutableListOf<TracePoint>()
     private val selectedTracePointIds = mutableSetOf<String>()
@@ -64,50 +80,7 @@ class TracePointService(private val project: Project) {
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    ApplicationManager.getApplication().runReadAction {
-                        val filePath = file.path.removePrefix(project.basePath + "/")
-                        if (tracePoints.any { it.fileName == filePath }) {
-                            val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
-                            val listener = object : DocumentListener {
-                                override fun documentChanged(event: DocumentEvent) {
-                                    val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
-                                    val docFilePath = docFile.path.removePrefix(project.basePath + "/")
-                                    val affectedTracePoints = tracePoints.filter { it.fileName == docFilePath }
-                                    if (affectedTracePoints.isEmpty()) return
-
-                                    ApplicationManager.getApplication().runReadAction {
-                                        val newLines = event.document.text.split("\n")
-                                        val oldLines = (event.oldFragment.toString().split("\n").size - 1)
-                                        val newLinesCount = (event.newFragment.toString().split("\n").size - 1)
-                                        val lineOffset = newLinesCount - oldLines
-                                        val changedLine = event.document.getLineNumber(event.offset) + 1
-
-                                        val updatedTracePoints = tracePoints.map { tracePoint ->
-                                            if (tracePoint.fileName != docFilePath) return@map tracePoint
-                                            when {
-                                                // Update line content if changed at trace point's line
-                                                tracePoint.lineNumber == changedLine -> {
-                                                    val newContent = if (changedLine <= newLines.size) newLines[changedLine - 1].trim() else null
-                                                    tracePoint.copy(lineContent = newContent, isValid = true)
-                                                }
-                                                // Adjust line number if change is above trace point
-                                                tracePoint.lineNumber > changedLine && lineOffset != 0 -> {
-                                                    val newLineNumber = (tracePoint.lineNumber + lineOffset).coerceAtLeast(1)
-                                                    tracePoint.copy(lineNumber = newLineNumber)
-                                                }
-                                                else -> tracePoint
-                                            }
-                                        }
-                                        tracePoints.clear()
-                                        tracePoints.addAll(updatedTracePoints)
-                                        notifyListeners()
-                                    }
-                                }
-                            }
-                            document.addDocumentListener(listener)
-                            monitoredDocuments[file] = listener
-                        }
-                    }
+                    attachDocumentListener(file)
                 }
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
@@ -135,10 +108,67 @@ class TracePointService(private val project: Project) {
         }, project)
     }
 
+    private fun attachDocumentListener(file: VirtualFile) {
+        ApplicationManager.getApplication().runReadAction {
+            val filePath = file.path.removePrefix(project.basePath + "/")
+            if (tracePoints.any { it.fileName == filePath } && !monitoredDocuments.containsKey(file)) {
+                val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
+                val listener = object : DocumentListener {
+                    override fun documentChanged(event: DocumentEvent) {
+                        val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
+                        val docFilePath = docFile.path.removePrefix(project.basePath + "/")
+                        val affectedTracePoints = tracePoints.filter { it.fileName == docFilePath }
+                        if (affectedTracePoints.isEmpty()) return
+
+                        ApplicationManager.getApplication().runReadAction {
+                            val newLines = event.document.text.split("\n")
+                            val oldLines = (event.oldFragment.toString().split("\n").size - 1)
+                            val newLinesCount = (event.newFragment.toString().split("\n").size - 1)
+                            val lineOffset = newLinesCount - oldLines
+                            val changedLine = event.document.getLineNumber(event.offset) + 1
+
+                            val updatedTracePoints = tracePoints.map { tracePoint ->
+                                if (tracePoint.fileName != docFilePath) return@map tracePoint
+                                when {
+                                    // Update line content if changed at trace point's line
+                                    tracePoint.lineNumber == changedLine -> {
+                                        val newContent = if (changedLine <= newLines.size) {
+                                            val startOffset = event.document.getLineStartOffset(changedLine - 1)
+                                            val endOffset = event.document.getLineEndOffset(changedLine - 1)
+                                            event.document.getText(TextRange(startOffset, endOffset)).trim()
+                                        } else {
+                                            null
+                                        }
+                                        tracePoint.copy(lineContent = newContent, isValid = true)
+                                    }
+                                    // Adjust line number if change is above trace point
+                                    tracePoint.lineNumber > changedLine && lineOffset != 0 -> {
+                                        val newLineNumber = (tracePoint.lineNumber + lineOffset).coerceAtLeast(1)
+                                        tracePoint.copy(lineNumber = newLineNumber)
+                                    }
+                                    else -> tracePoint
+                                }
+                            }
+                            tracePoints.clear()
+                            tracePoints.addAll(updatedTracePoints)
+                            notifyListeners()
+                        }
+                    }
+                }
+                document.addDocumentListener(listener)
+                monitoredDocuments[file] = listener
+            }
+        }
+    }
+
     private fun validateTracePointsOnLoad() {
         ApplicationManager.getApplication().runReadAction {
             val updatedTracePoints = tracePoints.map { tracePoint ->
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/${tracePoint.fileName}")
+                // Invalidate trace points with default/empty required fields
+                if (tracePoint.id.isEmpty() || tracePoint.fileName.isEmpty() || tracePoint.projectPath.isEmpty()) {
+                    return@map tracePoint.copy(isValid = false)
+                }
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${tracePoint.projectPath}/${tracePoint.fileName}")
                 if (file == null || tracePoint.lineContent == null) {
                     return@map tracePoint.copy(isValid = false)
                 }
@@ -181,11 +211,13 @@ class TracePointService(private val project: Project) {
                 fileName = file.path.removePrefix(project.basePath + "/"),
                 lineNumber = lineNumber,
                 parentId = parentId,
-                project = project,
+                projectPath = project.basePath ?: "",
                 lineContent = lineContent,
                 isValid = true
             )
             tracePoints.add(tracePoint)
+            // Attach DocumentListener for the file if not already monitored
+            attachDocumentListener(file)
             notifyListeners()
         }
     }
@@ -213,14 +245,19 @@ class TracePointService(private val project: Project) {
         ApplicationManager.getApplication().runReadAction {
             tracePoints.clear()
             tracePoints.addAll(newTracePoints)
+            // Re-attach DocumentListeners for all relevant files
+            tracePoints.map { it.fileName }.distinct().forEach { fileName ->
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+                if (file != null) {
+                    attachDocumentListener(file)
+                }
+            }
             notifyListeners()
         }
     }
 
     fun getTracePoints(): List<TracePoint> {
-        return ApplicationManager.getApplication().runReadAction<List<TracePoint>> {
-            tracePoints.toList()
-        }
+        return ApplicationManager.getApplication().runReadAction<List<TracePoint>> { tracePoints.toList() }
     }
 
     fun selectTracePoints(ids: List<String>) {
@@ -241,10 +278,9 @@ class TracePointService(private val project: Project) {
     }
 
     fun isTracePointSelected(id: String): Boolean {
-        return ApplicationManager.getApplication().runReadAction<Boolean> {
-            selectedTracePointIds.contains(id)
-        }
+        return ApplicationManager.getApplication().runReadAction<Boolean> { selectedTracePointIds.contains(id) }
     }
+
     fun setExpandedTracePointIds(ids: List<String>) {
         ApplicationManager.getApplication().runReadAction {
             expandedTracePointIds.clear()
@@ -254,9 +290,7 @@ class TracePointService(private val project: Project) {
     }
 
     fun getExpandedTracePointIds(): List<String> {
-        return ApplicationManager.getApplication().runReadAction<List<String>> {
-            expandedTracePointIds.toList()
-        }
+        return ApplicationManager.getApplication().runReadAction< List<String>> { expandedTracePointIds.toList() }
     }
 
     fun addTracePointListener(listener: (List<TracePoint>, List<String>) -> Unit) {
@@ -271,6 +305,35 @@ class TracePointService(private val project: Project) {
             val tracePointsCopy = tracePoints.toList()
             val expandedIdsCopy = expandedTracePointIds.toList()
             listeners.forEach { it(tracePointsCopy, expandedIdsCopy) }
+        }
+    }
+
+    override fun getState(): TracePointState {
+        return ApplicationManager.getApplication().runReadAction<TracePointState> {
+            TracePointState(
+                tracePoints = tracePoints.toList(),
+                selectedTracePointIds = selectedTracePointIds.toList(),
+                expandedTracePointIds = expandedTracePointIds.toList()
+            )
+        }
+    }
+
+    override fun loadState(state: TracePointState) {
+        ApplicationManager.getApplication().runReadAction {
+            tracePoints.clear()
+            tracePoints.addAll(state.tracePoints)
+            selectedTracePointIds.clear()
+            selectedTracePointIds.addAll(state.selectedTracePointIds)
+            expandedTracePointIds.clear()
+            expandedTracePointIds.addAll(state.expandedTracePointIds)
+            // Re-attach DocumentListeners for all relevant files
+            tracePoints.map { it.fileName }.distinct().forEach { fileName ->
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+                if (file != null) {
+                    attachDocumentListener(file)
+                }
+            }
+            notifyListeners()
         }
     }
 }
