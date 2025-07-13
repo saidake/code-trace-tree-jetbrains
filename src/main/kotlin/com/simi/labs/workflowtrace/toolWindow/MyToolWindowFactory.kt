@@ -15,7 +15,6 @@ import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.ui.components.JBPanel
 import java.awt.BorderLayout
 import java.awt.datatransfer.DataFlavor
@@ -32,6 +31,9 @@ import java.util.*
 import javax.swing.event.TreeExpansionListener
 import javax.swing.event.TreeExpansionEvent
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditorManager
 import java.awt.Point
 import javax.swing.JComponent
 import javax.swing.TransferHandler
@@ -85,7 +87,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                     override fun getSourceActions(c: JComponent): Int = MOVE
 
-                    override fun canImport(support: TransferSupport): Boolean {
+                    override fun canImport(support: TransferHandler.TransferSupport): Boolean {
                         if (!support.isDrop || !support.isDataFlavorSupported(DataFlavor.stringFlavor)) return false
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
                         val dropPath = dropLocation.path ?: return false
@@ -212,10 +214,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 val anchor = anchorPath ?: tree.selectionPaths?.firstOrNull()
                                 if (anchor != null) {
                                     val anchorRow = tree.getRowForPath(anchor)
-                                    val startRow = minOf(anchorRow, currentRow)
-                                    val endRow = maxOf(anchorRow, currentRow)
+                                    val minRow = minOf(anchorRow, currentRow)
+                                    val maxRow = maxOf(anchorRow, currentRow)
                                     val newSelectedPaths = mutableListOf<TreePath>()
-                                    for (row in startRow..endRow) {
+                                    for (row in minRow..maxRow) {
                                         val rowPath = tree.getPathForRow(row) ?: continue
                                         val rowNode = rowPath.lastPathComponent as? DefaultMutableTreeNode ?: continue
                                         if (rowNode.userObject is TracePointService.TracePoint) {
@@ -251,11 +253,13 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             isUpdatingTree = false
                         } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
                             println("Double-clicked trace point: ${tracePoint.name}")
-                            tracePoint.navigateTo()
-                            isUpdatingTree = true
-                            service.selectTracePoints(listOf(tracePoint.id))
-                            isUpdatingTree = false
-                            anchorPath = path // Set anchor on double-click
+                            ApplicationManager.getApplication().invokeLater {
+                                tracePoint.navigateTo()
+                                isUpdatingTree = true
+                                service.selectTracePoints(listOf(tracePoint.id))
+                                isUpdatingTree = false
+                                anchorPath = path // Set anchor on double-click
+                            }
                         }
                     }
 
