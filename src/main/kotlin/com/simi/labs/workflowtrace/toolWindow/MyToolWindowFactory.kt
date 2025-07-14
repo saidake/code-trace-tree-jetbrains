@@ -283,10 +283,13 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             println("Double-clicked trace point: ${tracePoint.name}")
                             ApplicationManager.getApplication().invokeLater {
                                 tracePoint.navigateTo(project)
-                                isUpdatingTree = true
-                                service.selectTracePoints(listOf(tracePoint.id))
-                                isUpdatingTree = false
-                                anchorPath = path
+                                if (!tree.isPathSelected(path)) {
+                                    isUpdatingTree = true
+                                    tree.clearSelection()
+                                    service.selectTracePoints(emptyList())
+                                    anchorPath = null
+                                    isUpdatingTree = false
+                                }
                             }
                         }
                     }
