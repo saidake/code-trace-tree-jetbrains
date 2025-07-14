@@ -23,7 +23,7 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.util.TextRange
-import java.awt.Color
+import com.intellij.ui.JBColor
 import java.util.*
 
 @Service(Service.Level.PROJECT)
@@ -135,8 +135,12 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
             if (editors.isEmpty()) return@runReadAction
 
+            // Use different highlight colors based on theme
             val textAttributes = TextAttributes().apply {
-                backgroundColor = Color(255, 255, 200) // Light yellow background
+                backgroundColor = JBColor(
+                    java.awt.Color(255, 255, 200), // Light yellow for light theme
+                    java.awt.Color(100, 100, 0)    // Darker yellow for dark theme
+                )
             }
 
             val newHighlighters = mutableListOf<com.intellij.openapi.editor.markup.RangeHighlighter>()
