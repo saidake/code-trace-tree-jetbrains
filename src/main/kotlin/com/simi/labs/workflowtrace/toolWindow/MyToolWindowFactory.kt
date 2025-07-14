@@ -13,6 +13,7 @@ import com.simi.labs.workflowtrace.actions.ExpandSelectedTracePointAction
 import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
 import com.simi.labs.workflowtrace.actions.ExportTracePointsAction
 import com.simi.labs.workflowtrace.actions.ImportTracePointsAction
+import com.simi.labs.workflowtrace.actions.GoToTracePointAction
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -56,7 +57,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private var highlightedPath: TreePath? = null
         private var isUpdatingTree = false
         private lateinit var tree: JTree
-        private var anchorPath: TreePath? = null // Fixed anchor for Shift selection
+        private var anchorPath: TreePath? = null
 
         fun getContent(): JComponent {
             tree = Tree(treeModel).apply {
@@ -151,7 +152,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             treeModel.reload()
                             val pathsToExpand = mutableSetOf<TreePath>()
                             val expandedIds = service.getExpandedTracePointIds()
-                            traverseNodes(rootNode) { node ->
+                            traverseNodes(rootNode)
+
+                            { node ->
                                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
                                 if (tracePoint != null) {
                                     val nodePath = TreePath(node.path)
@@ -229,7 +232,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     tree.selectionPaths = newSelectedPaths.toTypedArray()
                                     selectedIds.addAll(newSelectedPaths.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }.map { it.id })
                                 } else {
-                                    // No anchor, set as anchor and select single node
                                     tree.selectionPath = path
                                     selectedIds.add(tracePoint.id)
                                     anchorPath = path
@@ -244,11 +246,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     service.toggleTracePointSelection(tracePoint.id)
                                     selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }?.map { it.id } ?: emptyList())
                                 }
-                                anchorPath = null // Reset anchor on Control-click
+                                anchorPath = null
                             } else {
                                 tree.selectionPath = path
                                 selectedIds.add(tracePoint.id)
-                                anchorPath = path // Set anchor on single click
+                                anchorPath = path
                             }
                             isUpdatingTree = true
                             service.selectTracePoints(selectedIds)
@@ -260,7 +262,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 isUpdatingTree = true
                                 service.selectTracePoints(listOf(tracePoint.id))
                                 isUpdatingTree = false
-                                anchorPath = path // Set anchor on double-click
+                                anchorPath = path
                             }
                         }
                     }
@@ -287,7 +289,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             isUpdatingTree = true
                             service.selectTracePoints(listOf(tracePoint.id))
                             isUpdatingTree = false
-                            anchorPath = path // Set anchor on popup selection
+                            anchorPath = path
                         }
                         val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint } ?: emptyList()
                         val popupMenu = JPopupMenu()
@@ -399,12 +401,34 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             }
 
             val actionGroup = DefaultActionGroup().apply {
-                add(MoveUpTracePointAction(this@MyToolWindow))
-                add(MoveDownTracePointAction(this@MyToolWindow))
-                add(ExpandSelectedTracePointAction(this@MyToolWindow))
-                add(CollapseAllTracePointAction(this@MyToolWindow))
-                add(ExportTracePointsAction())
-                add(ImportTracePointsAction())
+                add(GoToTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Go to Trace Point"
+                    templatePresentation.description = "Navigate to the selected trace point's file and line"
+                })
+                add(MoveUpTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Move Up"
+                    templatePresentation.description = "Move the selected trace point up in the list"
+                })
+                add(MoveDownTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Move Down"
+                    templatePresentation.description = "Move the selected trace point down in the list"
+                })
+                add(ExpandSelectedTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Expand Selected"
+                    templatePresentation.description = "Expand the selected trace point node"
+                })
+                add(CollapseAllTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Collapse All"
+                    templatePresentation.description = "Collapse all trace point nodes"
+                })
+                add(ExportTracePointsAction().apply {
+                    templatePresentation.text = "Export Trace Points"
+                    templatePresentation.description = "Export all trace points to an XML file"
+                })
+                add(ImportTracePointsAction().apply {
+                    templatePresentation.text = "Import Trace Points"
+                    templatePresentation.description = "Import trace points from an XML file"
+                })
             }
             val actionToolbar = ActionManager.getInstance().createActionToolbar(
                 ActionPlaces.TOOLWINDOW_TITLE,
