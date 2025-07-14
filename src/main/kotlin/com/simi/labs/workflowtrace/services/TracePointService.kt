@@ -41,7 +41,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Property val parentId: String? = null,
         @Property val projectPath: String = "",
         @Property val lineContent: String? = null,
-        @Property val isValid: Boolean = true
+        @Property val isValid: Boolean = true,
+        @Property val totalOccurrenceCount: Int = 0,
+        @Property val occurrenceIndex: Int = 0
     ) {
         fun navigateTo(project: Project) {
             ApplicationManager.getApplication().runReadAction {
@@ -160,6 +162,15 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
+    private fun getLineOccurrences(document: com.intellij.openapi.editor.Document, content: String?): Pair<Int, List<Int>> {
+        if (content.isNullOrBlank()) return Pair(0, emptyList())
+        val lines = document.text.split("\n")
+        val matchingLines = lines.mapIndexed { index, line ->
+            if (line.trim() == content.trim()) index + 1 else null
+        }.filterNotNull()
+        return Pair(matchingLines.size, matchingLines)
+    }
+
     private fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
             val filePath = file.path.removePrefix(project.basePath + "/")
@@ -167,6 +178,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
                     override fun documentChanged(event: DocumentEvent) {
+                        println("documentChanged triggered")
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
                         val docFilePath = docFile.path.removePrefix(project.basePath + "/")
                         val affectedTracePoints = tracePoints.filter { it.fileName == docFilePath }
@@ -178,6 +190,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             val newLinesCount = (event.newFragment.toString().split("\n").size - 1)
                             val lineOffset = newLinesCount - oldLines
                             val changedLine = event.document.getLineNumber(event.offset) + 1
+                            println("lineOffset: $lineOffset, changedLine: $changedLine")
+                            println("oldLines: $oldLines, newLines: $newLines")
 
                             val updatedTracePoints = tracePoints.map { tracePoint ->
                                 if (tracePoint.fileName != docFilePath) return@map tracePoint
@@ -192,7 +206,19 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                         } else {
                                             null
                                         }
-                                        tracePoint.copy(lineNumber = newLineNumber, lineContent = newContent, isValid = true)
+                                        val (totalOccurrences, matchingLines) = getLineOccurrences(event.document, newContent)
+                                        val newOccurrenceIndex = if (newContent == tracePoint.lineContent) {
+                                            tracePoint.occurrenceIndex
+                                        } else {
+                                            matchingLines.indexOf(newLineNumber) + 1
+                                        }
+                                        tracePoint.copy(
+                                            lineNumber = newLineNumber,
+                                            lineContent = newContent,
+                                            isValid = true,
+                                            totalOccurrenceCount = totalOccurrences,
+                                            occurrenceIndex = newOccurrenceIndex
+                                        )
                                     }
                                     // Update line content if changed at trace point's line (no line insertion/deletion)
                                     tracePoint.lineNumber == changedLine && lineOffset == 0 -> {
@@ -203,7 +229,18 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                         } else {
                                             null
                                         }
-                                        tracePoint.copy(lineContent = newContent, isValid = true)
+                                        val (totalOccurrences, matchingLines) = getLineOccurrences(event.document, newContent)
+                                        val newOccurrenceIndex = if (newContent == tracePoint.lineContent) {
+                                            tracePoint.occurrenceIndex
+                                        } else {
+                                            matchingLines.indexOf(changedLine) + 1
+                                        }
+                                        tracePoint.copy(
+                                            lineContent = newContent,
+                                            isValid = true,
+                                            totalOccurrenceCount = totalOccurrences,
+                                            occurrenceIndex = newOccurrenceIndex
+                                        )
                                     }
                                     // Adjust line number if change is above trace point
                                     tracePoint.lineNumber > changedLine && lineOffset != 0 -> {
@@ -215,7 +252,18 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                         } else {
                                             null
                                         }
-                                        tracePoint.copy(lineNumber = newLineNumber, lineContent = newContent)
+                                        val (totalOccurrences, matchingLines) = getLineOccurrences(event.document, newContent)
+                                        val newOccurrenceIndex = if (newContent == tracePoint.lineContent) {
+                                            tracePoint.occurrenceIndex
+                                        } else {
+                                            matchingLines.indexOf(newLineNumber) + 1
+                                        }
+                                        tracePoint.copy(
+                                            lineNumber = newLineNumber,
+                                            lineContent = newContent,
+                                            totalOccurrenceCount = totalOccurrences,
+                                            occurrenceIndex = newOccurrenceIndex
+                                        )
                                     }
                                     else -> tracePoint
                                 }
@@ -235,25 +283,41 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     private fun validateTracePointsOnLoad() {
+        println("validateTracePointsOnLoad triggered")
         ApplicationManager.getApplication().runReadAction {
             val updatedTracePoints = tracePoints.map { tracePoint ->
                 // Invalidate trace points with default/empty required fields
-                if (tracePoint.id.isEmpty() || tracePoint.fileName.isEmpty() || tracePoint.projectPath.isEmpty()) {
-                    return@map tracePoint.copy(isValid = false)
+                if (tracePoint.id.isEmpty() || tracePoint.fileName.isEmpty() || tracePoint.projectPath.isEmpty() || tracePoint.lineContent == null) {
+                    return@map tracePoint.copy(isValid = false, totalOccurrenceCount = 0, occurrenceIndex = 0)
                 }
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${tracePoint.projectPath}/${tracePoint.fileName}")
-                if (file == null || tracePoint.lineContent == null) {
-                    return@map tracePoint.copy(isValid = false)
+                if (file == null) {
+                    return@map tracePoint.copy(isValid = false, totalOccurrenceCount = 0, occurrenceIndex = 0)
                 }
-                val document = FileDocumentManager.getInstance().getDocument(file) ?: return@map tracePoint.copy(isValid = false)
+                val document = FileDocumentManager.getInstance().getDocument(file) ?: return@map tracePoint.copy(isValid = false, totalOccurrenceCount = 0, occurrenceIndex = 0)
                 val lines = document.text.split("\n")
-                val matchingLines = lines.mapIndexed { index, line ->
-                    if (line.trim() == tracePoint.lineContent.trim()) index + 1 else null
-                }.filterNotNull()
-                when {
-                    matchingLines.isEmpty() -> tracePoint.copy(isValid = false)
-                    matchingLines.contains(tracePoint.lineNumber) -> tracePoint // Keep valid if line number matches
-                    else -> tracePoint.copy(isValid = false)
+                if (tracePoint.lineNumber <= lines.size) {
+                    val currentLineContent = lines[tracePoint.lineNumber - 1].trim()
+                    if (currentLineContent == tracePoint.lineContent.trim()) {
+                        return@map tracePoint
+                    }
+                }
+                // Content does not match at lineNumber, search the file
+                val (totalOccurrences, matchingLines) = getLineOccurrences(document, tracePoint.lineContent)
+                println("occurrence doesn't match: totalOccurrences: $totalOccurrences, matchingLines: $matchingLines, tracePoint.totalOccurrenceCount: ${tracePoint.totalOccurrenceCount} tracePoint.occurrenceIndex: ${tracePoint.occurrenceIndex}")
+                if (totalOccurrences == tracePoint.totalOccurrenceCount && tracePoint.occurrenceIndex in 1..totalOccurrences) {
+                    // Update lineNumber to the line at occurrenceIndex
+                    val newLineNumber = matchingLines[tracePoint.occurrenceIndex - 1]
+
+                    return@map tracePoint.copy(
+                        lineNumber = newLineNumber,
+                        totalOccurrenceCount = totalOccurrences,
+                        occurrenceIndex = tracePoint.occurrenceIndex,
+                        isValid = true
+                    )
+                } else {
+                    // Mark as invalid if occurrence count differs or occurrenceIndex is out of range
+                    return@map tracePoint.copy(isValid = false, totalOccurrenceCount = totalOccurrences, occurrenceIndex = 0)
                 }
             }
             tracePoints.clear()
@@ -276,6 +340,12 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             } else {
                 null
             }
+            val (totalOccurrences, matchingLines) = if (document != null && lineContent != null) {
+                getLineOccurrences(document, lineContent)
+            } else {
+                Pair(0, emptyList())
+            }
+            val occurrenceIndex = if (lineContent != null) matchingLines.indexOf(lineNumber) + 1 else 0
             val tracePoint = TracePoint(
                 id = UUID.randomUUID().toString(),
                 name = name,
@@ -284,12 +354,16 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 parentId = parentId,
                 projectPath = project.basePath ?: "",
                 lineContent = lineContent,
-                isValid = true
+                isValid = document != null && lineContent != null,
+                totalOccurrenceCount = totalOccurrences,
+                occurrenceIndex = occurrenceIndex
             )
             tracePoints.add(tracePoint)
             // Attach DocumentListener and highlight for the file
-            attachDocumentListener(file)
-            highlightTracePointsInFile(file)
+            if (document != null) {
+                attachDocumentListener(file)
+                highlightTracePointsInFile(file)
+            }
             notifyListeners()
         }
     }
