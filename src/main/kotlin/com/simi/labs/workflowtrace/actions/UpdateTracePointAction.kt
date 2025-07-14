@@ -5,47 +5,72 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
-import com.simi.labs.workflowtrace.services.TracePointService
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.ui.Messages
+import com.simi.labs.workflowtrace.services.TracePointService
 
 class UpdateTracePointAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val service = project.service<TracePointService>()
-        val editor = e.getData(CommonDataKeys.EDITOR) ?: return
+        val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
+        val service = project.service<TracePointService>()
+        val selectedTracePointIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
 
-        // Get selected trace points from the service
-        val selectedTracePoints = service.getTracePoints().filter { service.isTracePointSelected(it.id) }
-        if (selectedTracePoints.isEmpty()) {
-            return // No selected trace points to update
+        if (selectedTracePointIds.isEmpty()) {
+            Messages.showWarningDialog(
+                project,
+                "No trace points are selected in the Workflow Trace tool window.",
+                "Update Trace Points"
+            )
+            return
         }
 
-        // Update the fileName and lineNumber of selected trace points
+        val document = editor.document
+        val lineNumber = editor.caretModel.currentCaret.logicalPosition.line + 1
+        if (lineNumber > document.lineCount) {
+            Messages.showWarningDialog(
+                project,
+                "Invalid line number: $lineNumber. The file has only ${document.lineCount} lines.",
+                "Update Trace Points"
+            )
+            return
+        }
+
+        val startOffset = document.getLineStartOffset(lineNumber - 1)
+        val endOffset = document.getLineEndOffset(lineNumber - 1)
+        val lineContent = document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trim()
+        val projectPath = project.basePath ?: return
+        val fileName = file.path.removePrefix("$projectPath/")
+
         val updatedTracePoints = service.getTracePoints().map { tracePoint ->
-            if (selectedTracePoints.any { it.id == tracePoint.id }) {
+            if (tracePoint.id in selectedTracePointIds) {
+                val (totalOccurrences, matchingLines) = service.getLineOccurrences(document, lineContent)
+                val occurrenceIndex = matchingLines.indexOf(lineNumber) + 1
                 tracePoint.copy(
-                    fileName = file.path,
-                    lineNumber = lineNumber
+                    fileName = fileName,
+                    projectPath = projectPath,
+                    lineNumber = lineNumber,
+                    lineContent = lineContent,
+                    isValid = true,
+                    totalOccurrenceCount = totalOccurrences,
+                    occurrenceIndex = if (occurrenceIndex >= 0) occurrenceIndex else 0
                 )
             } else {
                 tracePoint
             }
         }
 
-        // Update the service with the modified trace points
         service.updateTracePoints(updatedTracePoints)
+        service.selectTracePoints(selectedTracePointIds) // Preserve selection
+        service.highlightTracePointsInFile(file) // Ensure highlights are applied
     }
 
     override fun update(e: AnActionEvent) {
-        // Enable the action only if a project, editor, and file are available, and there are selected trace points
         val project = e.project
-        val editor = e.getData(CommonDataKeys.EDITOR)
+        val editor = project?.let { FileEditorManager.getInstance(it).selectedTextEditor }
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        val hasSelectedTracePoints = project?.service<TracePointService>()?.getTracePoints()?.any { project.service<TracePointService>().isTracePointSelected(it.id) } ?: false
-        e.presentation.isEnabled = project != null && editor != null && file != null && hasSelectedTracePoints
+        e.presentation.isEnabled = project != null && editor != null && file != null
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {
