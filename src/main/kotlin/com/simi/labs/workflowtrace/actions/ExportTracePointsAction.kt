@@ -15,12 +15,17 @@ import org.jdom.output.Format
 import java.io.File
 
 class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.Actions.Upload) {
+    init {
+        templatePresentation.text = "Export Trace Points"
+        templatePresentation.description = "Export all trace points to an XML file"
+    }
+
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = project.service<TracePointService>()
         val defaultFileName = "workflowTrace.xml"
 
-        // Prompt for file name first
+        // Prompt for file name
         val fileName = Messages.showInputDialog(
             project,
             "Enter file name for trace points export:",
@@ -30,19 +35,15 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
             null
         )?.trim()
 
+        // Exit if user cancels the dialog
         if (fileName.isNullOrBlank()) {
-            Messages.showWarningDialog(
-                project,
-                "File name cannot be empty.",
-                "Export Trace Points"
-            )
             return
         }
 
         // Ensure the file has .xml extension
         val finalFileName = if (fileName.endsWith(".xml", ignoreCase = true)) fileName else "$fileName.xml"
 
-        // Then prompt for directory
+        // Prompt for directory
         val descriptor = FileChooserDescriptor(false, true, false, false, false, false)
             .withTitle("Export Trace Points - Select Directory")
             .withDescription("Choose a directory to save the trace points file")

@@ -16,6 +16,8 @@
                 anchor="right"
                 factoryClass="com.simi.labs.workflowtrace.toolWindow.MyToolWindowFactory"
                 secondary="false"
+                icon="/icons/workflow_trace_icon.svg"
+                icon-dark="/icons/workflow_trace_icon_dark.svg"
                 canCloseContent="false"
                 sideTool="false"
         />
@@ -36,12 +38,5 @@
                 description="Updates the selected workflow trace point(s) to the current line">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
-        <action id="com.simi.labs.workflowtrace.GoToTracePointAction"
-                class="com.simi.labs.workflowtrace.actions.GoToTracePointAction"
-                text="Go to Trace Point"
-                description="Navigate to the selected trace point's file and line">
-            <add-to-group group-id="WorkflowTrace.ToolWindow" anchor="first"/>
-        </action>
-        <group id="WorkflowTrace.ToolWindow" popup="true"/>
     </actions>
 </idea-plugin>
