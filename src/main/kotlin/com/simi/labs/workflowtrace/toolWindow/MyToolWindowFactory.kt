@@ -5,6 +5,7 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindow
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
 import com.simi.labs.workflowtrace.services.TracePointService
 import com.simi.labs.workflowtrace.actions.MoveUpTracePointAction
@@ -14,6 +15,7 @@ import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
 import com.simi.labs.workflowtrace.actions.ExportTracePointsAction
 import com.simi.labs.workflowtrace.actions.ImportTracePointsAction
 import com.simi.labs.workflowtrace.actions.GoToTracePointAction
+import com.simi.labs.workflowtrace.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -36,16 +38,40 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.treeStructure.Tree
 import java.awt.Point
 import javax.swing.JComponent
 import javax.swing.TransferHandler
+import com.intellij.ui.JBColor
 
 class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val myToolWindow = MyToolWindow(toolWindow, project)
         val content = ContentFactory.getInstance().createContent(myToolWindow.getContent(), null, false)
         toolWindow.contentManager.addContent(content)
+
+        // Listen for tool window activation/deactivation to update icon
+        ApplicationManager.getApplication().messageBus.connect(project).subscribe(
+            ToolWindowManagerListener.TOPIC,
+            object : ToolWindowManagerListener {
+                override fun toolWindowShown(toolWindow: ToolWindow) {
+                    if (toolWindow.id == "WorkflowTrace") {
+                        toolWindow.setIcon(GlobalIcons.WorkflowTraceSelected)
+                    }
+                }
+
+                override fun stateChanged(toolWindowManager: ToolWindowManager) {
+                    val activeToolWindow = toolWindowManager.activeToolWindowId
+                    if (activeToolWindow == "WorkflowTrace") {
+                        toolWindow.setIcon(GlobalIcons.WorkflowTraceSelected)
+                    } else if (toolWindow.id == "WorkflowTrace") {
+                        val isDarkTheme = JBColor.isBright()
+                        toolWindow.setIcon(if (isDarkTheme) GlobalIcons.WorkflowTrace else GlobalIcons.WorkflowTraceDark)
+                    }
+                }
+            }
+        )
     }
 
     override fun shouldBeAvailable(project: Project) = true
@@ -152,9 +178,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             treeModel.reload()
                             val pathsToExpand = mutableSetOf<TreePath>()
                             val expandedIds = service.getExpandedTracePointIds()
-                            traverseNodes(rootNode)
-
-                            { node ->
+                            traverseNodes(rootNode) { node ->
                                 val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
                                 if (tracePoint != null) {
                                     val nodePath = TreePath(node.path)
