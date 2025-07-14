@@ -44,6 +44,7 @@ import java.awt.Point
 import javax.swing.JComponent
 import javax.swing.TransferHandler
 import com.intellij.ui.JBColor
+import java.awt.datatransfer.UnsupportedFlavorException
 
 class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -85,6 +86,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private lateinit var tree: JTree
         private var anchorPath: TreePath? = null
 
+        // Custom DataFlavor for trace point IDs
+        private val tracePointDataFlavor = DataFlavor(
+            "${TracePointService.TracePoint::class.java.canonicalName}/trace-point-id",
+            "TracePoint ID"
+        )
+
         fun getContent(): JComponent {
             tree = Tree(treeModel).apply {
                 isRootVisible = false
@@ -108,16 +115,23 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         draggedNode = path.lastPathComponent as? DefaultMutableTreeNode ?: return null
                         val tracePoint = draggedNode?.userObject as? TracePointService.TracePoint ?: return null
                         return object : Transferable {
-                            override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(DataFlavor.stringFlavor)
-                            override fun isDataFlavorSupported(flavor: DataFlavor?): Boolean = flavor == DataFlavor.stringFlavor
-                            override fun getTransferData(flavor: DataFlavor?): Any = tracePoint.id
+                            override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(tracePointDataFlavor)
+                            override fun isDataFlavorSupported(flavor: DataFlavor?): Boolean = flavor == tracePointDataFlavor
+                            override fun getTransferData(flavor: DataFlavor?): Any {
+                                if (flavor == tracePointDataFlavor) {
+                                    return tracePoint.id
+                                }
+                                throw UnsupportedFlavorException(flavor)
+                            }
                         }
                     }
 
                     override fun getSourceActions(c: JComponent): Int = MOVE
 
                     override fun canImport(support: TransferHandler.TransferSupport): Boolean {
-                        if (!support.isDrop || !support.isDataFlavorSupported(DataFlavor.stringFlavor)) return false
+                        // Only allow drops within the JTree (tool window)
+                        if (!support.isDrop || support.component !is JTree) return false
+                        if (!support.isDataFlavorSupported(tracePointDataFlavor)) return false
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
                         val dropPath = dropLocation.path ?: return false
                         val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
@@ -142,7 +156,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val dropPath = dropLocation.path ?: return false
                         val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                         val transferable = support.transferable
-                        val tracePointId = transferable.getTransferData(DataFlavor.stringFlavor) as String
+                        val tracePointId = transferable.getTransferData(tracePointDataFlavor) as? String ?: return false
                         val draggedTracePoint = service.getTracePoints().find { it.id == tracePointId } ?: return false
                         val draggedNode = findNodeByTracePointId(tracePointId) ?: return false
                         val tree = support.component as? JTree ?: return false
