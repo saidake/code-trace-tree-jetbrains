@@ -81,6 +81,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
     private val highlighters = mutableMapOf<VirtualFile, MutableList<com.intellij.openapi.editor.markup.RangeHighlighter>>()
+    private var isFileSystemRefreshing = false
 
     init {
         // Listen for file openings to attach DocumentListener and apply highlights
@@ -110,9 +111,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
         // Refresh trace points on file system changes
         VirtualFileManager.getInstance().addVirtualFileManagerListener(object : VirtualFileManagerListener {
+            override fun beforeRefreshStart(isAsync: Boolean) {
+                isFileSystemRefreshing = true
+            }
+
             override fun afterRefreshFinish(isAsync: Boolean) {
                 ApplicationManager.getApplication().runReadAction {
                     validateTracePointsOnLoad()
+                    isFileSystemRefreshing = false
                 }
             }
         }, project)
@@ -178,6 +184,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
                     override fun documentChanged(event: DocumentEvent) {
+                        // Skip processing if event is due to file system refresh
+                        if (isFileSystemRefreshing) return
+
                         println("documentChanged triggered")
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
                         val docFilePath = docFile.path.removePrefix(project.basePath + "/")
@@ -283,7 +292,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     private fun validateTracePointsOnLoad() {
-        println("validateTracePointsOnLoad triggered")
         ApplicationManager.getApplication().runReadAction {
             val updatedTracePoints = tracePoints.map { tracePoint ->
                 // Invalidate trace points with default/empty required fields
@@ -298,17 +306,21 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 val lines = document.text.split("\n")
                 if (tracePoint.lineNumber <= lines.size) {
                     val currentLineContent = lines[tracePoint.lineNumber - 1].trim()
-                    if (currentLineContent == tracePoint.lineContent.trim()) {
-                        return@map tracePoint
+                    if (currentLineContent == tracePoint.lineContent?.trim()) {
+                        // Content matches at the current line number, update occurrence info
+                        val (totalOccurrences, matchingLines) = getLineOccurrences(document, tracePoint.lineContent)
+                        val occurrenceIndex = matchingLines.indexOf(tracePoint.lineNumber) + 1
+                        return@map tracePoint.copy(
+                            totalOccurrenceCount = totalOccurrences,
+                            occurrenceIndex = occurrenceIndex
+                        )
                     }
                 }
                 // Content does not match at lineNumber, search the file
                 val (totalOccurrences, matchingLines) = getLineOccurrences(document, tracePoint.lineContent)
-                println("occurrence doesn't match: totalOccurrences: $totalOccurrences, matchingLines: $matchingLines, tracePoint.totalOccurrenceCount: ${tracePoint.totalOccurrenceCount} tracePoint.occurrenceIndex: ${tracePoint.occurrenceIndex}")
                 if (totalOccurrences == tracePoint.totalOccurrenceCount && tracePoint.occurrenceIndex in 1..totalOccurrences) {
                     // Update lineNumber to the line at occurrenceIndex
                     val newLineNumber = matchingLines[tracePoint.occurrenceIndex - 1]
-
                     return@map tracePoint.copy(
                         lineNumber = newLineNumber,
                         totalOccurrenceCount = totalOccurrences,
