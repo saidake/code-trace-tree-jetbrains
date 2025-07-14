@@ -1,6 +1,5 @@
 package com.simi.labs.workflowtrace.services
 
-import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.components.*
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -23,6 +22,7 @@ import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.HighlighterLayer
+import com.intellij.openapi.util.TextRange
 import java.awt.Color
 import java.util.*
 
@@ -124,8 +124,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             val filePath = file.path.removePrefix(project.basePath + "/")
             val relevantTracePoints = tracePoints.filter { it.fileName == filePath && it.isValid }
             val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
-            val editorManager = FileEditorManager.getInstance(project)
-            val editors = editorManager.getEditors(file).filterIsInstance<TextEditor>()
+            val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
             if (editors.isEmpty()) return@runReadAction
 
             val textAttributes = TextAttributes().apply {
@@ -183,8 +182,20 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             val updatedTracePoints = tracePoints.map { tracePoint ->
                                 if (tracePoint.fileName != docFilePath) return@map tracePoint
                                 when {
-                                    // Update line content if changed at trace point's line
-                                    tracePoint.lineNumber == changedLine -> {
+                                    // Update line number and content for trace points at the changed line if lines were added
+                                    tracePoint.lineNumber == changedLine && lineOffset > 0 -> {
+                                        val newLineNumber = tracePoint.lineNumber + lineOffset
+                                        val newContent = if (newLineNumber <= newLines.size) {
+                                            val startOffset = event.document.getLineStartOffset(newLineNumber - 1)
+                                            val endOffset = event.document.getLineEndOffset(newLineNumber - 1)
+                                            event.document.getText(TextRange(startOffset, endOffset)).trim()
+                                        } else {
+                                            null
+                                        }
+                                        tracePoint.copy(lineNumber = newLineNumber, lineContent = newContent, isValid = true)
+                                    }
+                                    // Update line content if changed at trace point's line (no line insertion/deletion)
+                                    tracePoint.lineNumber == changedLine && lineOffset == 0 -> {
                                         val newContent = if (changedLine <= newLines.size) {
                                             val startOffset = event.document.getLineStartOffset(changedLine - 1)
                                             val endOffset = event.document.getLineEndOffset(changedLine - 1)
@@ -197,7 +208,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                     // Adjust line number if change is above trace point
                                     tracePoint.lineNumber > changedLine && lineOffset != 0 -> {
                                         val newLineNumber = (tracePoint.lineNumber + lineOffset).coerceAtLeast(1)
-                                        tracePoint.copy(lineNumber = newLineNumber)
+                                        val newContent = if (newLineNumber <= newLines.size) {
+                                            val startOffset = event.document.getLineStartOffset(newLineNumber - 1)
+                                            val endOffset = event.document.getLineEndOffset(newLineNumber - 1)
+                                            event.document.getText(TextRange(startOffset, endOffset)).trim()
+                                        } else {
+                                            null
+                                        }
+                                        tracePoint.copy(lineNumber = newLineNumber, lineContent = newContent)
                                     }
                                     else -> tracePoint
                                 }
