@@ -366,13 +366,13 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
                                 val tracePointName = Messages.showInputDialog(
                                     toolWindow.project,
-                                    "Enter name for the child trace point:",
+                                    "Enter name for the child trace point (leave empty for default):",
                                     "Add Child Trace Point",
+                                    null,
+                                    "",
                                     null
-                                )
-                                if (!tracePointName.isNullOrBlank()) {
-                                    service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = tracePoint.id)
-                                }
+                                ) ?: ""
+                                service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = tracePoint.id)
                             }
                             popupMenu.add(addChildItem)
 
@@ -406,6 +406,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             popupMenu.add(deleteItem)
                         }
+                        popupMenu.addSeparator()
+                        val goToItem = JMenuItem("Go to Trace Point")
+                        goToItem.addActionListener {
+                            tracePoint.navigateTo(project)
+                        }
+                        popupMenu.add(goToItem)
                         popupMenu.show(this@apply, e.x, e.y)
                     }
                 })
