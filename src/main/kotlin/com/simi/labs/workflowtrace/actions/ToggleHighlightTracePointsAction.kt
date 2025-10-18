@@ -11,7 +11,7 @@ import com.simi.labs.workflowtrace.services.TracePointService
 class ToggleHighlightTracePointsAction : ToggleAction(
     null,
     "Toggle Trace Point Highlights",
-    AllIcons.Actions.Highlighting
+    AllIcons.Actions.Show
 ) {
     init {
         templatePresentation.text = "Toggle Highlights"

@@ -12,7 +12,7 @@ import javax.swing.tree.DefaultMutableTreeNode
 class GoToTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
     null,
     "Go to Trace Point",
-    AllIcons.Actions.Show
+    AllIcons.Actions.Back
 ) {
     init {
         templatePresentation.text = "Go to Trace Point"
