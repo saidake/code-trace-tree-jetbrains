@@ -35,9 +35,9 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
             val parent = node.parent as? DefaultMutableTreeNode ?: return@forEach
             val index = parent.getIndex(node)
             if (index > 0) {
-                val siblingTracePoints = tracePoints.filter {
+                val siblingTracePoints = updatedTracePoints.filter {
                     it.parentId == (node.userObject as TracePointService.TracePoint).parentId
-                }.sortedBy { tracePoints.indexOf(it) }
+                }.sortedBy { updatedTracePoints.indexOf(it) }
                 val currentIndex = siblingTracePoints.indexOfFirst { it.id == id }
                 if (currentIndex > 0) {
                     val currentGlobalIndex = updatedTracePoints.indexOfFirst { it.id == id }
