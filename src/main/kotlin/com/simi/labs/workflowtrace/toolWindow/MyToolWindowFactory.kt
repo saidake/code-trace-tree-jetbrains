@@ -15,6 +15,7 @@ import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
 import com.simi.labs.workflowtrace.actions.ExportTracePointsAction
 import com.simi.labs.workflowtrace.actions.ImportTracePointsAction
 import com.simi.labs.workflowtrace.actions.GoToTracePointAction
+import com.simi.labs.workflowtrace.actions.ToggleHighlightTracePointsAction
 import com.simi.labs.workflowtrace.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
@@ -461,6 +462,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 add(CollapseAllTracePointAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Collapse All"
                     templatePresentation.description = "Collapse all trace point nodes"
+                })
+                add(ToggleHighlightTracePointsAction().apply {
+                    templatePresentation.text = "Toggle Highlights"
+                    templatePresentation.description = "Toggle the visibility of trace point highlights in files"
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"

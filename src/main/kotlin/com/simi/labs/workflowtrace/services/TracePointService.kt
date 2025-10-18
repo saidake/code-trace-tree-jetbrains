@@ -73,7 +73,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     data class TracePointState(
         @Property @XCollection(elementName = "TracePoint") var tracePoints: List<TracePoint> = emptyList(),
         @Property @XCollection var selectedTracePointIds: List<String> = emptyList(),
-        @Property @XCollection var expandedTracePointIds: List<String> = emptyList()
+        @Property @XCollection var expandedTracePointIds: List<String> = emptyList(),
+        @Property var highlightingEnabled: Boolean = true
     )
 
     private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
@@ -83,6 +84,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
     private val highlighters = mutableMapOf<VirtualFile, MutableList<com.intellij.openapi.editor.markup.RangeHighlighter>>()
     private var isFileSystemRefreshing = false
+    private var isHighlightingEnabled = true
 
     init {
         // Listen for file openings to attach DocumentListener and apply highlights
@@ -125,7 +127,25 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }, project)
     }
 
+    fun isHighlightingEnabled(): Boolean {
+        return isHighlightingEnabled
+    }
+
+    fun setHighlightingEnabled(enabled: Boolean) {
+        isHighlightingEnabled = enabled
+        ApplicationManager.getApplication().runReadAction {
+            FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                if (enabled) {
+                    highlightTracePointsInFile(file)
+                } else {
+                    removeHighlights(file)
+                }
+            }
+        }
+    }
+
     fun highlightTracePointsInFile(file: VirtualFile) {
+        if (!isHighlightingEnabled) return
         ApplicationManager.getApplication().runReadAction {
             // Remove existing highlighters for this file
             removeHighlights(file)
@@ -474,7 +494,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             TracePointState(
                 tracePoints = tracePoints.toList(),
                 selectedTracePointIds = selectedTracePointIds.toList(),
-                expandedTracePointIds = expandedTracePointIds.toList()
+                expandedTracePointIds = expandedTracePointIds.toList(),
+                highlightingEnabled = isHighlightingEnabled
             )
         }
     }
@@ -487,6 +508,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             selectedTracePointIds.addAll(state.selectedTracePointIds)
             expandedTracePointIds.clear()
             expandedTracePointIds.addAll(state.expandedTracePointIds)
+            isHighlightingEnabled = state.highlightingEnabled
             // Re-attach DocumentListeners and apply highlights
             tracePoints.map { it.fileName }.distinct().forEach { fileName ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
