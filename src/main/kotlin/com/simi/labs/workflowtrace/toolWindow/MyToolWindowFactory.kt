@@ -138,6 +138,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                         val draggedTracePoint = draggedNode?.userObject as? TracePointService.TracePoint ?: return false
                         val dropTracePoint = dropNode.userObject as? TracePointService.TracePoint ?: return false
+                        // Prevent dropping on the same node or its descendants
                         if (dropTracePoint.id == draggedTracePoint.id) return false
                         var node: DefaultMutableTreeNode? = dropNode
                         while (node != null && node != rootNode) {
@@ -145,6 +146,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             if (nodeTracePoint?.id == draggedTracePoint.id) return false
                             node = node.parent as? DefaultMutableTreeNode
                         }
+                        // Prevent dropping on the current parent
+                        val draggedParent = draggedNode?.parent as? DefaultMutableTreeNode
+                        val draggedParentTracePoint = draggedParent?.userObject as? TracePointService.TracePoint
+                        if (draggedParentTracePoint?.id == dropTracePoint.id) return false
                         if (dropNode.userObject !is TracePointService.TracePoint) return false
                         highlightedPath = dropPath
                         (support.component as? JTree)?.repaint()
@@ -372,7 +377,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     "",
                                     null
                                 ) ?: ""
-                                service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = tracePoint.id)
+                                val finalName = if (tracePointName.isBlank()) "Unnamed Trace Point" else tracePointName
+                                service.addTracePoint(finalName, file, lineNumber, editor, parentId = tracePoint.id)
                             }
                             popupMenu.add(addChildItem)
 
