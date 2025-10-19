@@ -410,13 +410,14 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 }
                             }
                             popupMenu.add(deleteItem)
+                            popupMenu.addSeparator()
+                            val goToItem = JMenuItem("Go to Trace Point")
+                            goToItem.addActionListener {
+                                tracePoint.navigateTo(project)
+                            }
+                            popupMenu.add(goToItem)
                         }
-                        popupMenu.addSeparator()
-                        val goToItem = JMenuItem("Go to Trace Point")
-                        goToItem.addActionListener {
-                            tracePoint.navigateTo(project)
-                        }
-                        popupMenu.add(goToItem)
+
                         popupMenu.show(this@apply, e.x, e.y)
                     }
                 })
