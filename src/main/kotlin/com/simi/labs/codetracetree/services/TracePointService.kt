@@ -43,7 +43,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Property val lineContent: String? = null,
         @Property val isValid: Boolean = true,
         @Property val totalOccurrenceCount: Int = 0,
-        @Property val occurrenceIndex: Int = 0
+        @Property val occurrenceIndex: Int = 0,
+        @Property val description: String = "" // New description field
     ) {
         fun navigateTo(project: Project) {
             ApplicationManager.getApplication().runReadAction {
@@ -352,7 +353,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
-    fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor?, parentId: String? = null) {
+    fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor?, parentId: String? = null, description: String = "") {
         ApplicationManager.getApplication().runReadAction {
             val document = FileDocumentManager.getInstance().getDocument(file)
             val lineContent = if (document != null && lineNumber <= document.lineCount) {
@@ -378,7 +379,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 lineContent = lineContent,
                 isValid = document != null && lineContent != null,
                 totalOccurrenceCount = totalOccurrences,
-                occurrenceIndex = occurrenceIndex
+                occurrenceIndex = occurrenceIndex,
+                description = description
             )
             tracePoints.add(tracePoint)
             // Attach DocumentListener and highlight for the file
@@ -387,6 +389,16 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 highlightTracePointsInFile(file)
             }
             notifyListeners()
+        }
+    }
+
+    fun updateTracePointDescription(id: String, newDescription: String) {
+        ApplicationManager.getApplication().runReadAction {
+            val index = tracePoints.indexOfFirst { it.id == id }
+            if (index >= 0) {
+                tracePoints[index] = tracePoints[index].copy(description = newDescription)
+                notifyListeners()
+            }
         }
     }
 

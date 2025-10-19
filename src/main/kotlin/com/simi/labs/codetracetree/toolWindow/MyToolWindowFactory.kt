@@ -16,6 +16,7 @@ import com.simi.labs.codetracetree.actions.ExportTracePointsAction
 import com.simi.labs.codetracetree.actions.ImportTracePointsAction
 import com.simi.labs.codetracetree.actions.GoToTracePointAction
 import com.simi.labs.codetracetree.actions.ToggleHighlightTracePointsAction
+import com.simi.labs.codetracetree.actions.ToggleDescriptionAreaAction
 import com.simi.labs.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
@@ -37,15 +38,20 @@ import javax.swing.event.TreeExpansionListener
 import javax.swing.event.TreeExpansionEvent
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.treeStructure.Tree
 import java.awt.Point
 import javax.swing.JComponent
-import javax.swing.TransferHandler
+import javax.swing.JTextArea
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 import com.intellij.ui.JBColor
+import java.awt.Component
+import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
+import javax.swing.BoxLayout
+import javax.swing.TransferHandler
 
 class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -86,6 +92,14 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private var isUpdatingTree = false
         private lateinit var tree: JTree
         private var anchorPath: TreePath? = null
+        private var descriptionAreaVisible = false
+        private val descriptionTextArea = JTextArea().apply {
+            lineWrap = true
+            wrapStyleWord = true
+            isEnabled = false
+            rows = 4
+        }
+        private val descriptionScrollPane = JBScrollPane(descriptionTextArea)
 
         // Custom DataFlavor for trace point IDs
         private val tracePointDataFlavor = DataFlavor(
@@ -98,10 +112,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 isRootVisible = false
                 selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
                 toggleClickCount = 0
+                // Moved listener setup here to ensure tree is initialized
                 service.addTracePointListener { tracePoints, expandedIds ->
                     if (!isUpdatingTree) {
                         println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
                         updateTreeModel(tracePoints, this, expandedIds)
+//                        updateDescriptionArea()
                     }
                 }
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
@@ -299,6 +315,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             isUpdatingTree = true
                             service.selectTracePoints(selectedIds)
                             isUpdatingTree = false
+                            updateDescriptionArea()
                         } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
                             println("Double-clicked trace point: ${tracePoint.name}")
                             ApplicationManager.getApplication().invokeLater {
@@ -309,6 +326,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     service.selectTracePoints(emptyList())
                                     anchorPath = null
                                     isUpdatingTree = false
+                                    updateDescriptionArea()
                                 }
                             }
                         }
@@ -337,6 +355,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             service.selectTracePoints(listOf(tracePoint.id))
                             isUpdatingTree = false
                             anchorPath = path
+                            updateDescriptionArea()
                         }
                         val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint } ?: emptyList()
                         val popupMenu = JPopupMenu()
@@ -454,6 +473,35 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 })
             }
 
+            // Add DocumentListener to update description when edited
+            descriptionTextArea.document.addDocumentListener(object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent?) {
+                    updateTracePointDescription()
+                }
+
+                override fun removeUpdate(e: DocumentEvent?) {
+                    updateTracePointDescription()
+                }
+
+                override fun changedUpdate(e: DocumentEvent?) {
+                    updateTracePointDescription()
+                }
+
+                private fun updateTracePointDescription() {
+                    val selectedPaths = tree.selectionPaths
+                    if (selectedPaths?.size == 1) {
+                        val node = selectedPaths[0].lastPathComponent as? DefaultMutableTreeNode
+                        val tracePoint = node?.userObject as? TracePointService.TracePoint
+                        if (tracePoint != null) {
+                            val newDescription = descriptionTextArea.text
+                            if (newDescription != tracePoint.description) {
+                                service.updateTracePointDescription(tracePoint.id, newDescription)
+                            }
+                        }
+                    }
+                }
+            })
+
             val actionGroup = DefaultActionGroup().apply {
                 add(GoToTracePointAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Go to Trace Point"
@@ -479,6 +527,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Toggle Highlights"
                     templatePresentation.description = "Toggle the visibility of trace point highlights in files"
                 })
+                add(ToggleDescriptionAreaAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Toggle Description"
+                    templatePresentation.description = "Show or hide the description area for the selected trace point"
+                })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"
                     templatePresentation.description = "Export all trace points to an XML file"
@@ -497,10 +549,22 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             actionToolbar.component.isOpaque = false
 
             val panel = JBPanel<JBPanel<*>>().apply {
-                layout = BorderLayout()
-                add(actionToolbar.component, BorderLayout.NORTH)
-                add(JBScrollPane(tree), BorderLayout.CENTER)
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+
+                actionToolbar.component.maximumSize = Dimension(Int.MAX_VALUE, actionToolbar.component.preferredSize.height)
+                actionToolbar.component.minimumSize = actionToolbar.component.preferredSize
+                actionToolbar.component.alignmentX = Component.LEFT_ALIGNMENT
+                add(actionToolbar.component)
+
+                descriptionScrollPane.alignmentX = Component.LEFT_ALIGNMENT
+                add(descriptionScrollPane)
+
+                val treeScrollPane = JBScrollPane(tree)
+                treeScrollPane.alignmentX = Component.LEFT_ALIGNMENT
+                treeScrollPane.maximumSize = Dimension(Int.MAX_VALUE, Int.MAX_VALUE)
+                add(treeScrollPane)
             }
+            descriptionScrollPane.isVisible = descriptionAreaVisible
 
             return panel
         }
@@ -510,6 +574,38 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         fun getHighlightedPath(): TreePath? = highlightedPath
         fun isHighlightOnDivider(): Boolean = false
         fun getDropPoint(): Point? = null
+
+        fun isDescriptionAreaVisible(): Boolean = descriptionAreaVisible
+
+        fun setDescriptionAreaVisible(visible: Boolean) {
+            descriptionAreaVisible = visible
+            descriptionScrollPane.isVisible = visible
+            val panel = toolWindow.contentManager.contents[0].component as? JBPanel<*> ?: return
+            panel.revalidate()
+            panel.repaint()
+        }
+
+
+        private fun updateDescriptionArea() {
+            val selectedPaths = tree.selectionPaths
+            ApplicationManager.getApplication().invokeLater {
+                if (selectedPaths?.size == 1) {
+                    val node = selectedPaths[0].lastPathComponent as? DefaultMutableTreeNode
+                    val tracePoint = node?.userObject as? TracePointService.TracePoint
+                    if (tracePoint != null) {
+                        descriptionTextArea.text = tracePoint.description
+                        descriptionTextArea.isEnabled = true
+                    } else {
+                        descriptionTextArea.text = ""
+                        descriptionTextArea.isEnabled = false
+                    }
+                } else {
+                    descriptionTextArea.text = ""
+                    descriptionTextArea.isEnabled = false
+                }
+            }
+        }
+
 
         internal fun traverseNodes(node: DefaultMutableTreeNode, visitor: (DefaultMutableTreeNode) -> Boolean): Boolean {
             if (!visitor(node)) return false
