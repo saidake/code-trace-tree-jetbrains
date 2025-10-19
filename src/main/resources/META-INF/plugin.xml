@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.simi.labs.codetracetree</id>
-    <name>code-trace-tree</name>
+    <name>Code Trace Tree</name>
     <vendor>saidake</vendor>
 
     <depends>com.intellij.modules.platform</depends>
