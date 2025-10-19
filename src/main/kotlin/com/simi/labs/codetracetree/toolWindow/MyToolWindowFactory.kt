@@ -1,4 +1,4 @@
-package com.simi.labs.workflowtrace.toolWindow
+package com.simi.labs.codetracetree.toolWindow
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
@@ -7,16 +7,16 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
-import com.simi.labs.workflowtrace.services.TracePointService
-import com.simi.labs.workflowtrace.actions.MoveUpTracePointAction
-import com.simi.labs.workflowtrace.actions.MoveDownTracePointAction
-import com.simi.labs.workflowtrace.actions.ExpandSelectedTracePointAction
-import com.simi.labs.workflowtrace.actions.CollapseAllTracePointAction
-import com.simi.labs.workflowtrace.actions.ExportTracePointsAction
-import com.simi.labs.workflowtrace.actions.ImportTracePointsAction
-import com.simi.labs.workflowtrace.actions.GoToTracePointAction
-import com.simi.labs.workflowtrace.actions.ToggleHighlightTracePointsAction
-import com.simi.labs.workflowtrace.GlobalIcons
+import com.simi.labs.codetracetree.services.TracePointService
+import com.simi.labs.codetracetree.actions.MoveUpTracePointAction
+import com.simi.labs.codetracetree.actions.MoveDownTracePointAction
+import com.simi.labs.codetracetree.actions.ExpandSelectedTracePointAction
+import com.simi.labs.codetracetree.actions.CollapseAllTracePointAction
+import com.simi.labs.codetracetree.actions.ExportTracePointsAction
+import com.simi.labs.codetracetree.actions.ImportTracePointsAction
+import com.simi.labs.codetracetree.actions.GoToTracePointAction
+import com.simi.labs.codetracetree.actions.ToggleHighlightTracePointsAction
+import com.simi.labs.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -58,18 +58,18 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             ToolWindowManagerListener.TOPIC,
             object : ToolWindowManagerListener {
                 override fun toolWindowShown(toolWindow: ToolWindow) {
-                    if (toolWindow.id == "WorkflowTrace") {
-                        toolWindow.setIcon(GlobalIcons.WorkflowTraceSelected)
+                    if (toolWindow.id == "Code Trace Tree") {
+                        toolWindow.setIcon(GlobalIcons.CodeTraceTreeSelected)
                     }
                 }
 
                 override fun stateChanged(toolWindowManager: ToolWindowManager) {
                     val activeToolWindow = toolWindowManager.activeToolWindowId
-                    if (activeToolWindow == "WorkflowTrace") {
-                        toolWindow.setIcon(GlobalIcons.WorkflowTraceSelected)
-                    } else if (toolWindow.id == "WorkflowTrace") {
+                    if (activeToolWindow == "Code Trace Tree") {
+                        toolWindow.setIcon(GlobalIcons.CodeTraceTreeSelected)
+                    } else if (toolWindow.id == "Code Trace Tree") {
                         val isDarkTheme = JBColor.isBright()
-                        toolWindow.setIcon(if (isDarkTheme) GlobalIcons.WorkflowTrace else GlobalIcons.WorkflowTraceDark)
+                        toolWindow.setIcon(if (isDarkTheme) GlobalIcons.CodeTraceTree else GlobalIcons.CodeTraceTreeDark)
                     }
                 }
             }

@@ -1,4 +1,4 @@
-package com.simi.labs.workflowtrace.actions
+package com.simi.labs.codetracetree.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -7,7 +7,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
-import com.simi.labs.workflowtrace.services.TracePointService
+import com.simi.labs.codetracetree.services.TracePointService
 
 class UpdateTracePointAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {

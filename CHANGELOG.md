@@ -1,6 +1,6 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# workflow-trace Changelog
+# code-trace-tree Changelog
 
 ## [Unreleased]
 ### Added

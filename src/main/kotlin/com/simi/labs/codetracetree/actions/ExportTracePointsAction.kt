@@ -1,11 +1,11 @@
-package com.simi.labs.workflowtrace.actions
+package com.simi.labs.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
-import com.simi.labs.workflowtrace.services.TracePointService
+import com.simi.labs.codetracetree.services.TracePointService
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ui.Messages
@@ -23,7 +23,7 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = project.service<TracePointService>()
-        val defaultFileName = "workflowTrace.xml"
+        val defaultFileName = "code-trace-tree-config.xml"
 
         // Prompt for file name
         val fileName = Messages.showInputDialog(

@@ -1,9 +1,9 @@
-package com.simi.labs.workflowtrace.services
+package com.simi.labs.codetracetree.services
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.simi.labs.workflowtrace.MyBundle
+import com.simi.labs.codetracetree.MyBundle
 
 @Service(Service.Level.PROJECT)
 class MyProjectService(project: Project) {

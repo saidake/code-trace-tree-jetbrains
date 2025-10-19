@@ -1,6 +1,6 @@
-package com.simi.labs.workflowtrace.toolWindow
+package com.simi.labs.codetracetree.toolWindow
 
-import com.simi.labs.workflowtrace.services.TracePointService
+import com.simi.labs.codetracetree.services.TracePointService
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.UIUtil
 import java.awt.Component

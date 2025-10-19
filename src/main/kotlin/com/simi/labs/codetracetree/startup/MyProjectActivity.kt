@@ -1,4 +1,4 @@
-package com.simi.labs.workflowtrace.startup
+package com.simi.labs.codetracetree.startup
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity

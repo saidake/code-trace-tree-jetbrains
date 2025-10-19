@@ -1,11 +1,11 @@
-package com.simi.labs.workflowtrace.actions
+package com.simi.labs.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.simi.labs.workflowtrace.toolWindow.MyToolWindowFactory
-import com.simi.labs.workflowtrace.services.TracePointService
+import com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory
+import com.simi.labs.codetracetree.services.TracePointService
 import javax.swing.tree.DefaultMutableTreeNode
 
 class GoToTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(

@@ -1,41 +1,38 @@
-<!-- Plugin Configuration File -->
 <idea-plugin>
-    <id>com.simi.labs.workflowtrace</id>
-    <name>workflow-trace</name>
+    <id>com.simi.labs.codetracetree</id>
+    <name>code-trace-tree</name>
     <vendor>saidake</vendor>
 
-    ів
-
-    System: <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.platform</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
-                id="WorkflowTrace"
+                id="Code Trace Tree"
                 anchor="right"
-                factoryClass="com.simi.labs.workflowtrace.toolWindow.MyToolWindowFactory"
+                factoryClass="com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory"
                 secondary="false"
-                icon="/icons/workflow_trace_icon.svg"
-                icon-dark="/icons/workflow_trace_icon_dark.svg"
+                icon="/icons/code_trace_tree_icon.svg"
+                icon-dark="/icons/code_trace_tree_icon_dark.svg"
                 canCloseContent="false"
                 sideTool="false"
         />
-        <postStartupActivity implementation="com.simi.labs.workflowtrace.startup.MyProjectActivity" />
-        <projectService serviceImplementation="com.simi.labs.workflowtrace.services.TracePointService"/>
+        <postStartupActivity implementation="com.simi.labs.codetracetree.startup.MyProjectActivity" />
+        <projectService serviceImplementation="com.simi.labs.codetracetree.services.TracePointService"/>
     </extensions>
 
     <actions>
-        <action id="com.simi.labs.workflowtrace.CreateTracePointAction"
-                class="com.simi.labs.workflowtrace.actions.CreateTracePointAction"
-                text="Create a workflow trace point"
-                description="Creates a workflow trace point at the current line">
+        <action id="com.simi.labs.codetracetree.CreateTracePointAction"
+                class="com.simi.labs.codetracetree.actions.CreateTracePointAction"
+                text="Create a code trace point"
+                description="Creates a code trace point at the current line">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
-        <action id="com.simi.labs.workflowtrace.UpdateTracePointAction"
-                class="com.simi.labs.workflowtrace.actions.UpdateTracePointAction"
-                text="Update the selected workflow trace point"
-                description="Updates the selected workflow trace point(s) to the current line">
+        <action id="com.simi.labs.codetracetree.UpdateTracePointAction"
+                class="com.simi.labs.codetracetree.actions.UpdateTracePointAction"
+                text="Update the selected code trace point"
+                description="Updates the selected code trace point(s) to the current line">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>

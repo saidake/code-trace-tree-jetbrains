@@ -1,4 +1,4 @@
-package com.simi.labs.workflowtrace
+package com.simi.labs.codetracetree
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls

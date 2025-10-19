@@ -1,4 +1,4 @@
-package com.simi.labs.workflowtrace.services
+package com.simi.labs.codetracetree.services
 
 import com.intellij.openapi.components.*
 import com.intellij.openapi.project.Project
@@ -29,7 +29,7 @@ import java.util.*
 @Service(Service.Level.PROJECT)
 @State(
     name = "TracePointService",
-    storages = [Storage("workflowTrace.xml")]
+    storages = [Storage("code-trace-tree-config.xml")]
 )
 class TracePointService(private val project: Project) : PersistentStateComponent<TracePointService.TracePointState> {
     @Tag("TracePoint")

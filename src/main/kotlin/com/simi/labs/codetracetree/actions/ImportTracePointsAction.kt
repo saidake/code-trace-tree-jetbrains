@@ -1,11 +1,11 @@
-package com.simi.labs.workflowtrace.actions
+package com.simi.labs.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
-import com.simi.labs.workflowtrace.services.TracePointService
+import com.simi.labs.codetracetree.services.TracePointService
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ui.Messages
