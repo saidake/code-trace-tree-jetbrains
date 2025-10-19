@@ -30,27 +30,45 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
             }
         }.filter { it.second != null }
 
-        val updatedTracePoints = tracePoints.toMutableList()
-        nodesToMove.forEach { (node, id) ->
-            val parent = node.parent as? DefaultMutableTreeNode ?: return@forEach
-            val index = parent.getIndex(node)
-            if (index > 0) {
-                val siblingTracePoints = updatedTracePoints.filter {
-                    it.parentId == (node.userObject as TracePointService.TracePoint).parentId
-                }.sortedBy { updatedTracePoints.indexOf(it) }
+        val allTracePoints = tracePoints.toMutableList()
+
+        // Group trace points by their parent node
+        val nodesGroupedByParent = nodesToMove.groupBy { (node, _) ->
+            (node.parent as? DefaultMutableTreeNode)?.let {
+                (it.userObject as? TracePointService.TracePoint)?.id ?: ""
+            } ?: ""
+        }
+        val globalIndexMap = allTracePoints.withIndex().associate { it.value.id to it.index }.toMutableMap()
+        nodesGroupedByParent.forEach { (_, nodes) ->
+            val parentTracePointId = nodes.first().first.parent.let {
+                (it as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+            }?.id
+
+            val siblingTracePoints = allTracePoints.filter {
+                it.parentId == parentTracePointId
+            }.toMutableList()
+
+            // Move up points starting from the first selected point
+            nodes.forEach { (node, id) ->
                 val currentIndex = siblingTracePoints.indexOfFirst { it.id == id }
-                if (currentIndex > 0) {
-                    val currentGlobalIndex = updatedTracePoints.indexOfFirst { it.id == id }
+                if (currentIndex>0) {
                     val previousSibling = siblingTracePoints[currentIndex - 1]
-                    val previousGlobalIndex = updatedTracePoints.indexOfFirst { it.id == previousSibling.id }
-                    updatedTracePoints[currentGlobalIndex] = updatedTracePoints[previousGlobalIndex].also {
-                        updatedTracePoints[previousGlobalIndex] = updatedTracePoints[currentGlobalIndex]
+                    if (selectedIds.contains(previousSibling.id)) return@forEach
+                    val currentGlobalIndex = globalIndexMap[id]!!
+                    val previousGlobalIndex = globalIndexMap[previousSibling.id]!!
+                    allTracePoints[currentGlobalIndex] = allTracePoints[previousGlobalIndex].also {
+                        allTracePoints[previousGlobalIndex] = allTracePoints[currentGlobalIndex]
                     }
+                    siblingTracePoints[currentIndex-1] = siblingTracePoints[currentIndex].also {
+                        siblingTracePoints[currentIndex] = siblingTracePoints[currentIndex-1]
+                    }
+                    globalIndexMap[id!!] = previousGlobalIndex
+                    globalIndexMap[previousSibling.id] = currentGlobalIndex
                 }
             }
         }
 
-        service.updateTracePoints(updatedTracePoints)
+        service.updateTracePoints(allTracePoints)
         // Restore selection after moving
         service.selectTracePoints(selectedIds.toList())
     }

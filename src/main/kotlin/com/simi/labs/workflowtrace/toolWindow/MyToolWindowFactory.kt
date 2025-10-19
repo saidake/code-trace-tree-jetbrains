@@ -377,8 +377,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     "",
                                     null
                                 ) ?: ""
-                                val finalName = if (tracePointName.isBlank()) "Unnamed Trace Point" else tracePointName
-                                service.addTracePoint(finalName, file, lineNumber, editor, parentId = tracePoint.id)
+                                service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = tracePoint.id)
                             }
                             popupMenu.add(addChildItem)
 
