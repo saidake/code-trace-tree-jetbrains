@@ -8,6 +8,7 @@ import com.intellij.openapi.components.service
 import com.simi.labs.workflowtrace.services.TracePointService
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.ui.Messages
 import com.intellij.util.xmlb.XmlSerializer
 import org.jdom.input.SAXBuilder
 import java.io.File
@@ -21,12 +22,21 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
             .withFileFilter { it.extension == "xml" }
             .withTitle("Import Trace Points")
         FileChooser.chooseFile(descriptor, project, null) { file ->
-            val xmlString = File(file.path).readText()
-            val builder = SAXBuilder()
-            val document = builder.build(StringReader(xmlString))
-            val element = document.rootElement
-            val state = XmlSerializer.deserialize(element, TracePointService.TracePointState::class.java)
-            service.loadState(state)
+            try {
+                val xmlString = File(file.path).readText()
+                val builder = SAXBuilder()
+                val document = builder.build(StringReader(xmlString))
+                val element = document.rootElement
+                val state = XmlSerializer.deserialize(element, TracePointService.TracePointState::class.java)
+                val currentProjectPath = project.basePath ?: ""
+                val updatedTracePoints = state.tracePoints.map { tracePoint ->
+                    tracePoint.copy(projectPath = currentProjectPath)
+                }
+                state.tracePoints = updatedTracePoints;
+                service.loadState(state)
+            } catch (ex: Exception) {
+                Messages.showErrorDialog(project, "Failed to import trace points: ${ex.message}", "Import Error")
+            }
         }
     }
 
