@@ -588,6 +588,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
         private fun updateDescriptionArea() {
             val selectedPaths = tree.selectionPaths
+            descriptionTextArea.isEnabled = false
             ApplicationManager.getApplication().invokeLater {
                 if (selectedPaths?.size == 1) {
                     val node = selectedPaths[0].lastPathComponent as? DefaultMutableTreeNode

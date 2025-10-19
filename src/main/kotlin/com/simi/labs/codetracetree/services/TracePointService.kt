@@ -96,15 +96,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
                 }
-
-                override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-                    ApplicationManager.getApplication().runReadAction {
-                        monitoredDocuments.remove(file)?.let { listener ->
-                            FileDocumentManager.getInstance().getDocument(file)?.removeDocumentListener(listener)
-                        }
-                        removeHighlights(file)
-                    }
-                }
             }
         )
 
@@ -312,7 +303,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         }
                     }
                 }
-                document.addDocumentListener(listener)
+                document.addDocumentListener(listener, project)
                 monitoredDocuments[file] = listener
             }
         }
