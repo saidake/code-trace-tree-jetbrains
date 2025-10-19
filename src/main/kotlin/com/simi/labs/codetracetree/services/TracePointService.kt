@@ -75,7 +75,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Property @XCollection(elementName = "TracePoint") var tracePoints: List<TracePoint> = emptyList(),
         @Property @XCollection var selectedTracePointIds: List<String> = emptyList(),
         @Property @XCollection var expandedTracePointIds: List<String> = emptyList(),
-        @Property var highlightingEnabled: Boolean = true
+        @Property var highlightingEnabled: Boolean = true,
+        @Property var descriptionAreaOpened: Boolean = false
     )
 
     private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
@@ -86,6 +87,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private val highlighters = mutableMapOf<VirtualFile, MutableList<com.intellij.openapi.editor.markup.RangeHighlighter>>()
     private var isFileSystemRefreshing = false
     private var isHighlightingEnabled = true
+    private var isDescriptionAreaOpened = false
 
     init {
         // Listen for file openings to attach DocumentListener and apply highlights
@@ -121,6 +123,12 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun isHighlightingEnabled(): Boolean {
         return isHighlightingEnabled
+    }
+    fun isDescriptionAreaOpened(): Boolean {
+        return isDescriptionAreaOpened
+    }
+    fun setDescriptionAreaOpened(opened: Boolean) {
+        isDescriptionAreaOpened=opened
     }
 
     fun setHighlightingEnabled(enabled: Boolean) {
@@ -498,7 +506,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 tracePoints = tracePoints.toList(),
                 selectedTracePointIds = selectedTracePointIds.toList(),
                 expandedTracePointIds = expandedTracePointIds.toList(),
-                highlightingEnabled = isHighlightingEnabled
+                highlightingEnabled = isHighlightingEnabled,
+                descriptionAreaOpened = isDescriptionAreaOpened
             )
         }
     }
@@ -512,6 +521,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             expandedTracePointIds.clear()
             expandedTracePointIds.addAll(state.expandedTracePointIds)
             isHighlightingEnabled = state.highlightingEnabled
+            isDescriptionAreaOpened = state.descriptionAreaOpened
             // Re-attach DocumentListeners and apply highlights
             tracePoints.map { it.fileName }.distinct().forEach { fileName ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")

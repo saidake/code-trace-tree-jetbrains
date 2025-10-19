@@ -92,7 +92,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private var isUpdatingTree = false
         private lateinit var tree: JTree
         private var anchorPath: TreePath? = null
-        private var descriptionAreaVisible = false
         private val descriptionTextArea = JTextArea().apply {
             lineWrap = true
             wrapStyleWord = true
@@ -238,6 +237,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
                 addMouseListener(object : MouseAdapter() {
                     override fun mouseClicked(e: MouseEvent) {
+                        descriptionTextArea.isEnabled = false
                         val tree = this@apply
                         val path = tree.getPathForLocation(e.x, e.y) ?: return
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
@@ -315,7 +315,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             isUpdatingTree = true
                             service.selectTracePoints(selectedIds)
                             isUpdatingTree = false
-                            updateDescriptionArea()
                         } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
                             println("Double-clicked trace point: ${tracePoint.name}")
                             ApplicationManager.getApplication().invokeLater {
@@ -326,10 +325,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     service.selectTracePoints(emptyList())
                                     anchorPath = null
                                     isUpdatingTree = false
-                                    updateDescriptionArea()
                                 }
                             }
                         }
+                        updateDescriptionArea()
                     }
 
                     override fun mousePressed(e: MouseEvent) {
@@ -564,7 +563,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 treeScrollPane.maximumSize = Dimension(Int.MAX_VALUE, Int.MAX_VALUE)
                 add(treeScrollPane)
             }
-            descriptionScrollPane.isVisible = descriptionAreaVisible
+            descriptionScrollPane.isVisible = service.isDescriptionAreaOpened()
 
             return panel
         }
@@ -575,10 +574,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         fun isHighlightOnDivider(): Boolean = false
         fun getDropPoint(): Point? = null
 
-        fun isDescriptionAreaVisible(): Boolean = descriptionAreaVisible
 
         fun setDescriptionAreaVisible(visible: Boolean) {
-            descriptionAreaVisible = visible
+            service.setDescriptionAreaOpened(visible)
             descriptionScrollPane.isVisible = visible
             val panel = toolWindow.contentManager.contents[0].component as? JBPanel<*> ?: return
             panel.revalidate()

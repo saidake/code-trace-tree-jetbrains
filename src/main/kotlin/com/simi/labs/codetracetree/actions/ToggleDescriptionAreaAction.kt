@@ -5,6 +5,8 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.ToggleAction
+import com.intellij.openapi.components.service
+import com.simi.labs.codetracetree.services.TracePointService
 import com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory
 
 class ToggleDescriptionAreaAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : ToggleAction(
@@ -18,7 +20,9 @@ class ToggleDescriptionAreaAction(private val myToolWindow: MyToolWindowFactory.
     }
 
     override fun isSelected(e: AnActionEvent): Boolean {
-        return myToolWindow.isDescriptionAreaVisible()
+        val project = e.project ?: return false
+        val service = project.service<TracePointService>()
+        return service.isDescriptionAreaOpened()
     }
 
     override fun setSelected(e: AnActionEvent, state: Boolean) {
