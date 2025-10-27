@@ -53,7 +53,7 @@ class UpdateTracePointAction : AnAction() {
                     lineNumber = lineNumber,
                     lineContent = lineContent,
                     isValid = true,
-                    totalOccurrenceCount = totalOccurrences,
+                    totalOccurrences = totalOccurrences,
                     occurrenceIndex = if (occurrenceIndex >= 0) occurrenceIndex else 0
                 )
             } else {
