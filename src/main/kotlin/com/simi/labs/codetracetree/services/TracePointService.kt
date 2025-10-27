@@ -32,23 +32,28 @@ import java.util.*
     storages = [Storage("code-trace-tree-config.xml")]
 )
 class TracePointService(private val project: Project) : PersistentStateComponent<TracePointService.TracePointState> {
-    @Tag("TracePoint")
+    @Tag("tracePoint")
     data class TracePoint(
-        @Property val id: String = "",
-        @Property val name: String = "",
-        @Property val fileName: String = "",
-        @Property val lineNumber: Int = 0,
-        @Property val parentId: String? = null,
-        @Property val projectPath: String = "",
-        @Property val lineContent: String? = null,
-        @Property val isValid: Boolean = true,
-        @Property val totalOccurrences: Int = 0,
-        @Property val occurrenceIndex: Int = 0,
-        @Property val description: String = "" // New description field
+        @Tag("id") val id: String = "",
+        @Tag("name") val name: String = "",
+        @Tag("fileName") val fileName: String = "",
+        @Tag("filePath") val filePath: String = "",
+
+        @Tag("lineNumber") val lineNumber: Int = 0,
+
+        @Tag("parentId") val parentId: String? = null,
+
+        @Tag("projectPath") val projectPath: String = "",
+
+        @Tag("lineContent") val lineContent: String? = null,
+        @Tag("isValid") val isValid: Boolean = true,
+        @Tag("totalOccurrences") val totalOccurrences: Int = 0,
+        @Tag("occurrenceIndex") val occurrenceIndex: Int = 0,
+        @Tag("description") val description: String = ""
     ) {
         fun navigateTo(project: Project) {
             ApplicationManager.getApplication().runReadAction {
-                val fileUrl = "file:///$projectPath/$fileName"
+                val fileUrl = "file:///$projectPath/$filePath"
                 val file = VirtualFileManager.getInstance().findFileByUrl(fileUrl)
                 if (file == null) {
                     ApplicationManager.getApplication().invokeLater {
@@ -70,13 +75,20 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
-    @Tag("TracePointState")
+    @Tag("tracePointState")
     data class TracePointState(
-        @Property @XCollection(elementName = "TracePoint") var tracePoints: List<TracePoint> = emptyList(),
-        @Property @XCollection var selectedTracePointIds: List<String> = emptyList(),
-        @Property @XCollection var expandedTracePointIds: List<String> = emptyList(),
-        @Property var highlightingEnabled: Boolean = true,
-        @Property var descriptionAreaOpened: Boolean = false
+        @Tag("tracePoints")
+        @XCollection(elementName = "tracePoint") var tracePoints: List<TracePoint> = emptyList(),
+        @Tag("expandedTracePointIds")
+        @XCollection(elementName = "id") var expandedTracePointIds: List<String> = emptyList(),
+
+        @Tag("selectedTracePointIds")
+        @XCollection(elementName = "id") var selectedTracePointIds: List<String> = emptyList(),
+
+        @Tag("highlightingEnabled")
+        var highlightingEnabled: Boolean = true,
+        @Tag("descriptionAreaOpened")
+        var descriptionAreaOpened: Boolean = false
     )
 
     private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
@@ -151,7 +163,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             removeHighlights(file)
 
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val relevantTracePoints = tracePoints.filter { it.fileName == filePath && it.isValid }
+            val relevantTracePoints = tracePoints.filter { it.filePath == filePath && it.isValid }
             val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
             val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
             if (editors.isEmpty()) return@runReadAction
@@ -205,7 +217,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            if (tracePoints.any { it.fileName == filePath } && !monitoredDocuments.containsKey(file)) {
+            if (tracePoints.any { it.filePath == filePath } && !monitoredDocuments.containsKey(file)) {
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
                     override fun documentChanged(event: DocumentEvent) {
@@ -215,7 +227,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         println("documentChanged triggered")
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
                         val docFilePath = docFile.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-                        val affectedTracePoints = tracePoints.filter { it.fileName == docFilePath }
+                        val affectedTracePoints = tracePoints.filter { it.filePath == docFilePath }
                         if (affectedTracePoints.isEmpty()) return
 
                         ApplicationManager.getApplication().runReadAction {
@@ -228,7 +240,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             println("oldLines: $oldLines, newLines: $newLines")
 
                             val updatedTracePoints = tracePoints.map { tracePoint ->
-                                if (tracePoint.fileName != docFilePath) return@map tracePoint
+                                if (tracePoint.filePath != docFilePath) return@map tracePoint
                                 when {
                                     // Update line number and content for trace points at the changed line if lines were added
                                     tracePoint.lineNumber == changedLine && lineOffset > 0 -> {
@@ -321,10 +333,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             val updatedTracePoints = tracePoints.map { tracePoint ->
                 // Invalidate trace points with default/empty required fields
-                if (tracePoint.id.isEmpty() || tracePoint.fileName.isEmpty() || tracePoint.projectPath.isEmpty()) {
+                if (tracePoint.id.isEmpty() || tracePoint.filePath.isEmpty() || tracePoint.projectPath.isEmpty()) {
                     return@map tracePoint.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                 }
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${tracePoint.projectPath}/${tracePoint.fileName}")
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${tracePoint.projectPath}/${tracePoint.filePath}")
                 if (file == null) {
                     return@map tracePoint.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                 }
@@ -371,7 +383,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             val tracePoint = TracePoint(
                 id = UUID.randomUUID().toString(),
                 name = name,
-                fileName = file.path.removePrefix(project.basePath?.let { "$it/" } ?: ""),
+                filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: ""),
+                fileName = file.name,
                 lineNumber = lineNumber,
                 parentId = parentId,
                 projectPath = project.basePath ?: "",
@@ -414,14 +427,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     fun deleteTracePoints(ids: List<String>) {
         ApplicationManager.getApplication().runReadAction {
             // Collect files affected by deleted trace points
-            val deletedFiles = tracePoints.filter { it.id in ids }.map { it.fileName }.distinct()
+            val deletedFiles = tracePoints.filter { it.id in ids }.map { it.filePath }.distinct()
             tracePoints.removeAll { it.id in ids }
             selectedTracePointIds.removeAll(ids)
             expandedTracePointIds.removeAll(ids)
 
             // Remove highlights for affected files and reapply for remaining trace points
-            deletedFiles.forEach { fileName ->
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+            deletedFiles.forEach { filePath ->
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$filePath")
                 if (file != null) {
                     removeHighlights(file) // Remove all highlights for the file
                     highlightTracePointsInFile(file) // Reapply highlights for remaining trace points
@@ -437,8 +450,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             tracePoints.clear()
             tracePoints.addAll(newTracePoints)
             // Re-attach DocumentListeners and reapply highlights
-            tracePoints.map { it.fileName }.distinct().forEach { fileName ->
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+            tracePoints.map { it.filePath }.distinct().forEach { filePath ->
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$filePath")
                 if (file != null) {
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
@@ -523,8 +536,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             isHighlightingEnabled = state.highlightingEnabled
             isDescriptionAreaOpened = state.descriptionAreaOpened
             // Re-attach DocumentListeners and apply highlights
-            tracePoints.map { it.fileName }.distinct().forEach { fileName ->
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$fileName")
+            tracePoints.map { it.filePath }.distinct().forEach { filePath ->
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$filePath")
                 if (file != null) {
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)

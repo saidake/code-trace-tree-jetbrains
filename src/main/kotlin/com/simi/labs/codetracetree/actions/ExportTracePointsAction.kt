@@ -9,9 +9,9 @@ import com.simi.labs.codetracetree.services.TracePointService
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ui.Messages
-import com.intellij.util.xmlb.XmlSerializer
-import org.jdom.output.XMLOutputter
+import org.jdom.Element
 import org.jdom.output.Format
+import org.jdom.output.XMLOutputter
 import java.io.File
 
 class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.Actions.Upload) {
@@ -50,9 +50,39 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
         FileChooser.chooseFile(descriptor, project, null) { directory ->
             val filePath = "${directory.path}/$finalFileName"
             val state = service.getState()
-            val element = XmlSerializer.serialize(state)
+            // Create root element
+            val rootElement = Element("tracePointState")
+            // Add tracePoints element
+            val tracePointsElement = Element("tracePoints")
+            state.tracePoints.forEach { tracePoint ->
+                val tracePointElement = Element("tracePoint").apply {
+                    addContent(Element("id").setText(tracePoint.id))
+                    addContent(Element("name").setText(tracePoint.name))
+                    addContent(Element("filePath").setText(tracePoint.filePath))
+                    addContent(Element("fileName").setText(tracePoint.fileName))
+                    addContent(Element("lineNumber").setText(tracePoint.lineNumber.toString()))
+                    if (tracePoint.parentId != null) {
+                        addContent(Element("parentId").setText(tracePoint.parentId))
+                    }
+                    addContent(Element("projectPath").setText(tracePoint.projectPath))
+                    addContent(Element("lineContent").setText(tracePoint.lineContent ?: ""))
+                    addContent(Element("isValid").setText(tracePoint.isValid.toString()))
+                    addContent(Element("totalOccurrences").setText(tracePoint.totalOccurrences.toString()))
+                    addContent(Element("occurrenceIndex").setText(tracePoint.occurrenceIndex.toString()))
+                    addContent(Element("description").setText(tracePoint.description))
+                }
+                tracePointsElement.addContent(tracePointElement)
+            }
+            rootElement.addContent(tracePointsElement)
+            // Add expandedTracePointIds element
+            val expandedIdsElement = Element("expandedTracePointIds")
+            state.expandedTracePointIds.forEach { id ->
+                expandedIdsElement.addContent(Element("id").setText(id))
+            }
+            rootElement.addContent(expandedIdsElement)
+            // Write to file
             val xmlOutput = XMLOutputter(Format.getPrettyFormat())
-            val xmlString = xmlOutput.outputString(element)
+            val xmlString = xmlOutput.outputString(rootElement)
             File(filePath).writeText(xmlString)
         }
     }
