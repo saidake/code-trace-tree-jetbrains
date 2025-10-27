@@ -107,6 +107,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    println("TracePointService - fileOpened triggered for file ${file.path}")
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
                 }
@@ -216,6 +217,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     private fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
+            println("attachDocumentListener triggered")
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
             if (tracePoints.any { it.filePath == filePath } && !monitoredDocuments.containsKey(file)) {
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
@@ -331,28 +333,45 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     private fun validateTracePointsOnLoad() {
         ApplicationManager.getApplication().runReadAction {
+            println("validateTracePointsOnLoad triggered")
             val updatedTracePoints = tracePoints.map { tracePoint ->
                 // Invalidate trace points with default/empty required fields
-                if (tracePoint.id.isEmpty() || tracePoint.filePath.isEmpty() || tracePoint.projectPath.isEmpty()) {
+                if (tracePoint.id.isEmpty() || tracePoint.filePath.isEmpty() || tracePoint.projectPath.isEmpty() || tracePoint.lineContent == null) {
                     return@map tracePoint.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                 }
+                // The target file doesn't exist.
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${tracePoint.projectPath}/${tracePoint.filePath}")
                 if (file == null) {
                     return@map tracePoint.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                 }
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@map tracePoint.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
+
+                // Invalid line number
                 val lines = document.text.split("\n")
                 if (tracePoint.lineNumber <= lines.size) {
                     val currentLineContent = lines[tracePoint.lineNumber - 1].trim()
-                    val (totalOccurrences, matchingLines) = getLineOccurrences(document, tracePoint.lineContent)
-                    val occurrenceIndex = matchingLines.indexOf(tracePoint.lineNumber) + 1
+                    if (currentLineContent == tracePoint.lineContent.trim()) {
+                        return@map tracePoint
+                    }
+                }
+
+                // Content does not match at lineNumber, search the file
+                val (totalOccurrences, matchingLines) = getLineOccurrences(document, tracePoint.lineContent)
+                println("occurrence doesn't match: totalOccurrences: $totalOccurrences, matchingLines: $matchingLines, tracePoint.totalOccurrenceCount: ${tracePoint.totalOccurrences} tracePoint.occurrenceIndex: ${tracePoint.occurrenceIndex}")
+                if (totalOccurrences == tracePoint.totalOccurrences && tracePoint.occurrenceIndex in 1..totalOccurrences) {
+                    // Update lineNumber to the line at occurrenceIndex
+                    val newLineNumber = matchingLines[tracePoint.occurrenceIndex - 1]
+
                     return@map tracePoint.copy(
+                        lineNumber = newLineNumber,
                         totalOccurrences = totalOccurrences,
-                        occurrenceIndex = if (occurrenceIndex >= 0) occurrenceIndex else 0,
+                        occurrenceIndex = tracePoint.occurrenceIndex,
                         isValid = true
                     )
+                } else {
+                    // Mark as invalid if occurrence count differs or occurrenceIndex is out of range
+                    return@map tracePoint.copy(isValid = false, totalOccurrences = totalOccurrences, occurrenceIndex = 0)
                 }
-                return@map tracePoint.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
             }
             tracePoints.clear()
             tracePoints.addAll(updatedTracePoints)
@@ -365,6 +384,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     fun addTracePoint(name: String, file: VirtualFile, lineNumber: Int, editor: Editor?, parentId: String? = null, description: String = "") {
+        println("TracePointService - addTracePoint triggered")
         ApplicationManager.getApplication().runReadAction {
             val document = FileDocumentManager.getInstance().getDocument(file)
             val lineContent = if (document != null && lineNumber <= document.lineCount) {
@@ -425,6 +445,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     fun deleteTracePoints(ids: List<String>) {
+        println("deleteTracePoints triggered, ids: $ids")
         ApplicationManager.getApplication().runReadAction {
             // Collect files affected by deleted trace points
             val deletedFiles = tracePoints.filter { it.id in ids }.map { it.filePath }.distinct()
@@ -446,6 +467,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     fun updateTracePoints(newTracePoints: List<TracePoint>) {
+        println("TracePointService - updateTracePoints triggered")
         ApplicationManager.getApplication().runReadAction {
             tracePoints.clear()
             tracePoints.addAll(newTracePoints)
@@ -526,6 +548,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     override fun loadState(state: TracePointState) {
+        println("TracePointService - loadState triggered")
         ApplicationManager.getApplication().runReadAction {
             tracePoints.clear()
             tracePoints.addAll(state.tracePoints)
@@ -535,10 +558,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             expandedTracePointIds.addAll(state.expandedTracePointIds)
             isHighlightingEnabled = state.highlightingEnabled
             isDescriptionAreaOpened = state.descriptionAreaOpened
+
+            validateTracePointsOnLoad()
+
             // Re-attach DocumentListeners and apply highlights
             tracePoints.map { it.filePath }.distinct().forEach { filePath ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$filePath")
                 if (file != null) {
+                    println("TracePointService - file validation triggered: ${file.path}")
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
                 }
