@@ -41,7 +41,8 @@ class UpdateTracePointAction : AnAction() {
         val endOffset = document.getLineEndOffset(lineNumber - 1)
         val lineContent = document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trim()
         val projectPath = project.basePath ?: return
-        val fileName = file.path.removePrefix("$projectPath/")
+        val filePath = file.path.removePrefix("$projectPath/")
+        val fileName = file.name
 
         val updatedTracePoints = service.getTracePoints().map { tracePoint ->
             if (tracePoint.id in selectedTracePointIds) {
@@ -49,6 +50,7 @@ class UpdateTracePointAction : AnAction() {
                 val occurrenceIndex = matchingLines.indexOf(lineNumber) + 1
                 tracePoint.copy(
                     fileName = fileName,
+                    filePath = filePath,
                     projectPath = projectPath,
                     lineNumber = lineNumber,
                     lineContent = lineContent,
