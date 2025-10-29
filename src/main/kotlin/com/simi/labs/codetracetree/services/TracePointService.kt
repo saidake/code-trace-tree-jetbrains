@@ -116,6 +116,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
         // Validate trace points on initial load and file refresh
         ApplicationManager.getApplication().runReadAction {
+            println("validateTracePointsOnLoad triggered in the init method of TracePointService")
             validateTracePointsOnLoad()
         }
 
@@ -127,6 +128,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
             override fun afterRefreshFinish(isAsync: Boolean) {
                 ApplicationManager.getApplication().runReadAction {
+                    println("validateTracePointsOnLoad triggered in afterRefreshFinish")
                     validateTracePointsOnLoad()
                     isFileSystemRefreshing = false
                 }
@@ -238,11 +240,17 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             val newLinesCount = (event.newFragment.toString().split("\n").size - 1)
                             val lineOffset = newLinesCount - oldLines
                             val changedLine = event.document.getLineNumber(event.offset) + 1
-                            println("lineOffset: $lineOffset, changedLine: $changedLine")
-                            println("oldLines: $oldLines, newLines: $newLines")
+                            // println("lineOffset: $lineOffset, changedLine: $changedLine")
+                            // println("oldLines: $oldLines, newLines: $newLines")
 
                             val updatedTracePoints = tracePoints.map { tracePoint ->
                                 if (tracePoint.filePath != docFilePath) return@map tracePoint
+                                // Revalidate invalid line
+                                if (!tracePoint.isValid) {
+                                    return@map tracePoint.copy(
+                                        isValid = newLines[tracePoint.lineNumber-1] == tracePoint.lineContent
+                                    )
+                                }
                                 when {
                                     // Update line number and content for trace points at the changed line if lines were added
                                     tracePoint.lineNumber == changedLine && lineOffset > 0 -> {
@@ -558,7 +566,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             expandedTracePointIds.addAll(state.expandedTracePointIds)
             isHighlightingEnabled = state.highlightingEnabled
             isDescriptionAreaOpened = state.descriptionAreaOpened
-
+            println("validateTracePointsOnLoad triggered in loadState")
             validateTracePointsOnLoad()
 
             // Re-attach DocumentListeners and apply highlights
