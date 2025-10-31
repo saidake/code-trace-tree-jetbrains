@@ -15,10 +15,8 @@ import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.VirtualFileManagerListener
-import com.intellij.util.xmlb.annotations.Property
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
-import com.intellij.util.xmlb.XmlSerializerUtil
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -93,6 +91,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     private val listeners = mutableListOf<(List<TracePoint>, List<String>) -> Unit>()
     private val tracePoints = mutableListOf<TracePoint>()
+    private var tracePointMap: MutableMap<String, TracePoint> = mutableMapOf()
     private val selectedTracePointIds = mutableSetOf<String>()
     private val expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
@@ -215,6 +214,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             if (line.trim() == content.trim()) index + 1 else null
         }.filterNotNull()
         return Pair(matchingLines.size, matchingLines)
+    }
+
+    fun updateTracePointMap() {
+        tracePointMap = tracePoints.associateBy { it.id }.toMutableMap()
     }
 
     private fun attachDocumentListener(file: VirtualFile) {
@@ -452,14 +455,41 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
-    fun deleteTracePoints(ids: List<String>) {
-        println("deleteTracePoints triggered, ids: $ids")
+    fun deleteTracePointsWithChildren(ids: List<String>) {
+        println("deleteTracePointsWithChildren triggered, ids: $ids")
         ApplicationManager.getApplication().runReadAction {
+            // Collect all IDs to delete (target IDs + all their descendants)
+            val idsToDelete = mutableSetOf<String>()
+            idsToDelete.addAll(ids)
+
+            // Recursively collect all descendant IDs
+            fun collectDescendants(currentIds: Set<String>) {
+                val newDescendants = tracePoints
+                    .filter { it.parentId in currentIds }
+                    .map { it.id }
+                    .toSet()
+                if (newDescendants.isNotEmpty()) {
+                    idsToDelete.addAll(newDescendants)
+                    collectDescendants(newDescendants)
+                }
+            }
+
+            collectDescendants(ids.toSet())
+
+            println("Deleting ${idsToDelete.size} trace points (including descendants)")
+
             // Collect files affected by deleted trace points
-            val deletedFiles = tracePoints.filter { it.id in ids }.map { it.filePath }.distinct()
-            tracePoints.removeAll { it.id in ids }
-            selectedTracePointIds.removeAll(ids)
-            expandedTracePointIds.removeAll(ids)
+            val deletedFiles = tracePoints
+                .filter { it.id in idsToDelete }
+                .map { it.filePath }
+                .distinct()
+
+            // Remove trace points
+            tracePoints.removeAll { it.id in idsToDelete }
+
+            // Clean up selections and expansions
+            selectedTracePointIds.removeAll(idsToDelete)
+            expandedTracePointIds.removeAll(idsToDelete)
 
             // Remove highlights for affected files and reapply for remaining trace points
             deletedFiles.forEach { filePath ->

@@ -22,7 +22,6 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.ui.components.JBPanel
-import java.awt.BorderLayout
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.event.MouseAdapter
@@ -33,7 +32,6 @@ import javax.swing.tree.TreePath
 import javax.swing.JPopupMenu
 import javax.swing.JMenuItem
 import javax.swing.JTree
-import java.util.*
 import javax.swing.event.TreeExpansionListener
 import javax.swing.event.TreeExpansionEvent
 import com.intellij.ui.components.JBScrollPane
@@ -116,7 +114,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     if (!isUpdatingTree) {
                         println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
                         updateTreeModel(tracePoints, this, expandedIds)
-//                        updateDescriptionArea()
                     }
                 }
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
@@ -369,7 +366,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     null
                                 )
                                 if (confirm == Messages.YES) {
-                                    service.deleteTracePoints(selectedTracePoints.map { it.id })
+                                    service.deleteTracePointsWithChildren(selectedTracePoints.map { it.id })
                                 }
                             }
                             popupMenu.add(deleteItem)
@@ -424,7 +421,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     null
                                 )
                                 if (confirm == Messages.YES) {
-                                    service.deleteTracePoints(listOf(tracePoint.id))
+                                    service.deleteTracePointsWithChildren(listOf(tracePoint.id))
                                 }
                             }
                             popupMenu.add(deleteItem)
