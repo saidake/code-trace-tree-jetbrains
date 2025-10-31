@@ -23,16 +23,24 @@
     </extensions>
 
     <actions>
-        <action id="com.simi.labs.codetracetree.CreateTracePointAction"
-                class="com.simi.labs.codetracetree.actions.CreateTracePointAction"
-                text="Create a code trace point"
-                description="Creates a code trace point at the current line">
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-        </action>
         <action id="com.simi.labs.codetracetree.UpdateTracePointAction"
                 class="com.simi.labs.codetracetree.actions.UpdateTracePointAction"
                 text="Update the selected code trace point"
                 description="Updates the selected code trace point(s) to the current line">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.simi.labs.codetracetree.CreateRootTracePointAction"
+                class="com.simi.labs.codetracetree.actions.CreateRootTracePointAction"
+                text="Create a Root Trace Point"
+                description="Creates a root-level trace point at the current line">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.simi.labs.codetracetree.CreateTracePointUnderSelectedAction"
+                class="com.simi.labs.codetracetree.actions.CreateTracePointUnderSelectedAction"
+                text="Create a Trace Point (Under Selected)"
+                description="Adds the current line as a child of every selected trace point">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>

@@ -371,31 +371,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             popupMenu.add(deleteItem)
                         } else {
-                            val addChildItem = JMenuItem("Add a child point")
-                            addChildItem.addActionListener {
-                                val editor = FileEditorManager.getInstance(toolWindow.project).selectedTextEditor
-                                val file = FileEditorManager.getInstance(toolWindow.project).selectedFiles.firstOrNull()
-                                if (editor == null || file == null || editor.caretModel.getCaretsAndSelections().isEmpty() || !editor.caretModel.currentCaret.isValid) {
-                                    Messages.showWarningDialog(
-                                        toolWindow.project,
-                                        "No valid caret position found in the editor.",
-                                        "Add Child Trace Point"
-                                    )
-                                    return@addActionListener
-                                }
-                                val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
-                                val tracePointName = Messages.showInputDialog(
-                                    toolWindow.project,
-                                    "Enter name for the child trace point (leave empty for default):",
-                                    "Add Child Trace Point",
-                                    null,
-                                    "",
-                                    null
-                                ) ?: ""
-                                service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = tracePoint.id)
-                            }
-                            popupMenu.add(addChildItem)
-
                             val renameItem = JMenuItem("Rename")
                             renameItem.addActionListener {
                                 val newName = Messages.showInputDialog(
