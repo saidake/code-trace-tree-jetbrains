@@ -19,7 +19,7 @@ class CollapseAllTracePointAction(private val myToolWindow: MyToolWindowFactory.
         val pathsToCollapse = mutableListOf<TreePath>()
 
         myToolWindow.traverseTreeNodes(rootNode) { node ->
-            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
             if (tracePoint != null) {
                 pathsToCollapse.add(TreePath(node.path))
             }

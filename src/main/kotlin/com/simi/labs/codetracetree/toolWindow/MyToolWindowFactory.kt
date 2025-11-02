@@ -191,8 +191,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         try {
                             val expandedPaths = mutableSetOf<TreePath>()
                             traverseTreeNodes(rootTreeNode) { node ->
-                                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                                if (tracePoint != null) {
+                                val tracePointNode = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
+                                if (tracePointNode != null) {
                                     val nodePath = TreePath(node.path)
                                     if (tree.isExpanded(nodePath)) {
                                         expandedPaths.add(nodePath)
@@ -593,12 +593,14 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
         private fun updateDescriptionArea() {
+            println("updateDescriptionArea triggered")
             val selectedPaths = tree.selectionPaths
             descriptionTextArea.isEnabled = false
             ApplicationManager.getApplication().invokeLater {
                 if (selectedPaths?.size == 1) {
                     val node = selectedPaths[0].lastPathComponent as? DefaultMutableTreeNode
-                    val tracePoint = node?.userObject as? TracePointService.TracePoint
+                    val tracePointNode = node?.userObject as? TracePointService.TracePointNode
+                    val tracePoint = tracePointNode?.tracePoint
                     if (tracePoint != null) {
                         descriptionTextArea.text = tracePoint.description
                         descriptionTextArea.isEnabled = true

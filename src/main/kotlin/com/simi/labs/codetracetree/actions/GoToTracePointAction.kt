@@ -17,8 +17,8 @@ class GoToTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolW
         val tree = myToolWindow.getTree()
         val selectedPath = tree.selectionPath ?: return
         val node = selectedPath.lastPathComponent as? DefaultMutableTreeNode ?: return
-        val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
-        tracePoint.navigateTo(e.project ?: return)
+        val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
+        tracePointNode.tracePoint.navigateTo(e.project ?: return)
     }
 
     override fun update(e: AnActionEvent) {
