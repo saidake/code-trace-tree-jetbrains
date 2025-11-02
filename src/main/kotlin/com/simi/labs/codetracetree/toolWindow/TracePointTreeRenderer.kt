@@ -27,15 +27,15 @@ class TracePointTreeRenderer(
         this.tree = tree // Store the JTree instance
         val userObject = (value as? DefaultMutableTreeNode)?.userObject
         text = when (userObject) {
-            is TracePointService.TracePoint -> {
-                val fileName = userObject.fileName.substringAfterLast('/')
-                val title = "${userObject.name}($fileName: ${userObject.lineNumber})"
-                if (!userObject.isValid) "<html><strike>$title</strike></html>" else title
+            is TracePointService.TracePointNode -> {
+                val fileName = userObject.tracePoint.fileName.substringAfterLast('/')
+                val title = "${userObject.tracePoint.name}($fileName: ${userObject.tracePoint.lineNumber})"
+                if (!userObject.tracePoint.isValid) "<html><strike>$title</strike></html>" else title
             }
             else -> userObject?.toString() ?: ""
         }
         background = if (selected) JBColor.LIGHT_GRAY else JBColor.WHITE
-        foreground = if (userObject is TracePointService.TracePoint &&
+        foreground = if (userObject is TracePointService.TracePointNode &&
             service.isTracePointSelected(userObject.id)) {
             UIUtil.getTreeSelectionForeground()
         } else {

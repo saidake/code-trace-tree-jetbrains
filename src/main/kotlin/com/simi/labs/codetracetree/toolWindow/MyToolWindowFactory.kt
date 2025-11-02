@@ -36,7 +36,6 @@ import javax.swing.event.TreeExpansionListener
 import javax.swing.event.TreeExpansionEvent
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.treeStructure.Tree
 import java.awt.Point
@@ -49,7 +48,9 @@ import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
 import javax.swing.BoxLayout
+import javax.swing.SwingUtilities
 import javax.swing.TransferHandler
+
 
 class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -85,11 +86,16 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
     class MyToolWindow(private val toolWindow: ToolWindow, private val project: Project) {
         private val service = toolWindow.project.service<TracePointService>()
         private val treeModel = DefaultTreeModel(DefaultMutableTreeNode("Root"))
+
         private val rootNode get() = treeModel.root as DefaultMutableTreeNode
+        private val nodeMap: MutableMap<String, DefaultMutableTreeNode> = mutableMapOf(
+            "root" to rootNode
+        )
         private var highlightedPath: TreePath? = null
         private var isUpdatingTree = false
         private lateinit var tree: JTree
         private var anchorPath: TreePath? = null
+
         private val descriptionTextArea = JTextArea().apply {
             lineWrap = true
             wrapStyleWord = true
@@ -113,7 +119,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 service.addTracePointListener { tracePoints, expandedIds ->
                     if (!isUpdatingTree) {
                         println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
-                        updateTreeModel(tracePoints, this, expandedIds)
+                        fullyUpdateTreeModel(tracePoints, this, expandedIds)
                     }
                 }
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
@@ -126,7 +132,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val tree = c as? JTree ?: return null
                         val path = tree.selectionPath ?: return null
                         draggedNode = path.lastPathComponent as? DefaultMutableTreeNode ?: return null
-                        val tracePoint = draggedNode?.userObject as? TracePointService.TracePoint ?: return null
+                        val tracePoint = draggedNode?.userObject as? TracePointService.TracePointNode ?: return null
                         return object : Transferable {
                             override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(tracePointDataFlavor)
                             override fun isDataFlavorSupported(flavor: DataFlavor?): Boolean = flavor == tracePointDataFlavor
@@ -148,19 +154,19 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
                         val dropPath = dropLocation.path ?: return false
                         val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
-                        val draggedTracePoint = draggedNode?.userObject as? TracePointService.TracePoint ?: return false
-                        val dropTracePoint = dropNode.userObject as? TracePointService.TracePoint ?: return false
+                        val draggedTracePoint = draggedNode?.userObject as? TracePointService.TracePointNode ?: return false
+                        val dropTracePoint = dropNode.userObject as? TracePointService.TracePointNode ?: return false
                         // Prevent dropping on the same node or its descendants
                         if (dropTracePoint.id == draggedTracePoint.id) return false
                         var node: DefaultMutableTreeNode? = dropNode
                         while (node != null && node != rootNode) {
-                            val nodeTracePoint = node.userObject as? TracePointService.TracePoint
-                            if (nodeTracePoint?.id == draggedTracePoint.id) return false
+                            val tracePointNode = node.userObject as? TracePointService.TracePointNode
+                            if (tracePointNode?.id == draggedTracePoint.id) return false
                             node = node.parent as? DefaultMutableTreeNode
                         }
                         // Prevent dropping on the current parent
                         val draggedParent = draggedNode?.parent as? DefaultMutableTreeNode
-                        val draggedParentTracePoint = draggedParent?.userObject as? TracePointService.TracePoint
+                        val draggedParentTracePoint = draggedParent?.userObject as? TracePointService.TracePointNode
                         if (draggedParentTracePoint?.id == dropTracePoint.id) return false
                         if (dropNode.userObject !is TracePointService.TracePoint) return false
                         highlightedPath = dropPath
@@ -172,11 +178,14 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         if (!canImport(support)) return false
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
                         val dropPath = dropLocation.path ?: return false
-                        val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
+                        val dropTreeNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                         val transferable = support.transferable
                         val tracePointId = transferable.getTransferData(tracePointDataFlavor) as? String ?: return false
-                        val draggedTracePoint = service.getTracePoints().find { it.id == tracePointId } ?: return false
-                        val draggedNode = findNodeByTracePointId(tracePointId) ?: return false
+
+                        val draggedTracePoints=service.findTracePointNodes { it.id == tracePointId }
+                        if (draggedTracePoints.size!=1) return false
+                        val draggedTracePoint = draggedTracePoints[0]
+                        val draggedTreeNode = findNodeByTracePointId(tracePointId) ?: return false
                         val tree = support.component as? JTree ?: return false
 
                         try {
@@ -193,25 +202,34 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             highlightedPath = null
                             tree.repaint()
-                            val parentNode = dropNode
+                            val parentNode = dropTreeNode
                             val dropIndex = parentNode.childCount
-                            val newParentId = (dropNode.userObject as TracePointService.TracePoint).id
-                            (draggedNode.parent as? DefaultMutableTreeNode)?.remove(draggedNode)
-                            parentNode.insert(draggedNode, dropIndex)
-                            val currentTracePoints = service.getTracePoints()
-                            val updatedTracePoints = currentTracePoints.map { tracePoint ->
-                                if (tracePoint.id == draggedTracePoint.id) {
-                                    tracePoint.copy(parentId = newParentId)
-                                } else {
-                                    tracePoint
-                                }
+                            val newParentId = (dropTreeNode.userObject as TracePointService.TracePointNode).id
+                            (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
+                            // Append the draggedNode in the parentNode
+                            parentNode.insert(draggedTreeNode, dropIndex)
+
+                            // Remove the draggedTracePoint from its parent
+                            val oldParentTracePoint = draggedTracePoint.parentId?.let { service.getTracePointById(it) }
+                            oldParentTracePoint?.children?.remove(draggedTracePoint)
+
+                            // Insert the draggedTracePoint into the new parent
+                            val newParentTracePoint = service.findTracePointNodes { it.id == newParentId }.firstOrNull()
+                            newParentTracePoint?.children?.add(draggedTracePoint)
+                            draggedTracePoint.parentId = newParentId
+
+                            // Update the related trace points
+                            newParentTracePoint?.let {
+//                                service.updateNodeMap(listOf(newParentTracePoint))
+//                                service.refreshDocumentListener(listOf(newParentTracePoint))
+                                service.notifyListeners()
                             }
-                            service.updateTracePoints(updatedTracePoints)
+
                             treeModel.reload()
                             val pathsToExpand = mutableSetOf<TreePath>()
                             val expandedIds = service.getExpandedTracePointIds()
                             traverseNodes(rootNode) { node ->
-                                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
+                                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
                                 if (tracePoint != null) {
                                     val nodePath = TreePath(node.path)
                                     if (expandedIds.contains(tracePoint.id)) {
@@ -223,8 +241,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             pathsToExpand.forEach { path ->
                                 tree.expandPath(path)
                             }
-                            selectionPath = TreePath(draggedNode.path)
-                            println("Moved trace point ${draggedTracePoint.name} to parent $newParentId as last child")
+                            selectionPath = TreePath(draggedTreeNode.path)
+                            println("Moved trace point ${draggedTracePoint.tracePoint.name} to parent $newParentId as last child")
                             return true
                         } catch (e: Exception) {
                             thisLogger().warn("Failed to move trace point: ${e.message}", e)
@@ -234,11 +252,18 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
                 addMouseListener(object : MouseAdapter() {
                     override fun mouseClicked(e: MouseEvent) {
+                        println("mouseClicked triggered")
                         descriptionTextArea.isEnabled = false
                         val tree = this@apply
-                        val path = tree.getPathForLocation(e.x, e.y) ?: return
+//                        val path = tree.getPathForLocation(e.x, e.y) ?: run {
+//                            println("No path found - tree might be empty or coordinates wrong")
+//                            return
+//                        }
+                        val treePoint = SwingUtilities.convertPoint(e.component, e.point, tree)
+                        val path = tree.getPathForLocation(treePoint.x, treePoint.y) ?: return
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
-                        val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
+                        val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
+                        val tracePoint = tracePointNode.tracePoint
                         println("Mouse clicked on trace point: ${tracePoint.name} in ${tracePoint.fileName} at line ${tracePoint.lineNumber}")
 
                         if (e.clickCount == 1 && e.button == MouseEvent.BUTTON1) {
@@ -249,16 +274,16 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
                                     if (tree.isExpanded(path)) {
                                         tree.collapsePath(path)
-                                        if (currentExpandedIds.contains(tracePoint.id)) {
-                                            currentExpandedIds.remove(tracePoint.id)
+                                        if (currentExpandedIds.contains(tracePointNode.id)) {
+                                            currentExpandedIds.remove(tracePointNode.id)
                                             isUpdatingTree = true
                                             service.setExpandedTracePointIds(currentExpandedIds)
                                             isUpdatingTree = false
                                         }
                                     } else {
                                         tree.expandPath(path)
-                                        if (!currentExpandedIds.contains(tracePoint.id)) {
-                                            currentExpandedIds.add(tracePoint.id)
+                                        if (!currentExpandedIds.contains(tracePointNode.id)) {
+                                            currentExpandedIds.add(tracePointNode.id)
                                             isUpdatingTree = true
                                             service.setExpandedTracePointIds(currentExpandedIds)
                                             isUpdatingTree = false
@@ -269,7 +294,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
 
                             // Handle selection
-                            val selectedIds = mutableListOf<String>()
+                            val selectedIds = mutableSetOf<String>()
                             if (e.isShiftDown) {
                                 // Mimic Project view Shift selection: select all visible nodes between anchor and clicked node
                                 val currentRow = tree.getRowForPath(path)
@@ -287,30 +312,31 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                         }
                                     }
                                     tree.selectionPaths = newSelectedPaths.toTypedArray()
-                                    selectedIds.addAll(newSelectedPaths.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }.map { it.id })
+                                    selectedIds.addAll(newSelectedPaths.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode }.map { it.id })
                                 } else {
                                     tree.selectionPath = path
-                                    selectedIds.add(tracePoint.id)
+                                    selectedIds.add(tracePointNode.id)
                                     anchorPath = path
                                 }
                             } else if (e.isControlDown) {
                                 if (tree.isPathSelected(path)) {
                                     tree.removeSelectionPath(path)
-                                    service.toggleTracePointSelection(tracePoint.id)
-                                    selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }?.map { it.id } ?: emptyList())
+                                    service.toggleTracePointSelection(tracePointNode.id)
+                                    selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode }?.map { it.id } ?: emptyList())
                                 } else {
                                     tree.addSelectionPath(path)
-                                    service.toggleTracePointSelection(tracePoint.id)
-                                    selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint }?.map { it.id } ?: emptyList())
+                                    service.toggleTracePointSelection(tracePointNode.id)
+                                    selectedIds.addAll(tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode }?.map { it.id } ?: emptyList())
                                 }
                                 anchorPath = null
                             } else {
                                 tree.selectionPath = path
-                                selectedIds.add(tracePoint.id)
+                                selectedIds.add(tracePointNode.id)
                                 anchorPath = path
                             }
                             isUpdatingTree = true
                             service.selectTracePoints(selectedIds)
+                            service.notifyListeners()
                             isUpdatingTree = false
                         } else if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
                             println("Double-clicked trace point: ${tracePoint.name}")
@@ -319,7 +345,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 if (!tree.isPathSelected(path)) {
                                     isUpdatingTree = true
                                     tree.clearSelection()
-                                    service.selectTracePoints(emptyList())
+                                    service.selectTracePoints(emptySet())
+                                    service.notifyListeners()
                                     anchorPath = null
                                     isUpdatingTree = false
                                 }
@@ -341,21 +368,27 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     }
 
                     private fun showPopupMenu(e: MouseEvent, toolWindow: ToolWindow) {
+                        println("showPopupMenu triggered")
                         val tree = this@apply
-                        val path = tree.getPathForLocation(e.x, e.y) ?: return
+//                        val path = tree.getPathForLocation(e.x, e.y) ?: return
+                        val treePoint = SwingUtilities.convertPoint(e.component, e.point, tree)
+                        val path = tree.getPathForLocation(treePoint.x, treePoint.y) ?: return
+                        println("path: ${path}")
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
-                        val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
+                        val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
+                        val tracePoint = tracePointNode.tracePoint
                         if (!tree.isPathSelected(path)) {
                             tree.selectionPath = path
                             isUpdatingTree = true
-                            service.selectTracePoints(listOf(tracePoint.id))
+                            service.selectTracePoints(setOf(tracePointNode.id))
+                            service.notifyListeners()
                             isUpdatingTree = false
                             anchorPath = path
                             updateDescriptionArea()
                         }
-                        val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint } ?: emptyList()
+                        val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode } ?: emptyList()
                         val popupMenu = JPopupMenu()
-
+                        println("selectedTracePoints.size : ${selectedTracePoints.size}")
                         if (selectedTracePoints.size > 1) {
                             val deleteItem = JMenuItem("Delete")
                             deleteItem.addActionListener {
@@ -382,7 +415,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     null
                                 )
                                 if (!newName.isNullOrBlank()) {
-                                    service.renameTracePoint(tracePoint.id, newName)
+                                    service.renameTracePoint(tracePointNode.id, newName)
                                 }
                             }
                             popupMenu.add(renameItem)
@@ -396,7 +429,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     null
                                 )
                                 if (confirm == Messages.YES) {
-                                    service.deleteTracePointsWithChildren(listOf(tracePoint.id))
+                                    service.deleteTracePointsWithChildren(listOf(tracePointNode.id))
                                 }
                             }
                             popupMenu.add(deleteItem)
@@ -416,14 +449,15 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         if (isUpdatingTree) return
                         val path = event.path
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
-                        val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
+                        val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
+                        val tracePoint = tracePointNode.tracePoint
                         val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
-                        if (!currentExpandedIds.contains(tracePoint.id)) {
-                            currentExpandedIds.add(tracePoint.id)
+                        if (!currentExpandedIds.contains(tracePointNode.id)) {
+                            currentExpandedIds.add(tracePointNode.id)
                             isUpdatingTree = true
                             service.setExpandedTracePointIds(currentExpandedIds)
                             isUpdatingTree = false
-                            println("Expanded trace point: ${tracePoint.id}")
+                            println("Expanded trace point: ${tracePointNode.id}")
                         }
                     }
 
@@ -431,14 +465,15 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         if (isUpdatingTree) return
                         val path = event.path
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
-                        val tracePoint = node.userObject as? TracePointService.TracePoint ?: return
+                        val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
+                        val tracePoint = tracePointNode.tracePoint
                         val currentExpandedIds = service.getExpandedTracePointIds().toMutableList()
-                        if (currentExpandedIds.contains(tracePoint.id)) {
-                            currentExpandedIds.remove(tracePoint.id)
+                        if (currentExpandedIds.contains(tracePointNode.id)) {
+                            currentExpandedIds.remove(tracePointNode.id)
                             isUpdatingTree = true
                             service.setExpandedTracePointIds(currentExpandedIds)
                             isUpdatingTree = false
-                            println("Collapsed trace point: ${tracePoint.id}")
+                            println("Collapsed trace point: ${tracePointNode.id}")
                         }
                     }
                 })
@@ -462,11 +497,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     val selectedPaths = tree.selectionPaths
                     if (selectedPaths?.size == 1) {
                         val node = selectedPaths[0].lastPathComponent as? DefaultMutableTreeNode
-                        val tracePoint = node?.userObject as? TracePointService.TracePoint
+                        val tracePointNode = node?.userObject as? TracePointService.TracePointNode
+                        val tracePoint = tracePointNode?.tracePoint
                         if (tracePoint != null) {
                             val newDescription = descriptionTextArea.text
                             if (newDescription != tracePoint.description) {
-                                service.updateTracePointDescription(tracePoint.id, newDescription)
+                                service.updateTracePointDescription(tracePointNode.id, newDescription)
                             }
                         }
                     }
@@ -587,70 +623,62 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             return true
         }
 
-        private fun updateTreeModel(tracePoints: List<TracePointService.TracePoint>, tree: JTree, expandedIds: List<String>) {
+        private fun fullyUpdateTreeModel(rootTracePointNodes: List<TracePointService.TracePointNode>, tree: JTree, expandedIds: List<String>) {
+            println("fullyUpdateTreeModel triggered")
             isUpdatingTree = true
-            val selectedIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
+            val selectedIds = service.getSelectedTracePointIds()
             rootNode.removeAllChildren()
-            val nodeMap = mutableMapOf<String, DefaultMutableTreeNode>()
-            tracePoints.forEach { tracePoint ->
-                val node = DefaultMutableTreeNode(tracePoint)
-                nodeMap[tracePoint.id] = node
+            nodeMap.clear()
+            rootTracePointNodes.forEach { tp ->
+                val node = DefaultMutableTreeNode(tp)
+                nodeMap[tp.id] = node
             }
-            tracePoints.forEach { tracePoint ->
-                val node = nodeMap[tracePoint.id] ?: return@forEach
-                if (tracePoint.parentId == null) {
+
+            rootTracePointNodes.forEach { tp ->
+                val node = nodeMap[tp.id] ?: return@forEach
+                if (tp.parentId == null) {
                     rootNode.add(node)
                 } else {
-                    val parentNode = nodeMap[tracePoint.parentId]
-                    if (parentNode != null) {
-                        parentNode.add(node)
-                    } else {
-                        rootNode.add(node)
-                        thisLogger().warn("Parent node not found for trace point ${tracePoint.name} with parentId ${tracePoint.parentId}")
-                    }
+                    nodeMap[tp.parentId]?.add(node)
+                        ?: thisLogger().warn("Parent not found for ${tp.tracePoint.name} (${tp.parentId})")
                 }
             }
+
             treeModel.reload()
+
+            // Expand
             val pathsToExpand = mutableSetOf<TreePath>()
             traverseNodes(rootNode) { node ->
-                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                if (tracePoint != null && expandedIds.contains(tracePoint.id)) {
+                val tp = (node.userObject as? TracePointService.TracePointNode)
+                if (tp != null && expandedIds.contains(tp.id)) {
                     pathsToExpand.add(TreePath(node.path))
                 }
                 true
             }
-            pathsToExpand.forEach { path ->
-                tree.expandPath(path)
-            }
+            pathsToExpand.forEach { tree.expandPath(it) }
+
+            // Restore selection
             val selectedPaths = mutableListOf<TreePath>()
             traverseNodes(rootNode) { node ->
-                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                if (tracePoint != null && selectedIds.contains(tracePoint.id)) {
-                    val nodePath = TreePath(node.path)
-                    if (tree.isVisible(nodePath)) {
-                        selectedPaths.add(nodePath)
-                    }
+                val tp = (node.userObject as? TracePointService.TracePointNode)
+                if (tp != null && selectedIds.contains(tp.id) && tree.isVisible(TreePath(node.path))) {
+                    selectedPaths.add(TreePath(node.path))
                 }
                 true
             }
-            if (selectedPaths.isNotEmpty()) {
-                tree.selectionPaths = selectedPaths.toTypedArray()
-            } else {
-                tree.clearSelection()
-            }
+            tree.selectionPaths = selectedPaths.toTypedArray().takeIf { it.isNotEmpty() }
+
             isUpdatingTree = false
         }
 
-        private fun findNodeByTracePointId(tracePointId: String): DefaultMutableTreeNode? {
+        private fun findNodeByTracePointId(id: String): DefaultMutableTreeNode? {
             var result: DefaultMutableTreeNode? = null
             traverseNodes(rootNode) { node ->
-                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePoint
-                if (tracePoint?.id == tracePointId) {
+                val tp = (node.userObject as? TracePointService.TracePointNode)
+                if (tp?.id == id) {
                     result = node
                     false
-                } else {
-                    true
-                }
+                } else true
             }
             return result
         }

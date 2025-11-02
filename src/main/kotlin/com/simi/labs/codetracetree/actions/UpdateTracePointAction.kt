@@ -15,8 +15,7 @@ class UpdateTracePointAction : AnAction() {
         val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val service = project.service<TracePointService>()
-        val selectedTracePointIds = service.getTracePoints().filter { service.isTracePointSelected(it.id) }.map { it.id }
-
+        val selectedTracePointIds = service.getSelectedTracePointIds()
         if (selectedTracePointIds.isEmpty()) {
             Messages.showWarningDialog(
                 project,
@@ -44,11 +43,11 @@ class UpdateTracePointAction : AnAction() {
         val filePath = file.path.removePrefix("$projectPath/")
         val fileName = file.name
 
-        val updatedTracePoints = service.getTracePoints().map { tracePoint ->
-            if (tracePoint.id in selectedTracePointIds) {
+        service.traverseTracePointNodes{tracePointNode ->
+            if (tracePointNode.id in selectedTracePointIds) {
                 val (totalOccurrences, matchingLines) = service.getLineOccurrences(document, lineContent)
                 val occurrenceIndex = matchingLines.indexOf(lineNumber) + 1
-                tracePoint.copy(
+                tracePointNode.tracePoint=tracePointNode.tracePoint.copy(
                     fileName = fileName,
                     filePath = filePath,
                     projectPath = projectPath,
@@ -58,13 +57,18 @@ class UpdateTracePointAction : AnAction() {
                     totalOccurrences = totalOccurrences,
                     occurrenceIndex = if (occurrenceIndex >= 0) occurrenceIndex else 0
                 )
+                tracePointNode
             } else {
-                tracePoint
+                tracePointNode
             }
         }
 
-        service.updateTracePoints(updatedTracePoints)
+
+
+//        service.updateNodeMap(updateTracePoints)
+        service.refreshDocumentListener(mutableSetOf(filePath))
         service.selectTracePoints(selectedTracePointIds) // Preserve selection
+        service.notifyListeners()
         service.highlightTracePointsInFile(file) // Ensure highlights are applied
     }
 

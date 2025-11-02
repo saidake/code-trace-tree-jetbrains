@@ -30,9 +30,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
 
         // ---- selected trace points --------------------------------------------
-        val selectedIds = service.getTracePoints()
-            .filter { service.isTracePointSelected(it.id) }
-            .map { it.id }
+        val selectedIds = service.getSelectedTracePointIds()
 
         if (selectedIds.isEmpty()) {
             Messages.showInfoMessage(
@@ -62,10 +60,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         val project = e.project
         val service = project?.service<TracePointService>()
-        val hasSelection = service?.let {
-            it.getTracePoints().any { tp -> it.isTracePointSelected(tp.id) }
-        } ?: false
-
+        val hasSelection = service?.getSelectedTracePointIds()?.isNotEmpty() ?: false
         e.presentation.isEnabled = editor != null && file != null && hasSelection
     }
 
