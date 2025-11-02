@@ -73,7 +73,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Property(surroundWithTag = false)
         var tracePoint: TracePoint= TracePoint(),
 
-        @Transient
+        @Tag("parentId")
         var parentId: String? = null,
 
         @Tag("children")
@@ -88,11 +88,11 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var rootNodes: MutableList<TracePointNode> = mutableListOf(),
 
         @Tag("expandedTracePointIds")
-        @XCollection(elementName = "id")
+        @XCollection(elementName = "id",valueAttributeName = "")
         var expandedTracePointIds: MutableSet<String> = mutableSetOf(),
 
         @Tag("selectedTracePointIds")
-        @XCollection(elementName = "id")
+        @XCollection(elementName = "id",valueAttributeName = "")
         var selectedTracePointIds: List<String> = emptyList(),
 
         @Tag("highlightingEnabled")
@@ -102,7 +102,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var descriptionAreaOpened: Boolean = false
     )
 
-    private val listeners = mutableListOf<(List<TracePointNode>, List<String>) -> Unit>()
+    private val listeners = mutableListOf<(List<TracePointNode>, Set<String>) -> Unit>()
     private val selectedTracePointIds = mutableSetOf<String>()
     private val expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
@@ -235,7 +235,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
 
-    private fun attachDocumentListener(file: VirtualFile) {
+    fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
             println("attachDocumentListener triggered")
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
@@ -434,11 +434,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             } else {
                 nodeMap[parentId]?.children?.add(newNode)?.also { newNode.parentId = nodeMap[parentId]?.id }
             }
-
-            rebuildNodeMaps()
-            attachDocumentListener(file)
-            highlightTracePointsInFile(file)
-            notifyListeners()
+            nodeMap[newNode.id] = newNode
         }
     }
 
@@ -506,9 +502,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         return result
     }
 
-    fun traverseTracePointNodes(apply: (TracePointNode) -> TracePointNode) {
+    fun traverseTracePointNodes(visitor: (TracePointNode) -> TracePointNode) {
         fun walk(node: TracePointNode): TracePointNode {
-            val transformedNode = apply(node)
+            val transformedNode = visitor(node)
             node.children.map { walk(it) }
             return transformedNode
         }
@@ -593,7 +589,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun isTracePointSelected(id: String): Boolean = selectedTracePointIds.contains(id)
 
-    fun setExpandedTracePointIds(ids: List<String>) {
+    fun setExpandedTracePointIds(ids: Set<String>) {
         ApplicationManager.getApplication().runReadAction {
             expandedTracePointIds.clear()
             expandedTracePointIds.addAll(ids)
@@ -601,19 +597,19 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
-    fun getExpandedTracePointIds(): List<String> = expandedTracePointIds.toList()
+    fun getExpandedTracePointIds(): MutableSet<String> = expandedTracePointIds
 
     // === Listeners ===
 
-    fun addTracePointListener(listener: (List<TracePointNode>, List<String>) -> Unit) {
+    fun addTracePointListener(listener: (List<TracePointNode>, Set<String>) -> Unit) {
         listeners.add(listener)
-        listener(getTracePoints(), expandedTracePointIds.toList())
+        listener(getTracePoints(), expandedTracePointIds)
     }
 
     fun notifyListeners() {
         println("notifyListeners triggered")
         val copy = getTracePoints()
-        val exp = expandedTracePointIds.toList()
+        val exp = expandedTracePointIds
         listeners.forEach { it(copy, exp) }
     }
 

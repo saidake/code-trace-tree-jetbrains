@@ -15,7 +15,7 @@ class ExpandSelectedTracePointAction(private val myToolWindow: MyToolWindowFacto
         val service = project.service<TracePointService>()
         val tree = myToolWindow.getTree()
         val selectedPaths = tree.selectionPaths?.toList() ?: return
-        val expandedIds = service.getExpandedTracePointIds().toMutableList()
+        val expandedIds = service.getExpandedTracePointIds()
 
         selectedPaths.forEach { path ->
             val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return@forEach

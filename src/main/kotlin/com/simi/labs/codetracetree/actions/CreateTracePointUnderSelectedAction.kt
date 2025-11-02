@@ -48,11 +48,13 @@ class CreateTracePointUnderSelectedAction : AnAction() {
             null
         ) ?: return
 
-        // ---- create one child under **each** selected parent ------------------
+        service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
         selectedIds.forEach { parentId ->
             service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = parentId)
         }
-        service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
+        service.attachDocumentListener(file)
+        service.highlightTracePointsInFile(file)
+        service.notifyListeners()
     }
 
     override fun update(e: AnActionEvent) {

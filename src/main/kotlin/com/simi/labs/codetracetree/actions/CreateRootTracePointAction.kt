@@ -38,6 +38,9 @@ class CreateRootTracePointAction : AnAction() {
 
         // **root** → parentId = null
         service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = null)
+        service.attachDocumentListener(file)
+        service.highlightTracePointsInFile(file)
+        service.notifyListeners()
     }
 
     override fun update(e: AnActionEvent) {
