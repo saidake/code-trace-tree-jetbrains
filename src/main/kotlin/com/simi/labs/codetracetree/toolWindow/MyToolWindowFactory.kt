@@ -546,7 +546,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private fun fullyUpdateTreeModel(rootTracePointNodes: List<TracePointService.TracePointNode>, tree: JTree, expandedIds: Set<String>) {
             println("fullyUpdateTreeModel triggered")
             isUpdatingTree = true
-            val selectedIds = service.getSelectedTracePointIds()
+            val selectedPaths = tree.selectionPaths
             rootTreeNode.removeAllChildren()
             treeNodeMap.clear()
             service.traverseTracePointNodes {tp ->
@@ -567,7 +567,25 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             }
 
             treeModel.reload()
-            // Expand
+
+            // Restore selection
+            val pathsToSelect = mutableListOf<TreePath>()
+            val selectedTracePointIds=service.getSelectedTracePointIds()
+            traverseTreeNodes(rootTreeNode) { node ->
+                val tp = node.userObject as? TracePointService.TracePointNode
+                if (tp != null && selectedTracePointIds.contains(tp.id)) {
+                    pathsToSelect.add(TreePath(node.path))
+                }
+                true
+            }
+            tree.selectionPaths = pathsToSelect.toTypedArray()
+
+            if (pathsToSelect.isNotEmpty()) {
+                tree.requestFocusInWindow()
+                tree.scrollPathToVisible(pathsToSelect.first())
+            }
+
+            // Expand trace points
             val pathsToExpand = mutableSetOf<TreePath>()
             traverseTreeNodes(rootTreeNode) { node ->
                 val tp = (node.userObject as? TracePointService.TracePointNode)
@@ -577,6 +595,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 true
             }
             pathsToExpand.forEach { tree.expandPath(it) }
+
 
             isUpdatingTree = false
         }
