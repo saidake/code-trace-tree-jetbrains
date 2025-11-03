@@ -47,7 +47,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
             "Create Trace Point (Under Selected)",
             null
         ) ?: return
-
+        println("CreateTracePointUnderSelectedAction triggered setExpandedTracePointIds: $selectedIds")
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
         selectedIds.forEach { parentId ->
             service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = parentId)

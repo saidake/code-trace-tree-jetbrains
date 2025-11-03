@@ -104,7 +104,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     private val listeners = mutableListOf<(List<TracePointNode>, Set<String>) -> Unit>()
     private val selectedTracePointIds = mutableSetOf<String>()
-    private val expandedTracePointIds = mutableSetOf<String>()
+    private var expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
     private val highlighters = mutableMapOf<VirtualFile, MutableList<com.intellij.openapi.editor.markup.RangeHighlighter>>()
     private var isFileSystemRefreshing = false
@@ -595,12 +595,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     fun isTracePointSelected(id: String): Boolean = selectedTracePointIds.contains(id)
 
     fun setExpandedTracePointIds(ids: Set<String>) {
-        println("setExpandedTracePointIds ids: $ids")
-        ApplicationManager.getApplication().runReadAction {
-            expandedTracePointIds.clear()
-            expandedTracePointIds.addAll(ids)
-        }
+        this.expandedTracePointIds=ids.toMutableSet()
     }
+
 
     fun getExpandedTracePointIds(): Set<String> = expandedTracePointIds
 

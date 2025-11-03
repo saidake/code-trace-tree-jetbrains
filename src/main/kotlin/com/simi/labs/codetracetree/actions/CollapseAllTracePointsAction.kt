@@ -16,20 +16,8 @@ class CollapseAllTracePointAction(private val myToolWindow: MyToolWindowFactory.
         val service = project.service<TracePointService>()
         val tree = myToolWindow.getTree()
         val rootNode = tree.model.root as? DefaultMutableTreeNode ?: return
-        val pathsToCollapse = mutableListOf<TreePath>()
-
-        myToolWindow.traverseTreeNodes(rootNode) { node ->
-            val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
-            if (tracePoint != null) {
-                pathsToCollapse.add(TreePath(node.path))
-            }
-            true
-        }
-
-        pathsToCollapse.forEach { path ->
-            tree.collapsePath(path)
-        }
         service.setExpandedTracePointIds(emptySet())
+        myToolWindow.collapseAll()
     }
 
     override fun update(e: AnActionEvent) {

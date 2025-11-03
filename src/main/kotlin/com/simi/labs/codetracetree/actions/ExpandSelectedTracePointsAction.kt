@@ -8,6 +8,7 @@ import com.simi.labs.codetracetree.services.TracePointService
 import com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory
 import com.intellij.icons.AllIcons
 import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.TreePath
 
 class ExpandSelectedTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(null, "Expand Selected", AllIcons.Actions.Expandall) {
     override fun actionPerformed(e: AnActionEvent) {
@@ -17,14 +18,24 @@ class ExpandSelectedTracePointAction(private val myToolWindow: MyToolWindowFacto
         val selectedPaths = tree.selectionPaths?.toList() ?: return
         val expandedIds = service.getExpandedTracePointIds().toMutableSet()
 
+        myToolWindow.beginTreeUpdate()
         selectedPaths.forEach { path ->
             val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return@forEach
             val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return@forEach
-            tree.expandPath(path)
             if (!expandedIds.contains(tracePointNode.id)) {
                 expandedIds.add(tracePointNode.id)
             }
+            tree.expandPath(path)
+            myToolWindow.traverseTreeNodes(node){node ->
+                tree.expandPath(TreePath(node.path))
+                if (!expandedIds.contains(tracePointNode.id)) {
+                    expandedIds.add(tracePointNode.id)
+                }
+                true
+            }
         }
+        myToolWindow.endTreeUpdate()
+        println("ExpandSelectedTracePointAction triggered setExpandedTracePointIds: $expandedIds")
         service.setExpandedTracePointIds(expandedIds)
     }
 
