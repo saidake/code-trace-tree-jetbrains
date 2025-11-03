@@ -548,9 +548,33 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     fun getTracePoints(): MutableList<TracePointNode>  {
         return this.rootNodes
     }
+
     fun addRootTracePoint(tracePoint: TracePointNode){
         if(tracePoint.parentId==null)this.rootNodes.add(tracePoint)
     }
+
+    fun removeRootTracePoint(id: String): Boolean {
+        val iterator = rootNodes.iterator()
+        while (iterator.hasNext()) {
+            if (iterator.next().id == id) {
+                iterator.remove()
+                return true
+            }
+        }
+        return false
+    }
+
+    fun addRootTracePointNextTo(tracePoint: TracePointNode, id: String) {
+        if (tracePoint.parentId != null) return
+        val index = rootNodes.indexOfFirst { it.id == id }
+        if (index != -1) {
+            rootNodes.add(index + 1, tracePoint)
+        } else {
+            rootNodes.add(tracePoint)
+        }
+    }
+
+
 
     fun getTracePointById( id: String): TracePointNode?  {
         return this.nodeMap[id]

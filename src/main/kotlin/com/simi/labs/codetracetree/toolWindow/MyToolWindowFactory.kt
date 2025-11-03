@@ -47,6 +47,7 @@ import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
 import javax.swing.BoxLayout
+import javax.swing.SwingUtilities
 import javax.swing.TransferHandler
 
 
@@ -213,9 +214,20 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     oldParentTracePointNode?.children?.remove(draggedTracePointNode)
 
                                     // Attach under new parent
+                                    var tempTP: TracePointService.TracePointNode? = draggedTracePointNode
+                                    var rootParentId: String? = null
+                                    while (tempTP != null) {
+                                        rootParentId = tempTP.id
+                                        if (tempTP.parentId == null) {
+                                            break
+                                        }
+                                        tempTP = service.getTracePointById(tempTP.parentId!!)
+                                    }
+
                                     rootTreeNode.add(draggedTreeNode)
                                     draggedTracePointNode.parentId=null;
-                                    service.addRootTracePoint(draggedTracePointNode)
+                                    if(rootParentId!=null)service.addRootTracePointNextTo(draggedTracePointNode,rootParentId)
+                                    println("addRootTracePointNextTo: $rootParentId")
                                     continue
                                 }
 
@@ -244,6 +256,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
                                 val oldParentTracePointNode = draggedTracePointNode.parentId?.let { service.getTracePointById(it) }
                                 oldParentTracePointNode?.children?.remove(draggedTracePointNode)
+                                if(draggedTracePointNode.parentId==null)service.removeRootTracePoint(draggedTracePointNode.id)
 
                                 // Attach under new parent
                                 val parentNode = dropTreeNode
@@ -271,12 +284,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         println("mouseClicked triggered")
                         descriptionTextArea.isEnabled = false
                         val tree = this@apply
-                        val path = tree.getPathForLocation(e.x, e.y) ?: run {
-                            println("No path found - tree might be empty or coordinates wrong")
-                            return
-                        }
-//                        val treePoint = SwingUtilities.convertPoint(e.component, e.point, tree)
-//                        val path = tree.getPathForLocation(treePoint.x, treePoint.y) ?: return
+//                        val path = tree.getPathForLocation(e.x, e.y) ?: run {
+//                            println("No path found - tree might be empty or coordinates wrong")
+//                            return
+//                        }
+                        val treePoint = SwingUtilities.convertPoint(e.component, e.point, tree)
+                        val path = tree.getPathForLocation(treePoint.x, treePoint.y) ?: return
                         println("path: $path")
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
