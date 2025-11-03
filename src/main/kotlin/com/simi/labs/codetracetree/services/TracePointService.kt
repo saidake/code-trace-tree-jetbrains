@@ -19,6 +19,7 @@ import com.intellij.ui.JBColor
 import com.intellij.util.xmlb.annotations.Property
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
+import com.simi.labs.codetracetree.domain.enums.ListenerEventType
 import java.util.*
 
 @Service(Service.Level.PROJECT)
@@ -102,7 +103,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var descriptionAreaOpened: Boolean = false
     )
 
-    private val listeners = mutableListOf<(List<TracePointNode>, Set<String>) -> Unit>()
+    private val listenersMap =mutableMapOf<ListenerEventType, MutableList<(List<TracePointNode>, Set<String>) -> Unit>>()
     private val selectedTracePointIds = mutableSetOf<String>()
     private var expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
@@ -131,6 +132,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             println("validateTracePointsOnLoad triggered in the init method of TracePointService")
             validateTracePointsOnLoad()
+            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+            notifyListeners()
         }
 
         // Refresh trace points on file system changes
@@ -143,6 +146,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 ApplicationManager.getApplication().runReadAction {
                     println("validateTracePointsOnLoad triggered in afterRefreshFinish")
                     validateTracePointsOnLoad()
+                    FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+                    notifyListeners()
                     isFileSystemRefreshing = false
                 }
             }
@@ -383,8 +388,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             }
 
             rootNodes.forEach { validateRecursively(it, ::validateNode) }
-            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
-            notifyListeners()
         }
     }
 
@@ -601,16 +604,25 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun getExpandedTracePointIds(): Set<String> = expandedTracePointIds
 
-    fun addTracePointListener(listener: (List<TracePointNode>, Set<String>) -> Unit) {
-        listeners.add(listener)
-        listener(getTracePoints(), expandedTracePointIds)
+    fun addTracePointListener(listenerEventType: ListenerEventType, listener: (List<TracePointNode>, Set<String>) -> Unit) {
+        listenersMap.getOrPut(listenerEventType) { mutableListOf() }.add(listener)
+        //listener(getTracePoints(), expandedTracePointIds)
     }
 
     fun notifyListeners() {
         println("notifyListeners triggered")
         val copy = getTracePoints()
         val exp = expandedTracePointIds
-        listeners.forEach { it(copy, exp) }
+        val listeners= listenersMap[ListenerEventType.ALL]
+        listeners?.forEach { it(copy, exp) }
+    }
+
+    fun notifyListeners(event: ListenerEventType) {
+        println("notifyListeners triggered: $event")
+        val copy = getTracePoints()
+        val exp = expandedTracePointIds
+        val listeners= listenersMap[event]
+        listeners?.forEach { it(copy, exp) }
     }
 
     override fun getState(): TracePointState = TracePointState(
@@ -622,6 +634,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     )
 
     override fun loadState(state: TracePointState) {
+        println("loadState triggered")
         ApplicationManager.getApplication().runReadAction {
             rootNodes.clear()
             rootNodes.addAll(state.rootNodes)
@@ -631,7 +644,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             isHighlightingEnabled = state.highlightingEnabled
             isDescriptionAreaOpened = state.descriptionAreaOpened
             validateTracePointsOnLoad()
+            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
             reattachListenersAndHighlights()
+            notifyListeners(ListenerEventType.INIT)
             notifyListeners()
         }
     }

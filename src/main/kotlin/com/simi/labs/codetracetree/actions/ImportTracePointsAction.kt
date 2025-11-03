@@ -60,7 +60,7 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
 
                     // keep defaults for the rest (or read them if you add them later)
                     highlightingEnabled = true
-                    descriptionAreaOpened = false
+                    descriptionAreaOpened = true
                 }
 
                 // 2. Load the state exactly like the plugin does internally
@@ -79,9 +79,10 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
         nodeEl: Element,
         parentId: String?
     ): TracePointService.TracePointNode {
-
-        val tpEl = nodeEl.getChild("tracePoint")?.getChild("tracePoint")
-            ?: throw IllegalArgumentException("Missing <tracePoint> element")
+        val id = nodeEl.getChildTextTrim("id") ?: UUID.randomUUID().toString()
+        val parentId = nodeEl.getChildTextTrim("parentId").takeIf { it.isNotBlank() }
+        val tpEl = nodeEl.getChild("tracePoint")
+            ?: throw IllegalArgumentException("Missing <tracePoint> element in node $id")
 
         val tp = TracePointService.TracePoint(
             name = tpEl.getChildTextTrim("name") ?: "",
@@ -96,7 +97,7 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
             description = tpEl.getChildTextTrim("description") ?: ""
         )
 
-        val node = TracePointService.TracePointNode(tpEl.getChildTextTrim("id") ?: UUID.randomUUID().toString(),tp)
+        val node = TracePointService.TracePointNode(id,tp,parentId)
 
         // children
         nodeEl.getChild("children")?.getChildren("tracePointNode")?.forEach { childEl ->

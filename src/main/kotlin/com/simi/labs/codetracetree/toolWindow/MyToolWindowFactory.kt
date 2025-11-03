@@ -42,6 +42,7 @@ import javax.swing.JTextArea
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import com.intellij.ui.JBColor
+import com.simi.labs.codetracetree.domain.enums.ListenerEventType
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
@@ -116,17 +117,19 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
         fun getContent(): JComponent {
+            println("getContent triggered")
             tree = Tree(treeModel).apply {
                 isRootVisible = false
                 selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
                 toggleClickCount = 0
                 // Moved listener setup here to ensure tree is initialized
-                service.addTracePointListener { tracePoints, expandedIds ->
+                service.addTracePointListener(ListenerEventType.ALL) { tracePoints, expandedIds ->
                     if (!isUpdatingTree) {
                         println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
                         fullyUpdateTreeModel(tracePoints, this, expandedIds)
                     }
                 }
+                service.notifyListeners() // trigger fullyUpdateTreeModel
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
                 isEditable = false
                 dragEnabled = true
@@ -166,6 +169,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val dropTreeNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                         val dropTracePointNode = dropTreeNode.userObject as? TracePointService.TracePointNode ?: return false
                         val transferable = support.transferable
+                        @Suppress("UNCHECKED_CAST")
                         val draggedTracePointIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
 
                         // Skip if multiple trace points are selected

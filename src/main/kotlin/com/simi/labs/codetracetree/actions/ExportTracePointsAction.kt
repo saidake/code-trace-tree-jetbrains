@@ -94,10 +94,10 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
     private fun exportNode(node: TracePointService.TracePointNode, parentEl: Element) {
         val nodeEl = Element("tracePointNode")
         nodeEl.addContent(Element("id").setText(node.id))
+        nodeEl.addContent(Element("parentId").setText(node.parentId))
 
         // <tracePoint>
-        val tracePointEl = Element("tracePoint")
-        val innerEl = Element("tracePoint").apply {
+        val tracePointEl = Element("tracePoint").apply {
             addContent(Element("name").setText(node.tracePoint.name))
             addContent(Element("fileName").setText(node.tracePoint.fileName))
             addContent(Element("filePath").setText(node.tracePoint.filePath))
@@ -109,7 +109,6 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
             addContent(Element("occurrenceIndex").setText(node.tracePoint.occurrenceIndex.toString()))
             addContent(Element("description").setText(node.tracePoint.description))
         }
-        tracePointEl.addContent(innerEl)
         nodeEl.addContent(tracePointEl)
 
         // <children>
