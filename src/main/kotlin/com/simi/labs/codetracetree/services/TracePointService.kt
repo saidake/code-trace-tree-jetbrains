@@ -442,7 +442,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             nodeMap[id]?.let {
                 it.tracePoint = it.tracePoint.copy(description = newDescription)
-                notifyListeners()
             }
         }
     }
@@ -534,20 +533,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun refreshDocumentListener(updatedFilePaths: Set<String>) {
         ApplicationManager.getApplication().runReadAction {
-//            rootNodes.clear()
-//            val nodeMap = mutableMapOf<String, TracePointNode>()
-//            updateTracePoints.forEach {
-//                val node = TracePointNode(it)
-//                nodeMap[it.id] = node
-//                if (it.parentId == null) rootNodes.add(node)
-//            }
-//            updateTracePoints.forEach {
-//                val node = nodeMap[it.id] ?: return@forEach
-//                val parent = it.parentId?.let { nodeMap[it] }
-//                parent?.children?.add(node)
-//                node.parentId = parent?.tracePoint?.id
-//            }
-//            rebuildNodeMaps()
             updatedFilePaths.forEach { path ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$path")
                 file?.let {
@@ -580,26 +565,17 @@ class TracePointService(private val project: Project) : PersistentStateComponent
       return selectedTracePointIds;
     }
 
-    fun toggleTracePointSelection(id: String) {
-        ApplicationManager.getApplication().runReadAction {
-            if (!selectedTracePointIds.remove(id)) selectedTracePointIds.add(id)
-            notifyListeners()
-        }
-    }
-
     fun isTracePointSelected(id: String): Boolean = selectedTracePointIds.contains(id)
 
     fun setExpandedTracePointIds(ids: Set<String>) {
+        println("setExpandedTracePointIds ids: $ids")
         ApplicationManager.getApplication().runReadAction {
             expandedTracePointIds.clear()
             expandedTracePointIds.addAll(ids)
-            notifyListeners()
         }
     }
 
-    fun getExpandedTracePointIds(): MutableSet<String> = expandedTracePointIds
-
-    // === Listeners ===
+    fun getExpandedTracePointIds(): Set<String> = expandedTracePointIds
 
     fun addTracePointListener(listener: (List<TracePointNode>, Set<String>) -> Unit) {
         listeners.add(listener)
@@ -612,8 +588,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val exp = expandedTracePointIds
         listeners.forEach { it(copy, exp) }
     }
-
-    // === Persistence ===
 
     override fun getState(): TracePointState = TracePointState(
         rootNodes = rootNodes,
@@ -638,15 +612,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
-//    private fun reattachListenersAndHighlights() {
-//        getTracePoints().map { it.filePath }.distinct().forEach { path ->
-//            val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$path")
-//            file?.let {
-//                attachDocumentListener(it)
-//                highlightTracePointsInFile(it)
-//            }
-//        }
-//    }
     private fun reattachListenersAndHighlights() {
         val visitedFiles = mutableSetOf<String>()
         fun traverse(node: TracePointNode) {

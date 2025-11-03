@@ -39,7 +39,7 @@ class CollapseAllTracePointAction(private val myToolWindow: MyToolWindowFactory.
         var hasTracePoints = false
         if (rootNode != null) {
             myToolWindow.traverseTreeNodes(rootNode) { node ->
-                if ((node as? DefaultMutableTreeNode)?.userObject is TracePointService.TracePoint) {
+                if ((node as? DefaultMutableTreeNode)?.userObject is TracePointService.TracePointNode) {
                     hasTracePoints = true
                     false // Stop traversal as soon as a TracePoint is found
                 } else {
