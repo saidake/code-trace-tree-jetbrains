@@ -38,7 +38,6 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.treeStructure.Tree
-import java.awt.Point
 import javax.swing.JComponent
 import javax.swing.JTextArea
 import javax.swing.event.DocumentEvent
@@ -48,7 +47,6 @@ import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
 import javax.swing.BoxLayout
-import javax.swing.SwingUtilities
 import javax.swing.TransferHandler
 
 
@@ -91,7 +89,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         private val treeNodeMap: MutableMap<String, DefaultMutableTreeNode> = mutableMapOf(
             "root" to rootTreeNode
         )
-        private var highlightedPath: TreePath? = null
         private var isUpdatingTree = false
         private lateinit var tree: JTree
 
@@ -125,19 +122,16 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 isEditable = false
                 dragEnabled = true
                 transferHandler = object : TransferHandler() {
-                    private var draggedNode: DefaultMutableTreeNode? = null
-
                     override fun createTransferable(c: JComponent): Transferable? {
+                        println("createTransferable triggered")
                         val tree = c as? JTree ?: return null
                         val path = tree.selectionPath ?: return null
-                        draggedNode = path.lastPathComponent as? DefaultMutableTreeNode ?: return null
-                        val tracePoint = draggedNode?.userObject as? TracePointService.TracePointNode ?: return null
                         return object : Transferable {
                             override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(tracePointDataFlavor)
                             override fun isDataFlavorSupported(flavor: DataFlavor?): Boolean = flavor == tracePointDataFlavor
-                            override fun getTransferData(flavor: DataFlavor?): Any {
+                            override fun getTransferData(flavor: DataFlavor?): Set<String>{
                                 if (flavor == tracePointDataFlavor) {
-                                    return tracePoint.id
+                                    return service.getSelectedTracePointIds()
                                 }
                                 throw UnsupportedFlavorException(flavor)
                             }
@@ -146,104 +140,128 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                     override fun getSourceActions(c: JComponent): Int = MOVE
 
-                    override fun canImport(support: TransferHandler.TransferSupport): Boolean {
-                        println("canImport triggered")
-                        // Only allow drops within the JTree (tool window)
+                    override fun canImport(support: TransferSupport): Boolean {
+//                        println("canImport triggered")
+                        // Ensure drop is valid
                         if (!support.isDrop || support.component !is JTree) return false
                         if (!support.isDataFlavorSupported(tracePointDataFlavor)) return false
+
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
-                        val dropPath = dropLocation.path ?: return false
-                        val dropNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
-                        val draggedTracePointNode = draggedNode?.userObject as? TracePointService.TracePointNode ?: return false
-                        val dropTracePointNode = dropNode.userObject as? TracePointService.TracePointNode ?: return false
+                        val dropPath = dropLocation.path
+
+                        // Set the tracking point as a root trace point
+                        if (dropPath == null) {
+                            return true
+                        }
+
+                        val dropTreeNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
+                        val dropTracePointNode = dropTreeNode.userObject as? TracePointService.TracePointNode ?: return false
+                        val transferable = support.transferable
+                        val draggedTracePointIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
+
+                        // Skip if multiple trace points are selected
+                        if(draggedTracePointIds.size!=1)return true;
+
+                        // Skip if trying to drop inside itself or its descendant
+                        val draggedTreeNode = findNodeByTracePointId(draggedTracePointIds.first())
+                        val draggedTracePointNode = (draggedTreeNode?.userObject as? TracePointService.TracePointNode) ?: return false
+                        var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
+                        var invalid = false
+                        while (ancestorTreeNode != null && ancestorTreeNode != rootTreeNode) {
+                            val ancestorTracePoint = ancestorTreeNode.userObject as? TracePointService.TracePointNode
+                            if (ancestorTracePoint?.id == draggedTracePointNode.id) {
+                                invalid = true
+                                break
+                            }
+                            ancestorTreeNode = ancestorTreeNode.parent as? DefaultMutableTreeNode
+                        }
+                        if (invalid) return false
+
                         // Prevent dropping on the same node or its descendants
                         if (dropTracePointNode.id == draggedTracePointNode.id) return false
-                        var node: DefaultMutableTreeNode? = dropNode
-                        while (node != null && node != rootTreeNode) {
-                            val tracePointNode = node.userObject as? TracePointService.TracePointNode
-                            if (tracePointNode?.id == draggedTracePointNode.id) return false
-                            node = node.parent as? DefaultMutableTreeNode
-                        }
                         // Prevent dropping on the current parent
-                        val draggedParent = draggedNode?.parent as? DefaultMutableTreeNode
-                        val draggedParentTracePoint = draggedParent?.userObject as? TracePointService.TracePointNode
-                        if (draggedParentTracePoint?.id == dropTracePointNode.id) return false
-                        if (dropNode.userObject !is TracePointService.TracePointNode) return false
-                        highlightedPath = dropPath
-                        (support.component as? JTree)?.repaint()
+                        if (draggedTracePointNode.parentId==dropTracePointNode.id) return false
+//                        (support.component as? JTree)?.repaint()
                         return true
                     }
 
                     override fun importData(support: TransferSupport): Boolean {
-                        if (!canImport(support)) return false
+                        println("importData triggered")
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
-                        val dropPath = dropLocation.path ?: return false
-                        val dropTreeNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
-                        val transferable = support.transferable
-                        val tracePointId = transferable.getTransferData(tracePointDataFlavor) as? String ?: return false
+                        val dropPath = dropLocation.path
 
-                        val draggedTracePoints=service.findTracePointNodes { it.id == tracePointId }
-                        if (draggedTracePoints.size!=1) return false
-                        val draggedTracePoint = draggedTracePoints[0]
-                        val draggedTreeNode = findNodeByTracePointId(tracePointId) ?: return false
+
+
+                        val transferable = support.transferable
+                        val draggedTracePointIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
+
                         val tree = support.component as? JTree ?: return false
 
                         try {
-                            val expandedPaths = mutableSetOf<TreePath>()
-                            traverseTreeNodes(rootTreeNode) { node ->
-                                val tracePointNode = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
-                                if (tracePointNode != null) {
-                                    val nodePath = TreePath(node.path)
-                                    if (tree.isExpanded(nodePath)) {
-                                        expandedPaths.add(nodePath)
-                                    }
+//                            tree.repaint()
+                            // For each dragged trace point, move if valid
+                            for (tracePointId in draggedTracePointIds) {
+                                val draggedTreeNode = findNodeByTracePointId(tracePointId) ?: continue
+                                val draggedTracePointNode = (draggedTreeNode.userObject as? TracePointService.TracePointNode) ?: continue
+                                // Set the tracking point as a root trace point
+                                if (dropPath == null) {
+                                    if(draggedTreeNode.parent==rootTreeNode)continue
+
+                                    // Detach from old parent
+                                    (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
+                                    val oldParentTracePointNode = draggedTracePointNode.parentId?.let { service.getTracePointById(it) }
+                                    oldParentTracePointNode?.children?.remove(draggedTracePointNode)
+
+                                    // Attach under new parent
+                                    rootTreeNode.add(draggedTreeNode)
+                                    draggedTracePointNode.parentId=null;
+                                    service.addRootTracePoint(draggedTracePointNode)
+                                    continue
                                 }
-                                true
-                            }
-                            highlightedPath = null
-                            tree.repaint()
-                            val parentNode = dropTreeNode
-                            val dropIndex = parentNode.childCount
-                            val newParentId = (dropTreeNode.userObject as TracePointService.TracePointNode).id
-                            (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
-                            // Append the draggedNode in the parentNode
-                            parentNode.insert(draggedTreeNode, dropIndex)
 
-                            // Remove the draggedTracePoint from its parent
-                            val oldParentTracePoint = draggedTracePoint.parentId?.let { service.getTracePointById(it) }
-                            oldParentTracePoint?.children?.remove(draggedTracePoint)
+                                val dropTreeNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
+                                val dropTracePoint = dropTreeNode.userObject as? TracePointService.TracePointNode ?: return false
 
-                            // Insert the draggedTracePoint into the new parent
-                            val newParentTracePoint = service.findTracePointNodes { it.id == newParentId }.firstOrNull()
-                            newParentTracePoint?.children?.add(draggedTracePoint)
-                            draggedTracePoint.parentId = newParentId
 
-                            // Update the related trace points
-                            newParentTracePoint?.let {
-                                service.notifyListeners()
-                            }
 
-                            treeModel.reload()
-                            val pathsToExpand = mutableSetOf<TreePath>()
-                            val expandedIds = service.getExpandedTracePointIds()
-                            traverseTreeNodes(rootTreeNode) { node ->
-                                val tracePoint = (node as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
-                                if (tracePoint != null) {
-                                    val nodePath = TreePath(node.path)
-                                    if (expandedIds.contains(tracePoint.id)) {
-                                        pathsToExpand.add(nodePath)
+                                // Skip if trying to drop inside itself or its descendant
+                                var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
+                                var invalid = false
+                                while (ancestorTreeNode != null && ancestorTreeNode != rootTreeNode) {
+                                    val ancestorTracePoint = ancestorTreeNode.userObject as? TracePointService.TracePointNode
+                                    if (ancestorTracePoint?.id == draggedTracePointNode.id) {
+                                        invalid = true
+                                        break
                                     }
+                                    ancestorTreeNode = ancestorTreeNode.parent as? DefaultMutableTreeNode
                                 }
-                                true
+                                if (invalid) continue
+
+                                // Prevent dropping on the current parent
+                                if (draggedTracePointNode.parentId==dropTracePoint.id) continue
+
+                                // Detach from old parent
+                                (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
+                                val oldParentTracePointNode = draggedTracePointNode.parentId?.let { service.getTracePointById(it) }
+                                oldParentTracePointNode?.children?.remove(draggedTracePointNode)
+
+                                // Attach under new parent
+                                val parentNode = dropTreeNode
+                                val dropIndex = parentNode.childCount
+                                val newParentId = dropTracePoint.id
+                                parentNode.insert(draggedTreeNode, dropIndex)
+                                val newParentTracePointNode = service.findTracePointNodes { it.id == newParentId }.firstOrNull()
+                                newParentTracePointNode?.children?.add(draggedTracePointNode)
+                                draggedTracePointNode.parentId = newParentId
                             }
-                            pathsToExpand.forEach { path ->
-                                tree.expandPath(path)
-                            }
-                            selectionPath = TreePath(draggedTreeNode.path)
-                            println("Moved trace point ${draggedTracePoint.tracePoint.name} to parent $newParentId as last child")
+
+                            // Notify listeners and reload
+                            //(support.component as? JTree)?.repaint()
+                            service.notifyListeners()
+                            // println("Moved ${draggedTracePointIds.size} trace points to parent ${dropTracePoint.id}")
                             return true
                         } catch (e: Exception) {
-                            thisLogger().warn("Failed to move trace point: ${e.message}", e)
+                            thisLogger().warn("Failed to move trace points: ${e.message}", e)
                             return false
                         }
                     }
@@ -496,11 +514,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
         fun getTree(): JTree = tree
 
-        fun getHighlightedPath(): TreePath? = highlightedPath
-        fun isHighlightOnDivider(): Boolean = false
-        fun getDropPoint(): Point? = null
-
-
         fun setDescriptionAreaVisible(visible: Boolean) {
             service.setDescriptionAreaOpened(visible)
             descriptionScrollPane.isVisible = visible
@@ -601,15 +614,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         }
 
         private fun findNodeByTracePointId(id: String): DefaultMutableTreeNode? {
-            var result: DefaultMutableTreeNode? = null
-            traverseTreeNodes(rootTreeNode) { node ->
-                val tp = (node.userObject as? TracePointService.TracePointNode)
-                if (tp?.id == id) {
-                    result = node
-                    false
-                } else true
-            }
-            return result
+            return treeNodeMap[id]
         }
     }
 }

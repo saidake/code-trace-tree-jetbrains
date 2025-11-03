@@ -548,6 +548,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     fun getTracePoints(): MutableList<TracePointNode>  {
         return this.rootNodes
     }
+    fun addRootTracePoint(tracePoint: TracePointNode){
+        if(tracePoint.parentId==null)this.rootNodes.add(tracePoint)
+    }
 
     fun getTracePointById( id: String): TracePointNode?  {
         return this.nodeMap[id]
