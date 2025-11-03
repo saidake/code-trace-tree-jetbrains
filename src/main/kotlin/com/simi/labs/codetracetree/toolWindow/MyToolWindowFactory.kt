@@ -344,6 +344,13 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
                         val tracePoint = tracePointNode.tracePoint
                         val selectedTracePoints = tree.selectionPaths?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode } ?: emptyList()
+                        val selectedIds = tree.selectionPaths
+                            ?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode }
+                            ?.map { it.id }
+                            ?.toMutableSet()
+                            ?: mutableSetOf()
+
+                        service.selectTracePoints(selectedIds)
                         val popupMenu = JPopupMenu()
                         println("selectedTracePoints.size : ${selectedTracePoints.size}")
                         if (selectedTracePoints.size > 1) {
