@@ -14,7 +14,6 @@ import com.simi.labs.codetracetree.actions.ExpandSelectedTracePointAction
 import com.simi.labs.codetracetree.actions.CollapseAllTracePointAction
 import com.simi.labs.codetracetree.actions.ExportTracePointsAction
 import com.simi.labs.codetracetree.actions.ImportTracePointsAction
-import com.simi.labs.codetracetree.actions.GoToTracePointAction
 import com.simi.labs.codetracetree.actions.ToggleHighlightTracePointsAction
 import com.simi.labs.codetracetree.actions.ToggleDescriptionAreaAction
 import com.simi.labs.codetracetree.GlobalIcons
@@ -493,10 +492,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             })
 
             val actionGroup = DefaultActionGroup().apply {
-                add(GoToTracePointAction(this@MyToolWindow).apply {
-                    templatePresentation.text = "Go to Trace Point"
-                    templatePresentation.description = "Navigate to the selected trace point's file and line"
-                })
                 add(MoveUpTracePointAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Move Up"
                     templatePresentation.description = "Move the selected trace point up in the list"
