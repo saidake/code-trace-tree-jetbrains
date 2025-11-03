@@ -26,6 +26,7 @@ class TracePointTreeRenderer(
     ): Component {
         this.tree = tree // Store the JTree instance
         val userObject = (value as? DefaultMutableTreeNode)?.userObject
+        println("getTreeCellRendererComponent triggered: $userObject")
         text = when (userObject) {
             is TracePointService.TracePointNode -> {
                 val fileName = userObject.tracePoint.fileName.substringAfterLast('/')

@@ -47,7 +47,6 @@ import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
 import javax.swing.BoxLayout
-import javax.swing.SwingUtilities
 import javax.swing.TransferHandler
 
 
@@ -123,13 +122,19 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
                 toggleClickCount = 0
                 // Moved listener setup here to ensure tree is initialized
-                service.addTracePointListener(ListenerEventType.ALL) { tracePoints, expandedIds ->
+                service.addTracePointListener(ListenerEventType.FULL_UPDATE) { tracePoints, expandedIds,restoreSelection ->
                     if (!isUpdatingTree) {
                         println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
-                        fullyUpdateTreeModel(tracePoints, this, expandedIds)
+                        fullUpdateTreeModel(this, expandedIds,restoreSelection)
                     }
                 }
-                service.notifyListeners() // trigger fullyUpdateTreeModel
+                service.addTracePointListener(ListenerEventType.PARTIAL_UPDATE) { tracePoints, expandedIds,restoreSelection ->
+                    if (!isUpdatingTree) {
+                        println("Partial update tree model with ${tracePoints.size} trace points")
+                        partialUpdateTreeModel( this,tracePoints)
+                    }
+                }
+                service.notifyListeners() // trigger fullUpdateTreeModel
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
                 isEditable = false
                 dragEnabled = true
@@ -620,8 +625,42 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             isUpdatingTree=false
         }
 
-        private fun fullyUpdateTreeModel(rootTracePointNodes: List<TracePointService.TracePointNode>, tree: JTree, expandedIds: Set<String>) {
-            println("fullyUpdateTreeModel triggered")
+        private fun partialUpdateTreeModel(
+            tree: JTree,
+            updatedNodes: List<TracePointService.TracePointNode>
+        ) {
+            println("partialUpdateTreeModel triggered")
+            if (updatedNodes.isEmpty()) return
+            val model = tree.model as DefaultTreeModel
+            for (tp in updatedNodes) {
+                val node = treeNodeMap[tp.id]
+                if (node == null) {
+                    // If it's a new node
+                    val parentNode = tp.parentId?.let { treeNodeMap[it] }
+                    if (parentNode != null) {
+                        val newNode = DefaultMutableTreeNode(tp)
+                        parentNode.add(newNode)
+                        treeNodeMap[tp.id] = newNode
+                        model.nodesWereInserted(parentNode, intArrayOf(parentNode.childCount - 1))
+                    } else {
+                        // If the node already exists, only update the displayed content.
+                        val newNode = DefaultMutableTreeNode(tp)
+                        rootTreeNode.add(newNode)
+                        treeNodeMap[tp.id] = newNode
+                        model.nodesWereInserted(rootTreeNode, intArrayOf(rootTreeNode.childCount - 1))
+                    }
+                } else {
+                    // If the node already exists, only update the displayed content.
+                    node.userObject = tp
+                    model.nodeChanged(node)
+                }
+            }
+
+        }
+
+
+        private fun fullUpdateTreeModel(tree: JTree, expandedIds: Set<String>, restoreSelection: Boolean ) {
+            println("fullUpdateTreeModel triggered")
             isUpdatingTree = true
             rootTreeNode.removeAllChildren()
             treeNodeMap.clear()
@@ -645,21 +684,23 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             treeModel.reload()
 
             // Restore selection
-            val pathsToSelect = mutableListOf<TreePath>()
-            val selectedTracePointIds=service.getSelectedTracePointIds()
-            traverseTreeNodes(rootTreeNode) { node ->
-                val tp = node.userObject as? TracePointService.TracePointNode
-                if (tp != null && selectedTracePointIds.contains(tp.id)) {
-                    pathsToSelect.add(TreePath(node.path))
+            if(restoreSelection){
+                val pathsToSelect = mutableListOf<TreePath>()
+                val prevSelectedTracePointIds=service.getSelectedTracePointIds()
+                traverseTreeNodes(rootTreeNode) { node ->
+                    val tp = node.userObject as? TracePointService.TracePointNode
+                    if (tp != null && prevSelectedTracePointIds.contains(tp.id)) {
+                        pathsToSelect.add(TreePath(node.path))
+                    }
+                    true
                 }
-                true
+                tree.selectionPaths = pathsToSelect.toTypedArray()
+                if (pathsToSelect.isNotEmpty()) {
+                    tree.requestFocusInWindow()
+                    tree.scrollPathToVisible(pathsToSelect.first())
+                }
             }
-            tree.selectionPaths = pathsToSelect.toTypedArray()
 
-            if (pathsToSelect.isNotEmpty()) {
-                tree.requestFocusInWindow()
-                tree.scrollPathToVisible(pathsToSelect.first())
-            }
 
             // Expand trace points
             val pathsToExpand = mutableSetOf<TreePath>()

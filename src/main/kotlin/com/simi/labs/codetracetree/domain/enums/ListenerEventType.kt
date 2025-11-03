@@ -1,7 +1,7 @@
 package com.simi.labs.codetracetree.domain.enums
 
 enum class  ListenerEventType {
-    ALL,
-    INIT
+    FULL_UPDATE,
+    PARTIAL_UPDATE
 }
 

@@ -47,7 +47,7 @@ class MoveDownTracePointAction(private val myToolWindow: MyToolWindowFactory.MyT
 //        service.updateNodeMap(updateTracePoints)
 //        service.refreshDocumentListener(allTracePoints)
         service.selectTracePoints(selectedIds)
-        service.notifyListeners()
+        service.notifyListeners(true)
         // Restore selection after moving
     }
 

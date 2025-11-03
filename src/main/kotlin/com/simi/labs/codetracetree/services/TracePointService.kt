@@ -103,7 +103,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var descriptionAreaOpened: Boolean = false
     )
 
-    private val listenersMap =mutableMapOf<ListenerEventType, MutableList<(List<TracePointNode>, Set<String>) -> Unit>>()
+    private val listenersMap =mutableMapOf<ListenerEventType, MutableList<(List<TracePointNode>, Set<String>, Boolean) -> Unit>>()
     private val selectedTracePointIds = mutableSetOf<String>()
     private var expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
@@ -267,9 +267,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             val lineOffset = newLinesCount - oldLinesCount
                             val changedLine = event.document.getLineNumber(event.offset) + 1
 
-                            rootNodes.forEach { updateNodeRecursively(event.document, it, docPath, newLines, lineOffset, changedLine) }
+                            val updatedNodes = mutableListOf<TracePointNode>()
+                            rootNodes.forEach { updateNodeRecursively(event.document, it, docPath, newLines, lineOffset, changedLine,updatedNodes) }
                             highlightTracePointsInFile(docFile)
-                            notifyListeners()
+                            notifyListeners(ListenerEventType.PARTIAL_UPDATE,updatedNodes )
                         }
                     }
                 }
@@ -285,70 +286,81 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         filePath: String,
         newLines: List<String>,
         lineOffset: Int,
-        changedLine: Int
+        changedLine: Int,
+        updatedNodes: MutableList<TracePointNode>
     ) {
         if (node.tracePoint.filePath != filePath) {
-            node.children.forEach { updateNodeRecursively(document, it, filePath, newLines, lineOffset, changedLine) }
+            node.children.forEach { updateNodeRecursively(document, it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
             return
         }
 
         val tp = node.tracePoint
+        var updated = false
+
         if (!tp.isValid) {
             val valid = newLines.getOrNull(tp.lineNumber - 1)?.trim() == tp.lineContent?.trim()
-            node.tracePoint.copy(isValid = valid).also { node.tracePoint = it }
-            return
+            if (tp.isValid != valid) {
+                node.tracePoint = tp.copy(isValid = valid)
+                updated = true
+            }
+        } else {
+            when {
+                tp.lineNumber == changedLine && lineOffset > 0 -> {
+                    val newLineNum = tp.lineNumber + lineOffset
+                    val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
+                    val (total, matches) = getLineOccurrences(document, newContent)
+                    val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
+                    val newTp = tp.copy(
+                        lineNumber = newLineNum,
+                        lineContent = newContent,
+                        isValid = newContent != null,
+                        totalOccurrences = total,
+                        occurrenceIndex = occIdx.coerceAtLeast(0)
+                    )
+                    if (tp != newTp) {
+                        node.tracePoint = newTp
+                        updated = true
+                    }
+                }
+                tp.lineNumber == changedLine && lineOffset == 0 -> {
+                    val newContent = newLines.getOrNull(changedLine - 1)?.trim()
+                    val (total, matches) = getLineOccurrences(document, newContent)
+                    val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(changedLine) + 1
+                    val newTp = tp.copy(
+                        lineContent = newContent,
+                        isValid = newContent != null,
+                        totalOccurrences = total,
+                        occurrenceIndex = occIdx.coerceAtLeast(0)
+                    )
+                    if (tp != newTp) {
+                        node.tracePoint = newTp
+                        updated = true
+                    }
+                }
+                tp.lineNumber > changedLine && lineOffset != 0 -> {
+                    val newLineNum = (tp.lineNumber + lineOffset).coerceAtLeast(1)
+                    val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
+                    val (total, matches) = getLineOccurrences(document, newContent)
+                    val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
+                    val newTp = tp.copy(
+                        lineNumber = newLineNum,
+                        lineContent = newContent,
+                        isValid = newContent != null,
+                        totalOccurrences = total,
+                        occurrenceIndex = occIdx.coerceAtLeast(0)
+                    )
+                    if (tp != newTp) {
+                        node.tracePoint = newTp
+                        updated = true
+                    }
+                }
+            }
         }
 
-        when {
-            tp.lineNumber == changedLine && lineOffset > 0 -> {
-                val newLineNum = tp.lineNumber + lineOffset
-                val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
-                val (total, matches) = getLineOccurrences(
-                    document,
-                    newContent
-                )
-                val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
-                node.tracePoint = tp.copy(
-                    lineNumber = newLineNum,
-                    lineContent = newContent,
-                    isValid = newContent != null,
-                    totalOccurrences = total,
-                    occurrenceIndex = occIdx.coerceAtLeast(0)
-                )
-            }
-            tp.lineNumber == changedLine && lineOffset == 0 -> {
-                val newContent = newLines.getOrNull(changedLine - 1)?.trim()
-                val (total, matches) = getLineOccurrences(
-                    document,
-                    newContent
-                )
-                val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(changedLine) + 1
-                node.tracePoint = tp.copy(
-                    lineContent = newContent,
-                    isValid = newContent != null,
-                    totalOccurrences = total,
-                    occurrenceIndex = occIdx.coerceAtLeast(0)
-                )
-            }
-            tp.lineNumber > changedLine && lineOffset != 0 -> {
-                val newLineNum = (tp.lineNumber + lineOffset).coerceAtLeast(1)
-                val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
-                val (total, matches) = getLineOccurrences(
-                    document,
-                    newContent
-                )
-                val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
-                node.tracePoint = tp.copy(
-                    lineNumber = newLineNum,
-                    lineContent = newContent,
-                    isValid = newContent != null,
-                    totalOccurrences = total,
-                    occurrenceIndex = occIdx.coerceAtLeast(0)
-                )
-            }
-        }
-        node.children.forEach { updateNodeRecursively(document, it, filePath, newLines, lineOffset, changedLine) }
+        if (updated) updatedNodes.add(node)
+        node.children.forEach { updateNodeRecursively(document, it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
     }
+
 
     private fun validateTracePointsOnLoad() {
         ApplicationManager.getApplication().runReadAction {
@@ -604,7 +616,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun getExpandedTracePointIds(): Set<String> = expandedTracePointIds
 
-    fun addTracePointListener(listenerEventType: ListenerEventType, listener: (List<TracePointNode>, Set<String>) -> Unit) {
+    fun addTracePointListener(listenerEventType: ListenerEventType, listener: (List<TracePointNode>, Set<String>, Boolean) -> Unit) {
         listenersMap.getOrPut(listenerEventType) { mutableListOf() }.add(listener)
         //listener(getTracePoints(), expandedTracePointIds)
     }
@@ -613,8 +625,16 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         println("notifyListeners triggered")
         val copy = getTracePoints()
         val exp = expandedTracePointIds
-        val listeners= listenersMap[ListenerEventType.ALL]
-        listeners?.forEach { it(copy, exp) }
+        val listeners= listenersMap[ListenerEventType.FULL_UPDATE]
+        listeners?.forEach { it(copy, exp, false) }
+    }
+
+    fun notifyListeners(restoreSelection: Boolean) {
+        println("notifyListeners triggered")
+        val copy = getTracePoints()
+        val exp = expandedTracePointIds
+        val listeners= listenersMap[ListenerEventType.FULL_UPDATE]
+        listeners?.forEach { it(copy, exp, restoreSelection) }
     }
 
     fun notifyListeners(event: ListenerEventType) {
@@ -622,7 +642,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         val copy = getTracePoints()
         val exp = expandedTracePointIds
         val listeners= listenersMap[event]
-        listeners?.forEach { it(copy, exp) }
+        listeners?.forEach { it(copy, exp, false) }
+    }
+
+    fun notifyListeners(event: ListenerEventType, tracePoints:MutableList<TracePointNode>) {
+        println("notifyListeners triggered: $event")
+        val exp = expandedTracePointIds
+        val listeners= listenersMap[event]
+        listeners?.forEach { it(tracePoints, exp, false) }
     }
 
     override fun getState(): TracePointState = TracePointState(
@@ -646,7 +673,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             validateTracePointsOnLoad()
             FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
             reattachListenersAndHighlights()
-            notifyListeners(ListenerEventType.INIT)
             notifyListeners()
         }
     }
