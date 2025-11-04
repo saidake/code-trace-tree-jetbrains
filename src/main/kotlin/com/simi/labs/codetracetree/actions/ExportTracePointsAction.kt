@@ -71,7 +71,7 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
 
             // ----- root nodes ----------------------------------------------------
             val tracePointNodesEl = Element("tracePointNodes")
-            state.rootNodes.forEach { exportNode(it, tracePointNodesEl) }
+            state.tracePointNodes.forEach { exportNode(it, tracePointNodesEl) }
             rootElement.addContent(tracePointNodesEl)
 
             // ----- expanded ids --------------------------------------------------

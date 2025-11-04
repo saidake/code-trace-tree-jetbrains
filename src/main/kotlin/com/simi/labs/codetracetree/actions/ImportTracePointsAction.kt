@@ -48,7 +48,7 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
                         return@chooseFile
                     }
                     tracePointNodesEl.getChildren("tracePointNode").forEach { nodeEl ->
-                        rootNodes.add(importNode(nodeEl, null))
+                        tracePointNodes.add(importNode(nodeEl, null))
                     }
 
                     // expanded ids

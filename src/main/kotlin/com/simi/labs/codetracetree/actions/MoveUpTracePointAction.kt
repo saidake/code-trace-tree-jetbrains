@@ -25,14 +25,14 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
             (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
         }.map { it.id }.toSet()
 
-        val rootNodes: MutableList<TracePointNode> = service.getTracePoints()
+        val tracePointNodes: MutableList<TracePointNode> = service.getTracePoints()
         val groupedByParent = selectedIds
             .mapNotNull { service.getTracePointById(it) }
             .groupBy { it.parentId }
 
         for ((parentId, nodes) in groupedByParent) {
             val parentNode = parentId?.let { service.getTracePointById(parentId) }
-            val siblings = parentNode?.children ?: rootNodes
+            val siblings = parentNode?.children ?: tracePointNodes
             val orderedSelected = nodes.sortedBy { siblings.indexOf(it) }
             for (node in orderedSelected) {
                 val index = siblings.indexOf(node)

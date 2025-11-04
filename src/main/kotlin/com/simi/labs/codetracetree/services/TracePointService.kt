@@ -84,9 +84,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     @Tag("tracePointState")
     data class TracePointState(
-        @Tag("rootNodes")
+        @Tag("tracePointNodes")
         @XCollection(elementName = "tracePointNode")
-        var rootNodes: MutableList<TracePointNode> = mutableListOf(),
+        var tracePointNodes: MutableList<TracePointNode> = mutableListOf(),
 
         @Tag("expandedTracePointIds")
         @XCollection(elementName = "id",valueAttributeName = "")
@@ -112,7 +112,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
 
-    private var rootNodes: MutableList<TracePointNode> = mutableListOf()
+    private var tracePointNodes: MutableList<TracePointNode> = mutableListOf()
     private val nodeMap = mutableMapOf<String, TracePointNode>()
     private val fileNodesMap = mutableMapOf<String, MutableList<TracePointNode>>()
 
@@ -237,7 +237,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 walk(child)
             }
         }
-        rootNodes.forEach { walk(it) }
+        tracePointNodes.forEach { walk(it) }
     }
 
 
@@ -407,7 +407,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 }
             }
 
-            rootNodes.forEach { validateRecursively(it, ::validateNode) }
+            tracePointNodes.forEach { validateRecursively(it, ::validateNode) }
         }
     }
 
@@ -453,7 +453,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
             val newNode = TracePointNode(UUID.randomUUID().toString(), tp)
             if (parentId == null) {
-                rootNodes.add(newNode)
+                tracePointNodes.add(newNode)
             } else {
                 nodeMap[parentId]?.children?.add(newNode)?.also { newNode.parentId = nodeMap[parentId]?.id }
             }
@@ -491,8 +491,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
             val affectedFiles = toDelete.mapNotNull { nodeMap[it]?.tracePoint?.filePath }.distinct()
 
-            rootNodes.removeIf { toDelete.contains(it.id) }
-            rootNodes.forEach { pruneRecursively(it, toDelete) }
+            tracePointNodes.removeIf { toDelete.contains(it.id) }
+            tracePointNodes.forEach { pruneRecursively(it, toDelete) }
 
             selectedTracePointIds.removeAll(toDelete)
             expandedTracePointIds.removeAll(toDelete)
@@ -522,7 +522,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             node.children.forEach { walk(it) }
         }
 
-        rootNodes.forEach { walk(it) }
+        tracePointNodes.forEach { walk(it) }
         return result
     }
 
@@ -532,8 +532,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             node.children.map { walk(it) }
             return transformedNode
         }
-        // Transform all root nodes and update the rootNodes collection
-        rootNodes = rootNodes.map { walk(it) }.toMutableList()
+        // Transform all root nodes and update the tracePointNodes collection
+        tracePointNodes = tracePointNodes.map { walk(it) }.toMutableList()
     }
 
 
@@ -542,7 +542,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             if (predicate(node)) return true
             return node.children.any { walk(it) }
         }
-        return rootNodes.any { walk(it) }
+        return tracePointNodes.any { walk(it) }
     }
 
 
@@ -561,15 +561,15 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     // === Tree Traversal ===
 
     fun getTracePoints(): MutableList<TracePointNode>  {
-        return this.rootNodes
+        return this.tracePointNodes
     }
 
     fun addRootTracePoint(tracePoint: TracePointNode){
-        if(tracePoint.parentId==null)this.rootNodes.add(tracePoint)
+        if(tracePoint.parentId==null)this.tracePointNodes.add(tracePoint)
     }
 
     fun removeRootTracePoint(id: String): Boolean {
-        val iterator = rootNodes.iterator()
+        val iterator = tracePointNodes.iterator()
         while (iterator.hasNext()) {
             if (iterator.next().id == id) {
                 iterator.remove()
@@ -581,11 +581,11 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun addRootTracePointNextTo(tracePoint: TracePointNode, id: String) {
         if (tracePoint.parentId != null) return
-        val index = rootNodes.indexOfFirst { it.id == id }
+        val index = tracePointNodes.indexOfFirst { it.id == id }
         if (index != -1) {
-            rootNodes.add(index + 1, tracePoint)
+            tracePointNodes.add(index + 1, tracePoint)
         } else {
-            rootNodes.add(tracePoint)
+            tracePointNodes.add(tracePoint)
         }
     }
 
@@ -652,7 +652,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     override fun getState(): TracePointState = TracePointState(
-        rootNodes = rootNodes,
+        tracePointNodes = tracePointNodes,
         expandedTracePointIds = expandedTracePointIds,
         selectedTracePointIds = selectedTracePointIds.toList(),
         highlightingEnabled = isHighlightingEnabled,
@@ -662,8 +662,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     override fun loadState(state: TracePointState) {
         println("loadState triggered")
         ApplicationManager.getApplication().runReadAction {
-            rootNodes.clear()
-            rootNodes.addAll(state.rootNodes)
+            tracePointNodes.clear()
+            tracePointNodes.addAll(state.tracePointNodes)
             rebuildNodeAndFileMaps()
             selectedTracePointIds.clear(); selectedTracePointIds.addAll(state.selectedTracePointIds)
             expandedTracePointIds.clear(); expandedTracePointIds.addAll(state.expandedTracePointIds)
