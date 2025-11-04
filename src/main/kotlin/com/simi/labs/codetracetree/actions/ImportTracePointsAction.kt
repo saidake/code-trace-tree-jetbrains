@@ -12,7 +12,6 @@ import com.intellij.openapi.ui.Messages
 import com.simi.labs.codetracetree.services.TracePointService
 import org.jdom.Element
 import org.jdom.input.SAXBuilder
-import java.io.File
 import java.util.*
 
 class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.Actions.Download) {
@@ -44,11 +43,11 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
                 // 1. Build the full TracePointState object (same shape as getState())
                 val state = TracePointService.TracePointState().apply {
                     // root nodes (the tree)
-                    val rootNodesEl = root.getChild("rootNodes") ?: run {
-                        Messages.showWarningDialog(project, "No <rootNodes> element found", "Import Warning")
+                    val tracePointNodesEl = root.getChild("tracePointNodes") ?: run {
+                        Messages.showWarningDialog(project, "No <tracePointNodes> element found", "Import Warning")
                         return@chooseFile
                     }
-                    rootNodesEl.getChildren("tracePointNode").forEach { nodeEl ->
+                    tracePointNodesEl.getChildren("tracePointNode").forEach { nodeEl ->
                         rootNodes.add(importNode(nodeEl, null))
                     }
 

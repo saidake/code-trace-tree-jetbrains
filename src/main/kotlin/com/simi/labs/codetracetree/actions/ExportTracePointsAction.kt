@@ -1,4 +1,3 @@
-// src/main/kotlin/com/simi/labs/codetracetree/actions/ExportTracePointsAction.kt
 package com.simi.labs.codetracetree.actions
 
 import com.intellij.icons.AllIcons
@@ -20,17 +19,17 @@ import java.io.File
  * The output XML looks like this:
  *
  * <tracePointState>
- *   <rootNodes>
+ *   <tracePointNodes>
  *     <tracePointNode>
- *       <tracePoint>
- *         <tracePoint>…</tracePoint>
- *       </tracePoint>
+ *       <id>…</id>
+ *       <parentId>…</parentId>
+ *       <tracePoint>…</tracePoint>
  *       <children>
  *         <tracePointNode>…</tracePointNode>
  *         …
  *       </children>
  *     </tracePointNode>
- *   </rootNodes>
+ *   </tracePointNodes>
  *   <expandedTracePointIds>…</expandedTracePointIds>
  * </tracePointState>
  */
@@ -71,9 +70,9 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
             val rootElement = Element("tracePointState")
 
             // ----- root nodes ----------------------------------------------------
-            val rootNodesEl = Element("rootNodes")
-            state.rootNodes.forEach { exportNode(it, rootNodesEl) }
-            rootElement.addContent(rootNodesEl)
+            val tracePointNodesEl = Element("tracePointNodes")
+            state.rootNodes.forEach { exportNode(it, tracePointNodesEl) }
+            rootElement.addContent(tracePointNodesEl)
 
             // ----- expanded ids --------------------------------------------------
             val expandedEl = Element("expandedTracePointIds")

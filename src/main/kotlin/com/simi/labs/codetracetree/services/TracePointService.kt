@@ -268,7 +268,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             val changedLine = event.document.getLineNumber(event.offset) + 1
 
                             val updatedNodes = mutableListOf<TracePointNode>()
-                            rootNodes.forEach { updateNodeRecursively(event.document, it, docPath, newLines, lineOffset, changedLine,updatedNodes) }
+                            rootNodes.forEach { updateNodeRecursively(event.document,event.offset, it, docPath, newLines, lineOffset, changedLine,updatedNodes) }
                             highlightTracePointsInFile(docFile)
                             notifyListeners(ListenerEventType.PARTIAL_UPDATE,updatedNodes )
                         }
@@ -280,8 +280,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
+
     private fun updateNodeRecursively(
         document: com.intellij.openapi.editor.Document,
+        offset: Int,  // The cursor position (character offset) in the document during this editing operation.
         node: TracePointNode,
         filePath: String,
         newLines: List<String>,
@@ -290,7 +292,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         updatedNodes: MutableList<TracePointNode>
     ) {
         if (node.tracePoint.filePath != filePath) {
-            node.children.forEach { updateNodeRecursively(document, it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
+            node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
             return
         }
 
@@ -299,30 +301,32 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
         if (!tp.isValid) {
             val valid = newLines.getOrNull(tp.lineNumber - 1)?.trim() == tp.lineContent?.trim()
-            if (tp.isValid != valid) {
-                node.tracePoint = tp.copy(isValid = valid)
+            if (valid) {
+                node.tracePoint = tp.copy(isValid = true)
                 updated = true
             }
         } else {
+            val lineStartOffset = document.getLineStartOffset(changedLine - 1)
+            val isNewLineAtLineStart = (offset == lineStartOffset && lineOffset > 0)
             when {
-                tp.lineNumber == changedLine && lineOffset > 0 -> {
+                // Press Enter at the beginning of the current line:
+                // This will move the tracepoint down to the next line of code.
+                tp.lineNumber == changedLine && isNewLineAtLineStart -> {
                     val newLineNum = tp.lineNumber + lineOffset
                     val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
                     val (total, matches) = getLineOccurrences(document, newContent)
                     val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
-                    val newTp = tp.copy(
+                    node.tracePoint = tp.copy(
                         lineNumber = newLineNum,
                         lineContent = newContent,
                         isValid = newContent != null,
                         totalOccurrences = total,
                         occurrenceIndex = occIdx.coerceAtLeast(0)
                     )
-                    if (tp != newTp) {
-                        node.tracePoint = newTp
-                        updated = true
-                    }
+                    updated = true
                 }
-                tp.lineNumber == changedLine && lineOffset == 0 -> {
+                // When the edit happens on the trace point line, keep the line number unchanged and update only the content.
+                tp.lineNumber == changedLine-> {
                     val newContent = newLines.getOrNull(changedLine - 1)?.trim()
                     val (total, matches) = getLineOccurrences(document, newContent)
                     val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(changedLine) + 1
@@ -337,6 +341,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         updated = true
                     }
                 }
+                // Move only the nodes whose trace point line number is below the changed line.
                 tp.lineNumber > changedLine && lineOffset != 0 -> {
                     val newLineNum = (tp.lineNumber + lineOffset).coerceAtLeast(1)
                     val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
@@ -358,7 +363,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
 
         if (updated) updatedNodes.add(node)
-        node.children.forEach { updateNodeRecursively(document, it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
+        node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
     }
 
 
@@ -618,7 +623,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun addTracePointListener(listenerEventType: ListenerEventType, listener: (List<TracePointNode>, Set<String>, Boolean) -> Unit) {
         listenersMap.getOrPut(listenerEventType) { mutableListOf() }.add(listener)
-        //listener(getTracePoints(), expandedTracePointIds)
     }
 
     fun notifyListeners() {
