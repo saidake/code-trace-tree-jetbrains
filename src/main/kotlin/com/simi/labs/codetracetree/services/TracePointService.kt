@@ -114,6 +114,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     private var rootNodes: MutableList<TracePointNode> = mutableListOf()
     private val nodeMap = mutableMapOf<String, TracePointNode>()
+    private val fileNodesMap = mutableMapOf<String, MutableList<TracePointNode>>()
 
     init {
         // Listen for file openings to attach DocumentListener and apply highlights
@@ -178,9 +179,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             removeHighlights(file)
 
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val relevant = findTracePointNodes { tpNode ->
-                tpNode.tracePoint.filePath == filePath && tpNode.tracePoint.isValid
-            }
+            val relevant = fileNodesMap[filePath]?.filter { it.tracePoint.isValid } ?: emptyList()
             val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
             val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
             if (editors.isEmpty()) return@runReadAction
@@ -227,10 +226,12 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         return Pair(matching.size, matching)
     }
 
-    private fun rebuildNodeMaps() {
+    private fun rebuildNodeAndFileMaps() {
         nodeMap.clear()
         fun walk(node: TracePointNode) {
             nodeMap[node.id] = node
+            fileNodesMap.getOrPut(node.tracePoint.filePath) { mutableListOf() }
+                .add(node)
             node.children.forEach { child ->
                 child.parentId = node.id
                 walk(child)
@@ -242,9 +243,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
-            println("attachDocumentListener triggered")
+            println("attachDocumentListener triggered: $file")
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val hasTracePointsInFile = anyTracePointNode { it.tracePoint.filePath == filePath }
+            val affectedNodes = fileNodesMap[filePath]
+            val hasTracePointsInFile = affectedNodes!=null && affectedNodes.isNotEmpty()
             if (hasTracePointsInFile && !monitoredDocuments.containsKey(file)) {
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
@@ -255,10 +257,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         println("documentChanged triggered")
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
                         val docPath = docFile.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-                        val affected = findTracePointNodes { tpNode ->
-                            tpNode.tracePoint.filePath == docPath
-                        }
-                        if (affected.isEmpty()) return
+                        val affectedNodes = fileNodesMap[docPath]
+                        if (affectedNodes==null || affectedNodes.isEmpty()) return
 
                         ApplicationManager.getApplication().runReadAction {
                             val newLines = event.document.text.split("\n")
@@ -268,20 +268,23 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                             val changedLine = event.document.getLineNumber(event.offset) + 1
 
                             val updatedNodes = mutableListOf<TracePointNode>()
-                            rootNodes.forEach { updateNodeRecursively(event.document,event.offset, it, docPath, newLines, lineOffset, changedLine,updatedNodes) }
+                            for( tracePointNode:TracePointNode in affectedNodes ){
+                                updateNodeWhenDocChanged(event.document,event.offset, tracePointNode, docPath, newLines, lineOffset, changedLine,updatedNodes)
+                            }
                             highlightTracePointsInFile(docFile)
                             notifyListeners(ListenerEventType.PARTIAL_UPDATE,updatedNodes )
                         }
                     }
                 }
                 document.addDocumentListener(listener, project)
+                println("Add a listener for the file: $file")
                 monitoredDocuments[file] = listener
             }
         }
     }
 
 
-    private fun updateNodeRecursively(
+    private fun updateNodeWhenDocChanged(
         document: com.intellij.openapi.editor.Document,
         offset: Int,  // The cursor position (character offset) in the document during this editing operation.
         node: TracePointNode,
@@ -292,7 +295,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         updatedNodes: MutableList<TracePointNode>
     ) {
         if (node.tracePoint.filePath != filePath) {
-            node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
+            //node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
             return
         }
 
@@ -363,7 +366,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
 
         if (updated) updatedNodes.add(node)
-        node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
+        //node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
     }
 
 
@@ -455,6 +458,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 nodeMap[parentId]?.children?.add(newNode)?.also { newNode.parentId = nodeMap[parentId]?.id }
             }
             nodeMap[newNode.id] = newNode
+            fileNodesMap.getOrPut(newNode.tracePoint.filePath) { mutableListOf() }
+                .add(newNode)
         }
     }
 
@@ -491,7 +496,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
             selectedTracePointIds.removeAll(toDelete)
             expandedTracePointIds.removeAll(toDelete)
-            rebuildNodeMaps()
+            rebuildNodeAndFileMaps()
 
             affectedFiles.forEach { path ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$path")
@@ -538,16 +543,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             return node.children.any { walk(it) }
         }
         return rootNodes.any { walk(it) }
-    }
-
-
-
-    fun updateNodeMap(updatedTracePoints: List<TracePointNode>) {
-        ApplicationManager.getApplication().runReadAction {
-            for (node in updatedTracePoints) {
-                nodeMap[node.id]=node
-            }
-        }
     }
 
 
@@ -669,7 +664,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             rootNodes.clear()
             rootNodes.addAll(state.rootNodes)
-            rebuildNodeMaps()
+            rebuildNodeAndFileMaps()
             selectedTracePointIds.clear(); selectedTracePointIds.addAll(state.selectedTracePointIds)
             expandedTracePointIds.clear(); expandedTracePointIds.addAll(state.expandedTracePointIds)
             isHighlightingEnabled = state.highlightingEnabled
