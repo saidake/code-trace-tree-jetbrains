@@ -37,7 +37,7 @@ class CreateRootTracePointAction : AnAction() {
         ) ?: return
 
         // **root** → parentId = null
-        service.addTracePoint(tracePointName, file, lineNumber, editor, parentId = null)
+        service.addTracePoint(tracePointName, file, lineNumber,  parentId = null)
         service.attachDocumentListener(file)
         service.highlightTracePointsInFile(file)
         service.notifyListeners()

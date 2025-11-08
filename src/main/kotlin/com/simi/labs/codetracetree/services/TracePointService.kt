@@ -3,7 +3,6 @@ package com.simi.labs.codetracetree.services
 import com.intellij.openapi.vfs.VirtualFileManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.*
-import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -19,7 +18,7 @@ import com.intellij.ui.JBColor
 import com.intellij.util.xmlb.annotations.Property
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
-import com.simi.labs.codetracetree.domain.enums.ListenerEventType
+import com.simi.labs.codetracetree.domain.enums.NodeListenerEventType
 import java.util.*
 
 @Service(Service.Level.PROJECT)
@@ -103,7 +102,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var descriptionAreaOpened: Boolean = false
     )
 
-    private val listenersMap =mutableMapOf<ListenerEventType, MutableList<(List<TracePointNode>, Set<String>, Boolean) -> Unit>>()
+    private val listenersMap =mutableMapOf<NodeListenerEventType, MutableList<(List<TracePointNode>, Boolean) -> Unit>>()
     private val selectedTracePointIds = mutableSetOf<String>()
     private var expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
@@ -245,8 +244,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             println("attachDocumentListener triggered: $file")
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val affectedNodes = fileNodesMap[filePath]
-            val hasTracePointsInFile = affectedNodes!=null && affectedNodes.isNotEmpty()
+            val affectedFileNodes = fileNodesMap[filePath]
+            val hasTracePointsInFile = affectedFileNodes!=null && affectedFileNodes.isNotEmpty()
             if (hasTracePointsInFile && !monitoredDocuments.containsKey(file)) {
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
@@ -257,7 +256,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         println("documentChanged triggered")
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
                         val docPath = docFile.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-                        val affectedNodes = fileNodesMap[docPath]
+                        val affectedNodes = getTraceNodesByFilePath(docPath)
                         if (affectedNodes==null || affectedNodes.isEmpty()) return
 
                         ApplicationManager.getApplication().runReadAction {
@@ -272,7 +271,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                                 updateNodeWhenDocChanged(event.document,event.offset, tracePointNode, docPath, newLines, lineOffset, changedLine,updatedNodes)
                             }
                             highlightTracePointsInFile(docFile)
-                            notifyListeners(ListenerEventType.PARTIAL_UPDATE,updatedNodes )
+                            notifyListeners(NodeListenerEventType.PARTIAL_UPDATE,updatedNodes )
                         }
                     }
                 }
@@ -420,7 +419,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         name: String,
         file: VirtualFile,
         lineNumber: Int,
-        editor: Editor?,
         parentId: String? = null,
         description: String = ""
     ) {
@@ -431,27 +429,29 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 val end = it.getLineEndOffset(lineNumber - 1)
                 it.getText(TextRange(start, end)).trim()
             }
-
-            val (totalOccurrences, matchingLines) = if (document != null && lineContent != null) {
+            val (totalOccurrences, matchingLines) = if (document != null) {
                 getLineOccurrences(document, lineContent)
             } else Pair(0, emptyList())
-
             val occurrenceIndex = if (lineContent != null) matchingLines.indexOf(lineNumber) + 1 else 0
 
-            val tp = TracePoint(
+            val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
+            val fileName = file.name
+
+            val tracePoint = TracePoint(
                 name = name,
-                filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: ""),
-                fileName = file.name,
+                filePath = filePath,
+                fileName = fileName,
                 lineNumber = lineNumber,
                 projectPath = project.basePath ?: "",
                 lineContent = lineContent,
-                isValid = document != null && lineContent != null,
+                isValid = document != null,
                 totalOccurrences = totalOccurrences,
                 occurrenceIndex = occurrenceIndex,
                 description = description
             )
 
-            val newNode = TracePointNode(UUID.randomUUID().toString(), tp)
+            val newNode = TracePointNode(UUID.randomUUID().toString(), tracePoint)
+
             if (parentId == null) {
                 tracePointNodes.add(newNode)
             } else {
@@ -591,9 +591,23 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
 
 
-    fun getTracePointById( id: String): TracePointNode?  {
+    fun getTracePointNodeById(id: String): TracePointNode?  {
         return this.nodeMap[id]
     }
+
+    fun findRootParentId(node: TracePointNode): String?  {
+        var tempTP: TracePointService.TracePointNode? = node
+        var rootParentId: String? = null
+        while (tempTP != null) {
+            rootParentId = tempTP.id
+            if (tempTP.parentId == null) {
+                break
+            }
+            tempTP = getTracePointNodeById(tempTP.parentId!!)
+        }
+        return rootParentId
+    }
+
 
 
     fun selectTracePoints(ids: Set<String>) {
@@ -616,39 +630,36 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun getExpandedTracePointIds(): Set<String> = expandedTracePointIds
 
-    fun addTracePointListener(listenerEventType: ListenerEventType, listener: (List<TracePointNode>, Set<String>, Boolean) -> Unit) {
-        listenersMap.getOrPut(listenerEventType) { mutableListOf() }.add(listener)
+    fun addNodeListener(nodeListenerEventType: NodeListenerEventType,
+                        listener: (List<TracePointNode>,  Boolean) -> Unit) {
+        listenersMap.getOrPut(nodeListenerEventType) { mutableListOf() }.add(listener)
     }
 
     fun notifyListeners() {
         println("notifyListeners triggered")
         val copy = getTracePoints()
-        val exp = expandedTracePointIds
-        val listeners= listenersMap[ListenerEventType.FULL_UPDATE]
-        listeners?.forEach { it(copy, exp, false) }
+        val listeners= listenersMap[NodeListenerEventType.FULL_UPDATE]
+        listeners?.forEach { it(copy,false) }
     }
 
     fun notifyListeners(restoreSelection: Boolean) {
         println("notifyListeners triggered")
         val copy = getTracePoints()
-        val exp = expandedTracePointIds
-        val listeners= listenersMap[ListenerEventType.FULL_UPDATE]
-        listeners?.forEach { it(copy, exp, restoreSelection) }
+        val listeners= listenersMap[NodeListenerEventType.FULL_UPDATE]
+        listeners?.forEach { it(copy,restoreSelection) }
     }
 
-    fun notifyListeners(event: ListenerEventType) {
+    fun notifyListeners(event: NodeListenerEventType) {
         println("notifyListeners triggered: $event")
         val copy = getTracePoints()
-        val exp = expandedTracePointIds
         val listeners= listenersMap[event]
-        listeners?.forEach { it(copy, exp, false) }
+        listeners?.forEach { it(copy,false) }
     }
 
-    fun notifyListeners(event: ListenerEventType, tracePoints:MutableList<TracePointNode>) {
+    fun notifyListeners(event: NodeListenerEventType, tracePoints:MutableList<TracePointNode>) {
         println("notifyListeners triggered: $event")
-        val exp = expandedTracePointIds
         val listeners= listenersMap[event]
-        listeners?.forEach { it(tracePoints, exp, false) }
+        listeners?.forEach { it(tracePoints,  false) }
     }
 
     override fun getState(): TracePointState = TracePointState(
@@ -692,4 +703,9 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
         getTracePoints().forEach { traverse(it) }
     }
+
+    fun getTraceNodesByFilePath(filePath: String): List<TracePointNode>? {
+        return fileNodesMap[filePath]
+    }
+
 }

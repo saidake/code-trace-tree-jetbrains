@@ -42,7 +42,7 @@ import javax.swing.JTextArea
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import com.intellij.ui.JBColor
-import com.simi.labs.codetracetree.domain.enums.ListenerEventType
+import com.simi.labs.codetracetree.domain.enums.NodeListenerEventType
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
@@ -122,16 +122,16 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
                 toggleClickCount = 0
                 // Moved listener setup here to ensure tree is initialized
-                service.addTracePointListener(ListenerEventType.FULL_UPDATE) { tracePoints, expandedIds,restoreSelection ->
+                service.addNodeListener(NodeListenerEventType.FULL_UPDATE) { nodes, restoreSelection ->
                     if (!isUpdatingTree) {
-                        println("Updating tool window with ${tracePoints.size} trace points and ${expandedIds.size} expanded IDs")
-                        fullUpdateTreeModel(this, expandedIds,restoreSelection)
+                        println("Updating tool window with ${nodes.size} trace points and ${service.getExpandedTracePointIds().size} expanded IDs")
+                        fullUpdateTreeModel(this,restoreSelection)
                     }
                 }
-                service.addTracePointListener(ListenerEventType.PARTIAL_UPDATE) { tracePoints, expandedIds,restoreSelection ->
+                service.addNodeListener(NodeListenerEventType.PARTIAL_UPDATE) { nodes, restoreSelection ->
                     if (!isUpdatingTree) {
-                        println("Partial update tree model with ${tracePoints.size} trace points")
-                        partialUpdateTreeModel( this,tracePoints)
+                        println("Partial update tree model with ${nodes.size} trace points")
+                        partialUpdateTreeModel( this,nodes)
                     }
                 }
                 service.notifyListeners() // trigger fullUpdateTreeModel
@@ -181,7 +181,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         if(draggedTracePointIds.size!=1)return true;
 
                         // Skip if trying to drop inside itself or its descendant
-                        val draggedTreeNode = findTreeNodeById(draggedTracePointIds.first())
+                        val draggedTreeNode = getTreeNodeById(draggedTracePointIds.first())
                         val draggedTracePointNode = (draggedTreeNode?.userObject as? TracePointService.TracePointNode) ?: return false
                         var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
                         var invalid = false
@@ -211,36 +211,27 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
                         val transferable = support.transferable
-                        val draggedTracePointIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
+                        val draggedIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
 
                         val tree = support.component as? JTree ?: return false
 
                         try {
 //                            tree.repaint()
                             // For each dragged trace point, move if valid
-                            for (tracePointId in draggedTracePointIds) {
-                                val draggedTreeNode = findTreeNodeById(tracePointId) ?: continue
+                            for (tracePointId in draggedIds) {
+                                val draggedTreeNode = getTreeNodeById(tracePointId) ?: continue
                                 val draggedTracePointNode = (draggedTreeNode.userObject as? TracePointService.TracePointNode) ?: continue
-                                // Set the tracking point as a root trace point
+                                val oldParentTracePointNode = draggedTracePointNode.parentId?.let { service.getTracePointNodeById(it) }
+                                // If dropping into empty space (root level), position after original parent
                                 if (dropPath == null) {
                                     if(draggedTreeNode.parent==rootTreeNode)continue
 
                                     // Detach from old parent
                                     (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
-                                    val oldParentTracePointNode = draggedTracePointNode.parentId?.let { service.getTracePointById(it) }
                                     oldParentTracePointNode?.children?.remove(draggedTracePointNode)
 
                                     // Attach under new parent
-                                    var tempTP: TracePointService.TracePointNode? = draggedTracePointNode
-                                    var rootParentId: String? = null
-                                    while (tempTP != null) {
-                                        rootParentId = tempTP.id
-                                        if (tempTP.parentId == null) {
-                                            break
-                                        }
-                                        tempTP = service.getTracePointById(tempTP.parentId!!)
-                                    }
-
+                                    val rootParentId: String? = service.findRootParentId(draggedTracePointNode)
                                     rootTreeNode.add(draggedTreeNode)
                                     draggedTracePointNode.parentId=null;
                                     if(rootParentId!=null)service.addRootTracePointNextTo(draggedTracePointNode,rootParentId)
@@ -250,6 +241,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                                 val dropTreeNode = dropPath.lastPathComponent as? DefaultMutableTreeNode ?: return false
                                 val dropTracePoint = dropTreeNode.userObject as? TracePointService.TracePointNode ?: return false
+
+                                // Prevent dropping on the current parent
+                                if (draggedTracePointNode.parentId==dropTracePoint.id) continue
 
                                 // Skip if trying to drop inside itself or its descendant
                                 var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
@@ -264,12 +258,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 }
                                 if (invalid) continue
 
-                                // Prevent dropping on the current parent
-                                if (draggedTracePointNode.parentId==dropTracePoint.id) continue
+
 
                                 // Detach from old parent
                                 (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
-                                val oldParentTracePointNode = draggedTracePointNode.parentId?.let { service.getTracePointById(it) }
                                 oldParentTracePointNode?.children?.remove(draggedTracePointNode)
                                 if(draggedTracePointNode.parentId==null)service.removeRootTracePoint(draggedTracePointNode.id)
 
@@ -278,7 +270,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 val dropIndex = parentNode.childCount
                                 val newParentId = dropTracePoint.id
                                 parentNode.insert(draggedTreeNode, dropIndex)
-                                val newParentTracePointNode = service.getTracePointById(newParentId)
+                                val newParentTracePointNode = service.getTracePointNodeById(newParentId)
                                 newParentTracePointNode?.children?.add(draggedTracePointNode)
                                 draggedTracePointNode.parentId = newParentId
                             }
@@ -627,12 +619,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
         private fun partialUpdateTreeModel(
             tree: JTree,
-            updatedNodes: List<TracePointService.TracePointNode>
+            nodes: List<TracePointService.TracePointNode>
         ) {
             println("partialUpdateTreeModel triggered")
-            if (updatedNodes.isEmpty()) return
+            if (nodes.isEmpty()) return
             val model = tree.model as DefaultTreeModel
-            for (tp in updatedNodes) {
+            for (tp in nodes) {
                 val node = treeNodeMap[tp.id]
                 if (node == null) {
                     // If it's a new node
@@ -659,7 +651,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         }
 
 
-        private fun fullUpdateTreeModel(tree: JTree, expandedIds: Set<String>, restoreSelection: Boolean ) {
+        private fun fullUpdateTreeModel(tree: JTree, restoreSelection: Boolean ) {
             println("fullUpdateTreeModel triggered")
             isUpdatingTree = true
             rootTreeNode.removeAllChildren()
@@ -704,6 +696,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
             // Expand trace points
             val pathsToExpand = mutableSetOf<TreePath>()
+            val expandedIds=service.getExpandedTracePointIds()
             traverseTreeNodes(rootTreeNode) { node ->
                 val tp = (node.userObject as? TracePointService.TracePointNode)
                 if (tp != null && expandedIds.contains(tp.id)) {
@@ -717,7 +710,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             isUpdatingTree = false
         }
 
-        private fun findTreeNodeById(id: String): DefaultMutableTreeNode? {
+        private fun getTreeNodeById(id: String): DefaultMutableTreeNode? {
             return treeNodeMap[id]
         }
     }
