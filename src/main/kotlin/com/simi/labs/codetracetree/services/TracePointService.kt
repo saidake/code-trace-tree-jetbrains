@@ -39,7 +39,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @Tag("isValid") val isValid: Boolean = true,
         @Tag("totalOccurrences") val totalOccurrences: Int = 0,
         @Tag("occurrenceIndex") val occurrenceIndex: Int = 0,
-        @Tag("description") val description: String = ""
+        @Tag("description") val description: String? = ""
     ) {
         fun navigateTo(project: Project) {
             ApplicationManager.getApplication().runReadAction {
@@ -236,6 +236,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
 
+    // A document listener will not be added for the same file
     fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
             println("attachDocumentListener triggered: $file")
@@ -542,6 +543,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
 
+    // Add a document listener if one doesn't exist for the file
+    // Refresh the highlighted lines in the file
     fun refreshDocumentListener(updatedFilePaths: Set<String>) {
         ApplicationManager.getApplication().runReadAction {
             updatedFilePaths.forEach { path ->
@@ -553,8 +556,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             }
         }
     }
-
-    // === Tree Traversal ===
 
     fun getTracePoints(): MutableList<TracePointNode>  {
         return this.tracePointNodes
@@ -604,8 +605,20 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         return rootParentId
     }
 
+    fun updateInFileNodesMap(prevFilePath: String, node: TracePointNode) {
+        if (prevFilePath == node.tracePoint.filePath) return
+
+        // Remove the node from the previous node list
+        val prevList = this.fileNodesMap[prevFilePath]
+        prevList?.remove(node)
+        // Add the node to the new file path
+        val newFilePath = node.tracePoint.filePath
+        val newList = this.fileNodesMap.getOrPut(newFilePath) { mutableListOf() }
+        newList.add(node)
+    }
 
 
+    // Used in mouseClicked event
     fun selectTracePoints(ids: Set<String>) {
         ApplicationManager.getApplication().runReadAction {
             selectedTracePointIds.clear()

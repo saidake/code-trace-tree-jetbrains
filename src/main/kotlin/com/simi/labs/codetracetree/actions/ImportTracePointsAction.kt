@@ -1,4 +1,3 @@
-// src/main/kotlin/com/simi/labs/codetracetree/actions/ImportTracePointsAction.kt
 package com.simi.labs.codetracetree.actions
 
 import com.intellij.icons.AllIcons
@@ -79,7 +78,7 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
         parentId: String?
     ): TracePointService.TracePointNode {
         val id = nodeEl.getChildTextTrim("id") ?: UUID.randomUUID().toString()
-        val parentId = nodeEl.getChildTextTrim("parentId").takeIf { it.isNotBlank() }
+        val parentId = nodeEl.getChildTextTrim("parentId")?.takeIf { it.isNotBlank() }
         val tpEl = nodeEl.getChild("tracePoint")
             ?: throw IllegalArgumentException("Missing <tracePoint> element in node $id")
 
