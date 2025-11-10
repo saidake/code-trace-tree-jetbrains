@@ -91,10 +91,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         @XCollection(elementName = "id",valueAttributeName = "")
         var expandedTracePointIds: MutableSet<String> = mutableSetOf(),
 
-        @Tag("selectedTracePointIds")
-        @XCollection(elementName = "id",valueAttributeName = "")
-        var selectedTracePointIds: List<String> = emptyList(),
-
         @Tag("highlightingEnabled")
         var highlightingEnabled: Boolean = true,
 
@@ -225,7 +221,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         return Pair(matching.size, matching)
     }
 
-    private fun rebuildNodeAndFileMaps() {
+    private fun rebuildNodeMapAndFileNodesMap() {
         nodeMap.clear()
         fun walk(node: TracePointNode) {
             nodeMap[node.id] = node
@@ -496,7 +492,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
             selectedTracePointIds.removeAll(toDelete)
             expandedTracePointIds.removeAll(toDelete)
-            rebuildNodeAndFileMaps()
+            rebuildNodeMapAndFileNodesMap()
 
             affectedFiles.forEach { path ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$path")
@@ -568,10 +564,10 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         if(tracePoint.parentId==null)this.tracePointNodes.add(tracePoint)
     }
 
-    fun removeRootTracePoint(id: String): Boolean {
+    fun removeRootTracePoint(tpNode: TracePointNode): Boolean {
         val iterator = tracePointNodes.iterator()
         while (iterator.hasNext()) {
-            if (iterator.next().id == id) {
+            if (iterator.next().id == tpNode.id) {
                 iterator.remove()
                 return true
             }
@@ -665,7 +661,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     override fun getState(): TracePointState = TracePointState(
         tracePointNodes = tracePointNodes,
         expandedTracePointIds = expandedTracePointIds,
-        selectedTracePointIds = selectedTracePointIds.toList(),
         highlightingEnabled = isHighlightingEnabled,
         descriptionAreaOpened = isDescriptionAreaOpened
     )
@@ -675,8 +670,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             tracePointNodes.clear()
             tracePointNodes.addAll(state.tracePointNodes)
-            rebuildNodeAndFileMaps()
-            selectedTracePointIds.clear(); selectedTracePointIds.addAll(state.selectedTracePointIds)
+            rebuildNodeMapAndFileNodesMap()
             expandedTracePointIds.clear(); expandedTracePointIds.addAll(state.expandedTracePointIds)
             isHighlightingEnabled = state.highlightingEnabled
             isDescriptionAreaOpened = state.descriptionAreaOpened

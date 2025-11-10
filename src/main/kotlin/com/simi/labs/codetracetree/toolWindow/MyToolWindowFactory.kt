@@ -195,7 +195,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         }
                         if (invalid) return false
 
-                        // Prevent dropping on the same node or its descendants
+                        // Prevent dropping on the same node
                         if (dropTracePointNode.id == draggedTracePointNode.id) return false
                         // Prevent dropping on the current parent
                         if (draggedTracePointNode.parentId==dropTracePointNode.id) return false
@@ -263,7 +263,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 // Detach from old parent
                                 (draggedTreeNode.parent as? DefaultMutableTreeNode)?.remove(draggedTreeNode)
                                 oldParentTracePointNode?.children?.remove(draggedTracePointNode)
-                                if(draggedTracePointNode.parentId==null)service.removeRootTracePoint(draggedTracePointNode.id)
+                                if(draggedTracePointNode.parentId==null)service.removeRootTracePoint(draggedTracePointNode)
 
                                 // Attach under new parent
                                 val parentNode = dropTreeNode
