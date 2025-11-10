@@ -508,14 +508,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Move Down"
                     templatePresentation.description = "Move the selected trace point down in the list"
                 })
-                add(ExpandSelectedTracePointAction(this@MyToolWindow).apply {
-                    templatePresentation.text = "Expand Selected"
-                    templatePresentation.description = "Expand the selected trace point node"
-                })
-                add(CollapseAllTracePointAction(this@MyToolWindow).apply {
-                    templatePresentation.text = "Collapse All"
-                    templatePresentation.description = "Collapse all trace point nodes"
-                })
                 add(ToggleHighlightTracePointsAction().apply {
                     templatePresentation.text = "Toggle Highlights"
                     templatePresentation.description = "Toggle the visibility of trace point highlights in files"
@@ -531,6 +523,14 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 add(ImportTracePointsAction().apply {
                     templatePresentation.text = "Import Trace Points"
                     templatePresentation.description = "Import trace points from an XML file"
+                })
+                add(ExpandSelectedTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Expand Selected"
+                    templatePresentation.description = "Expand the selected trace point node"
+                })
+                add(CollapseAllTracePointAction(this@MyToolWindow).apply {
+                    templatePresentation.text = "Collapse All"
+                    templatePresentation.description = "Collapse all trace point nodes"
                 })
             }
             val actionToolbar = ActionManager.getInstance().createActionToolbar(
