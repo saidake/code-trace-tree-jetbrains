@@ -223,6 +223,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     private fun rebuildNodeMapAndFileNodesMap() {
         nodeMap.clear()
+        fileNodesMap.clear()
         fun walk(node: TracePointNode) {
             nodeMap[node.id] = node
             fileNodesMap.getOrPut(node.tracePoint.filePath) { mutableListOf() }
@@ -498,7 +499,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             affectedFiles.forEach { path ->
                 val file = VirtualFileManager.getInstance().findFileByUrl("file:///${project.basePath}/$path")
                 file?.let {
-                    removeHighlights(it)
                     highlightTracePointsInFile(it)
                 }
             }
