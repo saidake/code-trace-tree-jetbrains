@@ -1,0 +1,11 @@
+name: Kotlin Lint Check
+
+on: [push, pull_request]
+
+jobs:
+  ktlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gradle/gradle-build-action@v3
+      - run: ./gradlew ktlintCheck
