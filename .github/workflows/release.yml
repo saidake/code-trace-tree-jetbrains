@@ -1,6 +1,6 @@
 # Build and Release
 #
-# Builds the plugin ZIP and publishes it to JetBrains Marketplace.
+# Builds the plugin ZIP, attaches it to the GitHub Release, and publishes to JetBrains Marketplace.
 # Triggered on push of a git tag matching v* (e.g. v1.0.0), same pattern as rhctl.
 
 name: Build and Release
@@ -35,6 +35,21 @@ jobs:
           name: code-trace-tree
           path: main/build/distributions/*.zip
 
+      - name: Attach plugin ZIP to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          ZIP="$(ls main/build/distributions/*.zip | head -n1)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            gh release create "$TAG" \
+              --title "Code Trace Tree ${TAG#v}" \
+              --generate-notes \
+              "$ZIP"
+          fi
+
       - name: Publish plugin
         run: ./gradlew publishPlugin
         env:
@@ -42,3 +57,4 @@ jobs:
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        continue-on-error: true

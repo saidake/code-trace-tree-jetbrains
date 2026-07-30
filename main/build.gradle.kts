@@ -29,6 +29,10 @@ dependencies {
 }
 
 intellijPlatform {
+    projectName = "code-trace-tree"
+    // No custom Settings UI; skip headless IDE searchable-options indexing
+    buildSearchableOptions = false
+
     pluginConfiguration {
         name = "Code Trace Tree"
         version = pluginVersion
@@ -77,6 +81,19 @@ intellijPlatform {
 }
 
 tasks {
+    // Avoid Gradle module name "main" becoming the ZIP root / JAR base name
+    jar {
+        archiveBaseName.set("code-trace-tree")
+    }
+    instrumentedJar {
+        archiveBaseName.set("code-trace-tree")
+    }
+    composedJar {
+        archiveBaseName.set("code-trace-tree")
+    }
+    prepareSandbox {
+        pluginName.set("code-trace-tree")
+    }
     buildPlugin {
         archiveFileName.set("code-trace-tree-$pluginVersion.zip")
     }
