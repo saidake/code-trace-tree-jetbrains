@@ -29,6 +29,16 @@
   <li>Double-click a node in the tree to jump to that location in the source.</li>
   <li>Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.</li>
 </ol>
+
+<h3>Storage</h3>
+<p>
+  Trace data is stored in a shared global folder (Windows: <code>%LOCALAPPDATA%\code-trace-tree</code>;
+  macOS: <code>~/Library/Application Support/code-trace-tree</code>;
+  Linux: <code>$XDG_CONFIG_HOME/code-trace-tree</code> or <code>~/.config/code-trace-tree</code>).
+  Each project keeps only a small id file under <code>.idea/code-trace-tree.project.id</code>
+  (falls back to <code>.vscode/code-trace-tree.project.id</code> when present).
+  Old unused XML files are not deleted automatically — remove them from that folder if you no longer need them.
+</p>
 <!-- Plugin description end -->
 
 # Preview

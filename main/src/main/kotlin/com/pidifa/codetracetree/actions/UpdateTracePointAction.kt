@@ -71,7 +71,6 @@ class UpdateTracePointAction : AnAction() {
             tp.tracePoint=tp.tracePoint.copy(
                 fileName = fileName,
                 filePath = filePath,
-                projectPath = projectPath,
                 lineNumber = lineNumber,
                 lineContent = lineContent,
                 isValid = true,

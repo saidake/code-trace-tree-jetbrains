@@ -21,11 +21,11 @@ import org.jdom.Element
 import java.util.UUID
 
 /**
- * Shared XML encode/decode for single-profile (`<tracePointState>`) and
+ * Shared XML encode/decode for single-profile (`<traceProfile>`) and
  * multi-profile (`<traceProfiles>`) export files.
  */
 object TraceProfileXml {
-    const val ROOT_SINGLE = "tracePointState"
+    const val ROOT_SINGLE = "traceProfile"
     const val ROOT_MULTI = "traceProfiles"
 
     data class ParsedSingle(
@@ -45,7 +45,7 @@ object TraceProfileXml {
         expandedIds: Set<String>
     ): Element {
         val root = Element(ROOT_SINGLE)
-        root.addContent(Element("profileName").setText(profileName))
+        root.addContent(Element("name").setText(profileName))
         root.addContent(nodesElement(nodes))
         root.addContent(expandedElement(expandedIds))
         return root
@@ -58,7 +58,7 @@ object TraceProfileXml {
         val root = Element(ROOT_MULTI)
         root.addContent(Element("activeProfileName").setText(activeProfileName))
         profiles.forEach { profile ->
-            val profileEl = Element("traceProfile")
+            val profileEl = Element(ROOT_SINGLE)
             profileEl.addContent(Element("name").setText(profile.name))
             profileEl.addContent(nodesElement(profile.tracePointNodes))
             profileEl.addContent(expandedElement(profile.expandedTracePointIds))
@@ -68,6 +68,9 @@ object TraceProfileXml {
     }
 
     fun parseSingle(root: Element): ParsedSingle {
+        if (root.name != ROOT_SINGLE) {
+            throw IllegalArgumentException("Expected <$ROOT_SINGLE> root, got <${root.name}>")
+        }
         val nodes = mutableListOf<TracePointService.TracePointNode>()
         val expandedIds = mutableSetOf<String>()
         val nodesEl = root.getChild("tracePointNodes")
@@ -77,13 +80,16 @@ object TraceProfileXml {
             val id = idEl.textTrim
             if (id.isNotBlank()) expandedIds.add(id)
         }
-        val profileName = root.getChildTextTrim("profileName")?.takeIf { it.isNotBlank() }
+        val profileName = root.getChildTextTrim("name")?.takeIf { it.isNotBlank() }
         return ParsedSingle(profileName, nodes, expandedIds)
     }
 
     fun parseMulti(root: Element): ParsedMulti {
+        if (root.name != ROOT_MULTI) {
+            throw IllegalArgumentException("Expected <$ROOT_MULTI> root, got <${root.name}>")
+        }
         val profiles = mutableListOf<TracePointService.TraceProfile>()
-        root.getChildren("traceProfile").forEach { profileEl ->
+        root.getChildren(ROOT_SINGLE).forEach { profileEl ->
             val name = profileEl.getChildTextTrim("name")?.takeIf { it.isNotBlank() }
                 ?: TracePointService.DEFAULT_PROFILE_NAME
             val nodes = mutableListOf<TracePointService.TracePointNode>()
@@ -104,7 +110,7 @@ object TraceProfileXml {
             )
         }
         if (profiles.isEmpty()) {
-            throw IllegalArgumentException("No <traceProfile> elements found")
+            throw IllegalArgumentException("No <$ROOT_SINGLE> elements found")
         }
         val active = root.getChildTextTrim("activeProfileName")?.takeIf { it.isNotBlank() }
         return ParsedMulti(active, profiles)
@@ -125,21 +131,22 @@ object TraceProfileXml {
     private fun exportNode(node: TracePointService.TracePointNode, parentEl: Element) {
         val nodeEl = Element("tracePointNode")
         nodeEl.addContent(Element("id").setText(node.id))
+        // Always include parentId (empty for roots) for clarity
         nodeEl.addContent(Element("parentId").setText(node.parentId ?: ""))
 
-        val tracePointEl = Element("tracePoint").apply {
-            addContent(Element("name").setText(node.tracePoint.name))
-            addContent(Element("fileName").setText(node.tracePoint.fileName))
-            addContent(Element("filePath").setText(node.tracePoint.filePath))
-            addContent(Element("lineNumber").setText(node.tracePoint.lineNumber.toString()))
-            addContent(Element("projectPath").setText(node.tracePoint.projectPath))
-            addContent(Element("lineContent").setText(node.tracePoint.lineContent ?: ""))
-            addContent(Element("isValid").setText(node.tracePoint.isValid.toString()))
-            addContent(Element("totalOccurrences").setText(node.tracePoint.totalOccurrences.toString()))
-            addContent(Element("occurrenceIndex").setText(node.tracePoint.occurrenceIndex.toString()))
-            addContent(Element("description").setText(node.tracePoint.description ?: ""))
-        }
-        nodeEl.addContent(tracePointEl)
+        val tp = node.tracePoint
+        nodeEl.addContent(
+            Element("tracePoint").apply {
+                addContent(Element("name").setText(tp.name))
+                addContent(Element("fileName").setText(tp.fileName))
+                addContent(Element("filePath").setText(tp.filePath))
+                addContent(Element("lineNumber").setText(tp.lineNumber.toString()))
+                addContent(Element("lineContent").setText(tp.lineContent ?: ""))
+                addContent(Element("totalOccurrences").setText(tp.totalOccurrences.toString()))
+                addContent(Element("occurrenceIndex").setText(tp.occurrenceIndex.toString()))
+                addContent(Element("description").setText(tp.description ?: ""))
+            }
+        )
 
         if (node.children.isNotEmpty()) {
             val childrenEl = Element("children")
@@ -161,9 +168,8 @@ object TraceProfileXml {
             fileName = tpEl.getChildTextTrim("fileName") ?: "",
             filePath = tpEl.getChildTextTrim("filePath") ?: "",
             lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1,
-            projectPath = tpEl.getChildTextTrim("projectPath") ?: "",
             lineContent = tpEl.getChildTextTrim("lineContent") ?: "",
-            isValid = tpEl.getChildTextTrim("isValid")?.toBoolean() ?: true,
+            isValid = true,
             totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1,
             occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1,
             description = tpEl.getChildTextTrim("description") ?: ""

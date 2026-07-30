@@ -18,7 +18,8 @@ package com.pidifa.codetracetree.services
 
 import com.intellij.openapi.vfs.VirtualFileManagerListener
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.components.*
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -27,49 +28,55 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileEditor.*
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.Disposable
 import com.intellij.ui.JBColor
-import com.intellij.util.xmlb.annotations.Property
-import com.intellij.util.xmlb.annotations.Tag
-import com.intellij.util.xmlb.annotations.XCollection
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.storage.ProjectStorage
 import java.util.*
 
 @Service(Service.Level.PROJECT)
-@State(
-    name = "TracePointService",
-    storages = [Storage("code-trace-tree-config.xml")]
-)
-class TracePointService(private val project: Project) : PersistentStateComponent<TracePointService.TracePointState> {
+class TracePointService(private val project: Project) {
 
     companion object {
         const val DEFAULT_PROFILE_NAME = "main"
+        private val LOG = Logger.getInstance(TracePointService::class.java)
     }
 
-    @Tag("tracePoint")
     data class TracePoint(
-        @Tag("name") val name: String = "",
-        @Tag("fileName") val fileName: String = "",
-        @Tag("filePath") val filePath: String = "",
-        @Tag("lineNumber") val lineNumber: Int = 0,
-        @Tag("projectPath") val projectPath: String = "",
-        @Tag("lineContent") val lineContent: String? = null,
-        @Tag("isValid") val isValid: Boolean = true,
-        @Tag("totalOccurrences") val totalOccurrences: Int = 0,
-        @Tag("occurrenceIndex") val occurrenceIndex: Int = 0,
-        @Tag("description") val description: String? = ""
+        val name: String = "",
+        val fileName: String = "",
+        val filePath: String = "",
+        val lineNumber: Int = 0,
+        val lineContent: String? = null,
+        val isValid: Boolean = true,
+        val totalOccurrences: Int = 0,
+        val occurrenceIndex: Int = 0,
+        val description: String? = ""
     ) {
         fun navigateTo(project: Project) {
             ApplicationManager.getApplication().runReadAction {
-                val fileUrl = "file:///$projectPath/$filePath"
+                val basePath = project.basePath
+                if (basePath.isNullOrBlank()) {
+                    ApplicationManager.getApplication().invokeLater {
+                        Messages.showErrorDialog(
+                            project,
+                            "Cannot navigate: project has no base path",
+                            "Navigate to Trace Point"
+                        )
+                    }
+                    return@runReadAction
+                }
+                val fileUrl = "file:///$basePath/$filePath"
                 val file = VirtualFileManager.getInstance().findFileByUrl(fileUrl)
                 if (file == null) {
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showErrorDialog(
                             project,
-                            "Cannot find file: $fileName in project path $projectPath",
+                            "Cannot find file: $fileName in project path $basePath",
                             "Navigate to Trace Point"
                         )
                     }
@@ -85,62 +92,20 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }
     }
 
-    @Tag("tracePointNode")
     data class TracePointNode(
-        @Tag("id") val id: String = "",
-
-//        @Tag("tracePoint")
-        @Property(surroundWithTag = false)
-        var tracePoint: TracePoint= TracePoint(),
-
-        @Tag("parentId")
+        val id: String = "",
+        var tracePoint: TracePoint = TracePoint(),
         var parentId: String? = null,
-
-        @Tag("children")
-        @XCollection(elementName = "tracePointNode")
         var children: MutableList<TracePointNode> = mutableListOf()
     )
 
-    @Tag("traceProfile")
     data class TraceProfile(
-        @Tag("name")
         var name: String = DEFAULT_PROFILE_NAME,
-
-        @Tag("tracePointNodes")
-        @XCollection(elementName = "tracePointNode")
         var tracePointNodes: MutableList<TracePointNode> = mutableListOf(),
-
-        @Tag("expandedTracePointIds")
-        @XCollection(elementName = "id", valueAttributeName = "")
         var expandedTracePointIds: MutableSet<String> = mutableSetOf()
     )
 
-    @Tag("tracePointState")
-    data class TracePointState(
-        @Tag("profiles")
-        @XCollection(elementName = "traceProfile")
-        var profiles: MutableList<TraceProfile> = mutableListOf(),
-
-        @Tag("activeProfileName")
-        var activeProfileName: String = DEFAULT_PROFILE_NAME,
-
-        @Tag("highlightingEnabled")
-        var highlightingEnabled: Boolean = true,
-
-        @Tag("descriptionAreaOpened")
-        var descriptionAreaOpened: Boolean = false,
-
-        // Legacy fields kept for migrating configs saved before profiles existed
-        @Tag("tracePointNodes")
-        @XCollection(elementName = "tracePointNode")
-        var legacyTracePointNodes: MutableList<TracePointNode> = mutableListOf(),
-
-        @Tag("expandedTracePointIds")
-        @XCollection(elementName = "id", valueAttributeName = "")
-        var legacyExpandedTracePointIds: MutableSet<String> = mutableSetOf()
-    )
-
-    private val listenersMap =mutableMapOf<NodeListenerEventType, MutableList<(List<TracePointNode>, Boolean) -> Unit>>()
+    private val listenersMap = mutableMapOf<NodeListenerEventType, MutableList<(List<TracePointNode>, Boolean) -> Unit>>()
     private val profileListeners = mutableListOf<() -> Unit>()
     private val selectedTracePointIds = mutableSetOf<String>()
     private var expandedTracePointIds = mutableSetOf<String>()
@@ -155,8 +120,14 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private var tracePointNodes: MutableList<TracePointNode> = mutableListOf()
     private val nodeMap = mutableMapOf<String, TracePointNode>()
     private val fileNodesMap = mutableMapOf<String, MutableList<TracePointNode>>()
+    private var projectStorage: ProjectStorage? = null
+    private var persistScheduled = false
 
     init {
+        loadFromHybridStorage()
+
+        Disposer.register(project, Disposable { persistNow() })
+
         // Listen for file openings to attach DocumentListener and apply highlights
         ApplicationManager.getApplication().messageBus.connect(project).subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
@@ -192,12 +163,72 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         }, project)
     }
 
+    private fun loadFromHybridStorage() {
+        val basePath = project.basePath
+        if (basePath.isNullOrBlank()) {
+            LOG.info("Code Trace Tree: project has no base path; using in-memory defaults")
+            return
+        }
+        try {
+            val storage = ProjectStorage(basePath)
+            projectStorage = storage
+            val doc = storage.resolveAndLoad()
+            isHighlightingEnabled = doc.highlightingEnabled
+            isDescriptionAreaOpened = doc.descriptionAreaOpened
+            profiles = doc.profiles.map {
+                TraceProfile(
+                    name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
+                    tracePointNodes = it.tracePointNodes,
+                    expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
+                )
+            }.toMutableList()
+            if (profiles.isEmpty()) {
+                profiles.add(TraceProfile(name = DEFAULT_PROFILE_NAME))
+            }
+            activeProfileName = doc.activeProfileName
+                .takeIf { name -> profiles.any { it.name == name } }
+                ?: profiles.first().name
+            // Load active profile into working memory without re-validating yet (init does that)
+            val profile = profiles.find { it.name == activeProfileName } ?: profiles.first()
+            tracePointNodes = profile.tracePointNodes
+            expandedTracePointIds = profile.expandedTracePointIds.toMutableSet()
+            rebuildNodeMapAndFileNodesMap()
+        } catch (e: Exception) {
+            LOG.warn("Code Trace Tree: failed to load hybrid storage; using defaults", e)
+        }
+    }
+
+    /** Persist profiles to global storage (debounced on the EDT). */
+    fun schedulePersist() {
+        if (projectStorage == null) return
+        if (persistScheduled) return
+        persistScheduled = true
+        ApplicationManager.getApplication().invokeLater {
+            persistScheduled = false
+            if (!project.isDisposed) {
+                persistNow()
+            }
+        }
+    }
+
+    private fun persistNow() {
+        val storage = projectStorage ?: return
+        syncActiveProfileToStore()
+        storage.save(
+            profiles = profiles,
+            activeProfileName = activeProfileName,
+            descriptionAreaOpened = isDescriptionAreaOpened,
+            highlightingEnabled = isHighlightingEnabled
+        )
+    }
+
     // === Highlighting ===
 
     fun isHighlightingEnabled(): Boolean = isHighlightingEnabled
     fun isDescriptionAreaOpened(): Boolean = isDescriptionAreaOpened
     fun setDescriptionAreaOpened(opened: Boolean) {
         isDescriptionAreaOpened = opened
+        schedulePersist()
     }
 
     fun setHighlightingEnabled(enabled: Boolean) {
@@ -207,6 +238,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 if (enabled) highlightTracePointsInFile(file) else removeHighlights(file)
             }
         }
+        schedulePersist()
     }
 
     fun highlightTracePointsInFile(file: VirtualFile) {
@@ -410,12 +442,13 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             fun validateNode(node: TracePointNode) {
                 val tp = node.tracePoint
-                if (node.id.isEmpty() || tp.filePath.isEmpty() || tp.projectPath.isEmpty() || tp.lineContent == null) {
+                val basePath = project.basePath
+                if (node.id.isEmpty() || tp.filePath.isEmpty() || basePath.isNullOrBlank() || tp.lineContent == null) {
                     node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                     return
                 }
 
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${tp.projectPath}/${tp.filePath}")
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${basePath}/${tp.filePath}")
                 if (file == null) {
                     node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                     return
@@ -479,7 +512,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                 filePath = filePath,
                 fileName = fileName,
                 lineNumber = lineNumber,
-                projectPath = project.basePath ?: "",
                 lineContent = lineContent,
                 isValid = document != null,
                 totalOccurrences = totalOccurrences,
@@ -504,6 +536,7 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         ApplicationManager.getApplication().runReadAction {
             nodeMap[id]?.let {
                 it.tracePoint = it.tracePoint.copy(description = newDescription)
+                schedulePersist()
             }
         }
     }
@@ -672,7 +705,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     fun isTracePointSelected(id: String): Boolean = selectedTracePointIds.contains(id)
 
     fun setExpandedTracePointIds(ids: Set<String>) {
-        this.expandedTracePointIds=ids.toMutableSet()
+        this.expandedTracePointIds = ids.toMutableSet()
+        schedulePersist()
     }
 
 
@@ -904,74 +938,29 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun notifyListeners() {
         val copy = getTracePoints()
-        val listeners= listenersMap[NodeListenerEventType.FULL_UPDATE]
-        listeners?.forEach { it(copy,false) }
+        val listeners = listenersMap[NodeListenerEventType.FULL_UPDATE]
+        listeners?.forEach { it(copy, false) }
+        schedulePersist()
     }
 
     fun notifyListeners(restoreSelection: Boolean) {
         val copy = getTracePoints()
-        val listeners= listenersMap[NodeListenerEventType.FULL_UPDATE]
-        listeners?.forEach { it(copy,restoreSelection) }
+        val listeners = listenersMap[NodeListenerEventType.FULL_UPDATE]
+        listeners?.forEach { it(copy, restoreSelection) }
+        schedulePersist()
     }
 
     fun notifyListeners(event: NodeListenerEventType) {
         val copy = getTracePoints()
-        val listeners= listenersMap[event]
-        listeners?.forEach { it(copy,false) }
+        val listeners = listenersMap[event]
+        listeners?.forEach { it(copy, false) }
+        schedulePersist()
     }
 
-    fun notifyListeners(event: NodeListenerEventType, tracePoints:MutableList<TracePointNode>) {
-        val listeners= listenersMap[event]
-        listeners?.forEach { it(tracePoints,  false) }
-    }
-
-    override fun getState(): TracePointState {
-        syncActiveProfileToStore()
-        return TracePointState(
-            profiles = profiles.map {
-                TraceProfile(
-                    name = it.name,
-                    tracePointNodes = it.tracePointNodes,
-                    expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
-                )
-            }.toMutableList(),
-            activeProfileName = activeProfileName,
-            highlightingEnabled = isHighlightingEnabled,
-            descriptionAreaOpened = isDescriptionAreaOpened
-        )
-    }
-
-    override fun loadState(state: TracePointState) {
-        ApplicationManager.getApplication().runReadAction {
-            isHighlightingEnabled = state.highlightingEnabled
-            isDescriptionAreaOpened = state.descriptionAreaOpened
-
-            if (state.profiles.isNotEmpty()) {
-                profiles = state.profiles.map {
-                    TraceProfile(
-                        name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
-                        tracePointNodes = it.tracePointNodes,
-                        expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
-                    )
-                }.toMutableList()
-                activeProfileName = state.activeProfileName
-                    .takeIf { name -> profiles.any { it.name == name } }
-                    ?: profiles.first().name
-            } else {
-                // Migrate pre-profile configs into the default "main" profile
-                profiles = mutableListOf(
-                    TraceProfile(
-                        name = DEFAULT_PROFILE_NAME,
-                        tracePointNodes = state.legacyTracePointNodes,
-                        expandedTracePointIds = state.legacyExpandedTracePointIds.toMutableSet()
-                    )
-                )
-                activeProfileName = DEFAULT_PROFILE_NAME
-            }
-
-            loadActiveProfileFromStore()
-            notifyProfileListeners()
-        }
+    fun notifyListeners(event: NodeListenerEventType, tracePoints: MutableList<TracePointNode>) {
+        val listeners = listenersMap[event]
+        listeners?.forEach { it(tracePoints, false) }
+        schedulePersist()
     }
 
     private fun reattachListenersAndHighlights() {
@@ -1015,5 +1004,4 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             treeRevealer?.invoke(ids)
         }
     }
-
 }

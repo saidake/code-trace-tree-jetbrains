@@ -29,7 +29,7 @@ import com.pidifa.codetracetree.services.TracePointService
 import org.jdom.input.SAXBuilder
 
 /**
- * Import single-profile (`<tracePointState>`) or multi-profile (`<traceProfiles>`) files.
+ * Import single-profile (`<traceProfile>`) or multi-profile (`<traceProfiles>`) files.
  * Always asks how to apply the data — never auto-overwrites.
  */
 class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.Actions.Download) {

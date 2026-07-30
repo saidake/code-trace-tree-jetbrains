@@ -30,7 +30,7 @@ import org.jdom.output.XMLOutputter
 import java.io.File
 
 /**
- * Export current profile (`<tracePointState>`) or all profiles (`<traceProfiles>`).
+ * Export current profile (`<traceProfile>`) or all profiles (`<traceProfiles>`).
  */
 class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.Actions.Upload) {
 
@@ -47,7 +47,7 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
             project,
             "Choose what to export.\n\n" +
                 "• Current profile – exports \"${service.getActiveProfileName()}\" " +
-                "(compatible with older imports).\n" +
+                "as a single-profile file.\n" +
                 "• All profiles – exports every profile in a multi-profile file.",
             "Export Trace Points",
             arrayOf("Current Profile", "All Profiles", "Cancel"),

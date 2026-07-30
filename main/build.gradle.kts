@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.4"
+val pluginVersion = "1.0.5"
 version = pluginVersion
 
 repositories {
@@ -50,6 +50,12 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.0.5</h3>
+            <ul>
+              <li>Store trace data in OS global config (<code>%LOCALAPPDATA%</code> / Application Support / XDG) with a project id file under <code>.idea</code></li>
+              <li>Share-friendly storage and export XML (no per-node <code>projectPath</code> / <code>isValid</code>); single export uses <code>&lt;traceProfile&gt;</code></li>
+              <li>Document storage location and manual cleanup in the plugin description</li>
+            </ul>
             <h3>1.0.4</h3>
             <ul>
               <li>Include How to use instructions in the Marketplace plugin description</li>
