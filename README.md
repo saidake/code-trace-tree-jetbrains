@@ -19,13 +19,14 @@ Double click any trace point to navigate to its source, with support for multipl
 # How to use
 
 1. Open the **Code Trace Tree** tool window (right side of the IDE).
-2. In the editor, right-click a line and choose:
+2. Use the **Profile** selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.
+3. In the editor, right-click a line and choose:
    - **Create a Root Trace Point** — start a new trace tree
    - **Create a Trace Point (Under Selected)** — add a child under the selected node(s) in the tree
    - **Update the selected code trace point** — move the selected tree node(s) to the current line
    - **Go to the Trace Point in the tree panel** — shown only when the current single line is a highlighted trace point; selects and reveals that node in the tree
-3. Double-click a node in the tree to jump to that location in the source.
-4. Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.
+4. Double-click a node in the tree to jump to that location in the source.
+5. Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.
 
 # Development
 

@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.0"
+val pluginVersion = "1.1.0"
 version = pluginVersion
 
 repositories {
@@ -46,7 +46,16 @@ intellijPlatform {
         }
 
         changeNotes = """
-            Initial version
+            <h3>1.1.0</h3>
+            <ul>
+              <li>Add Trace Profiles so you can keep multiple independent trace trees (default: <code>main</code>)</li>
+              <li>Add, switch, and delete profiles from the tool window</li>
+              <li>Export the current profile or all profiles; import with explicit replace / new / merge choices</li>
+            </ul>
+            <h3>1.0.0</h3>
+            <ul>
+              <li>Initial Marketplace release</li>
+            </ul>
         """.trimIndent()
 
         ideaVersion {
