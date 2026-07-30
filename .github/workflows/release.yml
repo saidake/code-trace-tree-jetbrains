@@ -1,7 +1,7 @@
 # Build and Release
 #
-# Builds the plugin ZIP and publishes it to JetBrains Marketplace.
-# Triggered on push of a git tag matching v* (e.g. v1.0.0), same pattern as rhctl.
+# Builds the plugin ZIP, creates a GitHub Release, and publishes to JetBrains Marketplace.
+# Triggered on push of a git tag matching v* (e.g. v1.0.0).
 
 name: Build and Release
 
@@ -18,6 +18,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -35,7 +37,30 @@ jobs:
           name: code-trace-tree
           path: main/build/distributions/*.zip
 
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          NOTES="$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            -f target_commitish="${{ github.sha }}" \
+            --jq .body 2>/dev/null || true)"
+          if [ -z "$NOTES" ]; then
+            NOTES="Release $TAG"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" main/build/distributions/*.zip --clobber
+            gh release edit "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "$NOTES" \
+              main/build/distributions/*.zip
+          fi
+
       - name: Publish plugin
+        continue-on-error: true
         run: ./gradlew publishPlugin
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
