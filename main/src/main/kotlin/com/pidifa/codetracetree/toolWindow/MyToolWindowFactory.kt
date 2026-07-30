@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.toolWindow
+package com.pidifa.codetracetree.toolWindow
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
@@ -7,16 +7,16 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
-import com.simi.labs.codetracetree.services.TracePointService
-import com.simi.labs.codetracetree.actions.MoveUpTracePointAction
-import com.simi.labs.codetracetree.actions.MoveDownTracePointAction
-import com.simi.labs.codetracetree.actions.ExpandSelectedTracePointAction
-import com.simi.labs.codetracetree.actions.CollapseAllTracePointAction
-import com.simi.labs.codetracetree.actions.ExportTracePointsAction
-import com.simi.labs.codetracetree.actions.ImportTracePointsAction
-import com.simi.labs.codetracetree.actions.ToggleHighlightTracePointsAction
-import com.simi.labs.codetracetree.actions.ToggleDescriptionAreaAction
-import com.simi.labs.codetracetree.GlobalIcons
+import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.actions.MoveUpTracePointAction
+import com.pidifa.codetracetree.actions.MoveDownTracePointAction
+import com.pidifa.codetracetree.actions.ExpandSelectedTracePointAction
+import com.pidifa.codetracetree.actions.CollapseAllTracePointAction
+import com.pidifa.codetracetree.actions.ExportTracePointsAction
+import com.pidifa.codetracetree.actions.ImportTracePointsAction
+import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
+import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
+import com.pidifa.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -42,7 +42,7 @@ import javax.swing.JTextArea
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import com.intellij.ui.JBColor
-import com.simi.labs.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.datatransfer.UnsupportedFlavorException
@@ -116,7 +116,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
         fun getContent(): JComponent {
-            println("getContent triggered")
             tree = Tree(treeModel).apply {
                 isRootVisible = false
                 selectionModel.selectionMode = javax.swing.tree.TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
@@ -124,13 +123,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 // Moved listener setup here to ensure tree is initialized
                 service.addNodeListener(NodeListenerEventType.FULL_UPDATE) { nodes, restoreSelection ->
                     if (!isUpdatingTree) {
-                        println("Updating tool window with ${nodes.size} trace points and ${service.getExpandedTracePointIds().size} expanded IDs")
                         fullUpdateTreeModel(this,restoreSelection)
                     }
                 }
                 service.addNodeListener(NodeListenerEventType.PARTIAL_UPDATE) { nodes, restoreSelection ->
                     if (!isUpdatingTree) {
-                        println("Partial update tree model with ${nodes.size} trace points")
                         partialUpdateTreeModel( this,nodes)
                     }
                 }
@@ -140,7 +137,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 dragEnabled = true
                 transferHandler = object : TransferHandler() {
                     override fun createTransferable(c: JComponent): Transferable? {
-                        println("createTransferable triggered")
                         val tree = c as? JTree ?: return null
                         val path = tree.selectionPath ?: return null
                         return object : Transferable {
@@ -158,7 +154,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     override fun getSourceActions(c: JComponent): Int = MOVE
 
                     override fun canImport(support: TransferSupport): Boolean {
-//                        println("canImport triggered")
                         // Ensure drop is valid
                         if (!support.isDrop || support.component !is JTree) return false
                         if (!support.isDataFlavorSupported(tracePointDataFlavor)) return false
@@ -204,7 +199,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     }
 
                     override fun importData(support: TransferSupport): Boolean {
-                        println("importData triggered")
                         val dropLocation = support.dropLocation as? JTree.DropLocation ?: return false
                         val dropPath = dropLocation.path
 
@@ -235,7 +229,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     rootTreeNode.add(draggedTreeNode)
                                     draggedTracePointNode.parentId=null;
                                     if(rootParentId!=null)service.addRootTracePointNextTo(draggedTracePointNode,rootParentId)
-                                    println("addRootTracePointNextTo: $rootParentId")
                                     continue
                                 }
 
@@ -280,7 +273,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             // Notify listeners and reload
                             //(support.component as? JTree)?.repaint()
                             service.notifyListeners()
-                            // println("Moved ${draggedTracePointIds.size} trace points to parent ${dropTracePoint.id}")
                             return true
                         } catch (e: Exception) {
                             thisLogger().warn("Failed to move trace points: ${e.message}", e)
@@ -290,22 +282,17 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
                 addMouseListener(object : MouseAdapter() {
                     override fun mouseClicked(e: MouseEvent) {
-                        println("mouseClicked triggered")
                         descriptionTextArea.isEnabled = false
                         val tree = this@apply
                         val path = tree.getPathForLocation(e.x, e.y) ?: run {
-                            println("No path found - tree might be empty or coordinates wrong")
                             return
                         }
 //                        val treePoint = SwingUtilities.convertPoint(e.component, e.point, tree)
 //                        val path = tree.getPathForLocation(treePoint.x, treePoint.y) ?: return
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
-                        println("tracePointNode: $tracePointNode")
                         val tracePoint = tracePointNode.tracePoint
-                        println("Mouse clicked on trace point: ${tracePoint.name} in ${tracePoint.fileName} at line ${tracePoint.lineNumber}")
                         if (e.clickCount == 2 && e.button == MouseEvent.BUTTON1 && !e.isControlDown && !e.isShiftDown) {
-                            println("Double-clicked trace point: ${tracePoint.name}")
                             ApplicationManager.getApplication().invokeLater {
                                 tracePoint.navigateTo(project)
                             }
@@ -334,15 +321,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     }
 
                     private fun showPopupMenu(e: MouseEvent, toolWindow: ToolWindow) {
-                        println("showPopupMenu triggered")
                         val tree = this@apply
                         val path = tree.getPathForLocation(e.x, e.y) ?: run {
-                            println("No path found - tree might be empty or coordinates wrong")
                             return
                         }
 //                        val treePoint = SwingUtilities.convertPoint(e.component, e.point, tree)
 //                        val path = tree.getPathForLocation(treePoint.x, treePoint.y) ?: return
-                        println("path: $path")
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
                         val tracePoint = tracePointNode.tracePoint
@@ -355,7 +339,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                         service.selectTracePoints(selectedIds)
                         val popupMenu = JPopupMenu()
-                        println("selectedTracePoints.size : ${selectedTracePoints.size}")
                         if (selectedTracePoints.size > 1) {
                             val deleteItem = JMenuItem("Delete")
                             deleteItem.addActionListener {
@@ -417,7 +400,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val path = event.path
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
-                        println("treeExpanded tracePointNode: $tracePointNode")
                         val currentExpandedIds = service.getExpandedTracePointIds().toMutableSet()
                         // Collapse child trace points that are not in the expandedTracePointIds
 //                        isUpdatingTree=true
@@ -433,9 +415,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         // Update expandedTracePointIds
                         if (!currentExpandedIds.contains(tracePointNode.id)) {
                             currentExpandedIds.add(tracePointNode.id)
-                            println("treeExpanded triggered setExpandedTracePointIds: $currentExpandedIds")
                             service.setExpandedTracePointIds(currentExpandedIds)
-                            println("Expanded trace point: ${tracePointNode.id}")
                         }
                     }
 
@@ -445,7 +425,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         val path = event.path
                         val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                         val tracePointNode = node.userObject as? TracePointService.TracePointNode ?: return
-                        println("treeCollapsed triggered: $tracePointNode")
                         val currentExpandedIds = service.getExpandedTracePointIds().toMutableSet()
                         // Expand child trace points that are not in the expandedTracePointIds
 //                        isUpdatingTree=true
@@ -461,9 +440,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         // Update expandedTracePointIds
                         if (currentExpandedIds.contains(tracePointNode.id)) {
                             currentExpandedIds.remove(tracePointNode.id)
-                            println("treeCollapsed triggered setExpandedTracePointIds: $currentExpandedIds")
                             service.setExpandedTracePointIds(currentExpandedIds)
-                            println("Collapsed trace point: ${tracePointNode.id}")
                         }
                     }
                 })
@@ -484,7 +461,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
 
                 private fun updateTracePointDescription() {
-                    println("updateTracePointDescription triggered")
                     val selectedPaths = tree.selectionPaths
                     if (selectedPaths?.size == 1) {
                         val node = selectedPaths[0].lastPathComponent as? DefaultMutableTreeNode
@@ -494,7 +470,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             val newDescription = descriptionTextArea.text
                             if (newDescription != tracePoint.description) {
                                 service.updateTracePointDescription(tracePointNode.id, newDescription)
-                                println("service.updateTracePointDescription triggered")
                             }
                         }
                     }
@@ -576,7 +551,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
         private fun updateDescriptionArea() {
-            println("updateDescriptionArea triggered")
             val selectedPaths = tree.selectionPaths
             descriptionTextArea.isEnabled = false
             ApplicationManager.getApplication().invokeLater {
@@ -623,7 +597,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             tree: JTree,
             nodes: List<TracePointService.TracePointNode>
         ) {
-            println("partialUpdateTreeModel triggered")
             if (nodes.isEmpty()) return
             val model = tree.model as DefaultTreeModel
             for (tp in nodes) {
@@ -654,7 +627,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
         private fun fullUpdateTreeModel(tree: JTree, restoreSelection: Boolean ) {
-            println("fullUpdateTreeModel triggered")
             isUpdatingTree = true
             rootTreeNode.removeAllChildren()
             treeNodeMap.clear()

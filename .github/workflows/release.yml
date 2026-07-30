@@ -1,21 +1,22 @@
-name: Release
-#on:
-#  push:
-#    tags:
-#      - 'v*'
+# Build and Release
+#
+# Builds the plugin ZIP and publishes it to JetBrains Marketplace.
+# Triggered on push of a git tag matching v* (e.g. v1.0.0), same pattern as rhctl.
+
+name: Build and Release
+
 on:
   push:
-    branches: [ "non-existent-branch-for-disable" ]
+    tags:
+      - 'v*'
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name }}
 
       - uses: actions/setup-java@v4
         with:
@@ -24,7 +25,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - run: ./gradlew publishPlugin
+      - name: Build plugin
+        run: ./gradlew buildPlugin
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-trace-tree
+          path: main/build/distributions/*.zip
+
+      - name: Publish plugin
+        run: ./gradlew publishPlugin
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}

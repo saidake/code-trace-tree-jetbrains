@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.actions
+package com.pidifa.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -8,7 +8,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ui.Messages
-import com.simi.labs.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.services.TracePointService
 import org.jdom.Element
 import org.jdom.input.SAXBuilder
 import java.util.*
@@ -67,7 +67,6 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
                 Messages.showInfoMessage(project, "Trace points imported successfully", "Import Finished")
             } catch (ex: Exception) {
                 Messages.showErrorDialog(project, "Failed to import: ${ex.message}", "Import Error")
-                ex.printStackTrace()
             }
         }
     }

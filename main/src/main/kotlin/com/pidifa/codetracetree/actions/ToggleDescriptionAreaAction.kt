@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.actions
+package com.pidifa.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
@@ -6,8 +6,8 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.components.service
-import com.simi.labs.codetracetree.services.TracePointService
-import com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory
+import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.toolWindow.MyToolWindowFactory
 
 class ToggleDescriptionAreaAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : ToggleAction(
     null,

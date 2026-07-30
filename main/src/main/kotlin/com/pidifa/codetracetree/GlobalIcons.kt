@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree
+package com.pidifa.codetracetree
 
 import com.intellij.openapi.util.IconLoader
 import javax.swing.Icon

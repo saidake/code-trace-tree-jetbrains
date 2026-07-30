@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.actions
+package com.pidifa.codetracetree.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -7,9 +7,9 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
-import com.simi.labs.codetracetree.domain.enums.NodeListenerEventType
-import com.simi.labs.codetracetree.services.TracePointService
-import com.simi.labs.codetracetree.services.TracePointService.TracePointNode
+import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.services.TracePointService.TracePointNode
 
 class UpdateTracePointAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
@@ -21,7 +21,7 @@ class UpdateTracePointAction : AnAction() {
         if (selectedTracePointIds.isEmpty()) {
             Messages.showWarningDialog(
                 project,
-                "No trace points are selected in the Workflow Trace tool window.",
+                "No trace points are selected in the Code Trace Tree tool window.",
                 "Update Trace Points"
             )
             return

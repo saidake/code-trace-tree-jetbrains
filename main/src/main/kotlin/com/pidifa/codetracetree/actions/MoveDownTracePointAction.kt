@@ -1,26 +1,25 @@
-package com.simi.labs.codetracetree.actions
+package com.pidifa.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
-import com.simi.labs.codetracetree.services.TracePointService
-import com.simi.labs.codetracetree.services.TracePointService.TracePointNode
-import com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory
+import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.services.TracePointService.TracePointNode
+import com.pidifa.codetracetree.toolWindow.MyToolWindowFactory
 import javax.swing.tree.DefaultMutableTreeNode
 
-class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
+class MoveDownTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
     null,
-    "Move Up",
-    AllIcons.Actions.MoveUp
+    "Move Down",
+    AllIcons.Actions.MoveDown
 ) {
     override fun actionPerformed(e: AnActionEvent) {
         val tree = myToolWindow.getTree()
         val selectedPaths = tree.selectionPaths ?: return
         val project = e.project ?: return
         val service = project.service<TracePointService>()
-        val tracePoints = service.getTracePoints()
         val selectedIds = selectedPaths.mapNotNull { path ->
             (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
         }.map { it.id }.toSet()
@@ -31,18 +30,22 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
             .groupBy { it.parentId }
 
         for ((parentId, nodes) in groupedByParent) {
-            val parentNode = parentId?.let { service.getTracePointNodeById(parentId) }
-            val siblings = parentNode?.children ?: tracePointNodes
-            val orderedSelected = nodes.sortedBy { siblings.indexOf(it) }
-            for (node in orderedSelected) {
-                val index = siblings.indexOf(node)
-                if (index > 0 && !selectedIds.contains(siblings[index - 1].id)) {
-                    siblings[index] = siblings[index - 1].also { siblings[index - 1] = siblings[index] }
+            val parentNode = if (parentId == null) null else service.getTracePointNodeById(parentId)
+            val originalSiblings = parentNode?.children ?: tracePointNodes
+            val orderedSelected = nodes.sortedBy { originalSiblings.indexOf(it) }
+
+            for (node in orderedSelected.asReversed()) {
+                val originalIndex = originalSiblings.indexOf(node)
+                if (originalIndex < originalSiblings.size - 1
+                    && !selectedIds.contains(originalSiblings[originalIndex + 1].id)) {
+                    originalSiblings[originalIndex] = originalSiblings[originalIndex + 1].also {
+                        originalSiblings[originalIndex + 1] = originalSiblings[originalIndex]
+                    }
                 }
             }
         }
 
-//        service.updateNodeMap(allTracePoints)
+//        service.updateNodeMap(updateTracePoints)
 //        service.refreshDocumentListener(allTracePoints)
         service.selectTracePoints(selectedIds)
         service.notifyListeners(true)
@@ -55,16 +58,16 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
             e.presentation.isEnabled = false
             return
         }
-        var canMoveUp = false
+        var canMoveDown = false
         for (path in selectedPaths) {
             val node = path.lastPathComponent as? DefaultMutableTreeNode ?: continue
             val parent = node.parent as? DefaultMutableTreeNode ?: continue
-            if (parent.getIndex(node) > 0) {
-                canMoveUp = true
+            if (parent.getIndex(node) < parent.childCount - 1) {
+                canMoveDown = true
                 break
             }
         }
-        e.presentation.isEnabled = canMoveUp
+        e.presentation.isEnabled = canMoveDown
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {

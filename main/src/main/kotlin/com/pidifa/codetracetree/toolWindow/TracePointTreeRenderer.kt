@@ -1,6 +1,6 @@
-package com.simi.labs.codetracetree.toolWindow
+package com.pidifa.codetracetree.toolWindow
 
-import com.simi.labs.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.services.TracePointService
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.UIUtil
 import java.awt.Component
@@ -26,7 +26,6 @@ class TracePointTreeRenderer(
     ): Component {
         this.tree = tree // Store the JTree instance
         val userObject = (value as? DefaultMutableTreeNode)?.userObject
-//        println("getTreeCellRendererComponent triggered: $userObject")
         text = when (userObject) {
             is TracePointService.TracePointNode -> {
                 val fileName = userObject.tracePoint.fileName.substringAfterLast('/')

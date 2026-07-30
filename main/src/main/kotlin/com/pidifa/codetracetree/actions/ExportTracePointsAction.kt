@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.actions
+package com.pidifa.codetracetree.actions
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -8,7 +8,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ui.Messages
-import com.simi.labs.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.services.TracePointService
 import org.jdom.Element
 import org.jdom.output.Format
 import org.jdom.output.XMLOutputter

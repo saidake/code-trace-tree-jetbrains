@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.actions
+package com.pidifa.codetracetree.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -6,7 +6,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ui.Messages
-import com.simi.labs.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.services.TracePointService
 
 class CreateTracePointUnderSelectedAction : AnAction() {
 
@@ -47,7 +47,6 @@ class CreateTracePointUnderSelectedAction : AnAction() {
             "Create Trace Point (Under Selected)",
             null
         ) ?: return
-        println("CreateTracePointUnderSelectedAction triggered setExpandedTracePointIds: $selectedIds")
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
         selectedIds.forEach { parentId ->
             service.addTracePoint(tracePointName, file, lineNumber,  parentId = parentId)

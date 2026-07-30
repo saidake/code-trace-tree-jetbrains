@@ -1,4 +1,4 @@
-package com.simi.labs.codetracetree.services
+package com.pidifa.codetracetree.services
 
 import com.intellij.openapi.vfs.VirtualFileManagerListener
 import com.intellij.openapi.application.ApplicationManager
@@ -18,7 +18,7 @@ import com.intellij.ui.JBColor
 import com.intellij.util.xmlb.annotations.Property
 import com.intellij.util.xmlb.annotations.Tag
 import com.intellij.util.xmlb.annotations.XCollection
-import com.simi.labs.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import java.util.*
 
 @Service(Service.Level.PROJECT)
@@ -117,7 +117,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    println("TracePointService - fileOpened triggered for file ${file.path}")
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
                 }
@@ -126,7 +125,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
         // Validate trace points on initial load and file refresh
         ApplicationManager.getApplication().runReadAction {
-            println("validateTracePointsOnLoad triggered in the init method of TracePointService")
             validateTracePointsOnLoad()
             FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
             notifyListeners()
@@ -140,7 +138,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
             override fun afterRefreshFinish(isAsync: Boolean) {
                 ApplicationManager.getApplication().runReadAction {
-                    println("validateTracePointsOnLoad triggered in afterRefreshFinish")
                     validateTracePointsOnLoad()
                     FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
                     notifyListeners()
@@ -240,7 +237,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     // A document listener will not be added for the same file
     fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
-            println("attachDocumentListener triggered: $file")
             val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
             val affectedFileNodes = fileNodesMap[filePath]
             val hasTracePointsInFile = affectedFileNodes!=null && affectedFileNodes.isNotEmpty()
@@ -251,7 +247,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                         // Skip processing if event is due to file system refresh
                         if (isFileSystemRefreshing) return
 
-                        println("documentChanged triggered")
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
                         val docPath = docFile.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
                         val affectedNodes = getTraceNodesByFilePath(docPath)
@@ -274,7 +269,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
                     }
                 }
                 document.addDocumentListener(listener, project)
-                println("Add a listener for the file: $file")
                 monitoredDocuments[file] = listener
             }
         }
@@ -645,28 +639,24 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     }
 
     fun notifyListeners() {
-        println("notifyListeners triggered")
         val copy = getTracePoints()
         val listeners= listenersMap[NodeListenerEventType.FULL_UPDATE]
         listeners?.forEach { it(copy,false) }
     }
 
     fun notifyListeners(restoreSelection: Boolean) {
-        println("notifyListeners triggered")
         val copy = getTracePoints()
         val listeners= listenersMap[NodeListenerEventType.FULL_UPDATE]
         listeners?.forEach { it(copy,restoreSelection) }
     }
 
     fun notifyListeners(event: NodeListenerEventType) {
-        println("notifyListeners triggered: $event")
         val copy = getTracePoints()
         val listeners= listenersMap[event]
         listeners?.forEach { it(copy,false) }
     }
 
     fun notifyListeners(event: NodeListenerEventType, tracePoints:MutableList<TracePointNode>) {
-        println("notifyListeners triggered: $event")
         val listeners= listenersMap[event]
         listeners?.forEach { it(tracePoints,  false) }
     }
@@ -679,7 +669,6 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     )
 
     override fun loadState(state: TracePointState) {
-        println("loadState triggered")
         ApplicationManager.getApplication().runReadAction {
             tracePointNodes.clear()
             tracePointNodes.addAll(state.tracePointNodes)

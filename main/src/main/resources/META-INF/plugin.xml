@@ -1,44 +1,41 @@
 <idea-plugin>
-    <id>com.simi.labs.codetracetree</id>
+    <id>com.pidifa.codetracetree</id>
     <name>Code Trace Tree</name>
-    <vendor>saidake</vendor>
+    <vendor>pidifa</vendor>
 
     <depends>com.intellij.modules.platform</depends>
-
-    <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
                 id="Code Trace Tree"
                 anchor="right"
-                factoryClass="com.simi.labs.codetracetree.toolWindow.MyToolWindowFactory"
+                factoryClass="com.pidifa.codetracetree.toolWindow.MyToolWindowFactory"
                 secondary="false"
                 icon="/icons/code_trace_tree_icon.svg"
                 icon-dark="/icons/code_trace_tree_icon_dark.svg"
                 canCloseContent="false"
                 sideTool="false"
         />
-        <postStartupActivity implementation="com.simi.labs.codetracetree.startup.MyProjectActivity" />
-        <projectService serviceImplementation="com.simi.labs.codetracetree.services.TracePointService"/>
+        <projectService serviceImplementation="com.pidifa.codetracetree.services.TracePointService"/>
     </extensions>
 
     <actions>
-        <action id="com.simi.labs.codetracetree.UpdateTracePointAction"
-                class="com.simi.labs.codetracetree.actions.UpdateTracePointAction"
+        <action id="com.pidifa.codetracetree.UpdateTracePointAction"
+                class="com.pidifa.codetracetree.actions.UpdateTracePointAction"
                 text="Update the selected code trace point"
                 description="Updates the selected code trace point(s) to the current line">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
-        <action id="com.simi.labs.codetracetree.CreateRootTracePointAction"
-                class="com.simi.labs.codetracetree.actions.CreateRootTracePointAction"
+        <action id="com.pidifa.codetracetree.CreateRootTracePointAction"
+                class="com.pidifa.codetracetree.actions.CreateRootTracePointAction"
                 text="Create a Root Trace Point"
                 description="Creates a root-level trace point at the current line">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
-        <action id="com.simi.labs.codetracetree.CreateTracePointUnderSelectedAction"
-                class="com.simi.labs.codetracetree.actions.CreateTracePointUnderSelectedAction"
+        <action id="com.pidifa.codetracetree.CreateTracePointUnderSelectedAction"
+                class="com.pidifa.codetracetree.actions.CreateTracePointUnderSelectedAction"
                 text="Create a Trace Point (Under Selected)"
                 description="Adds the current line as a child of every selected trace point">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
