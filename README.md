@@ -33,4 +33,6 @@ Double click any trace point to navigate to its source, with support for multipl
 - Open the project root in IntelliJ IDEA and import as a Gradle project
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commits, and pull requests.
+# Contributing
+
+If you would like to contribute to the code base or fix an issue, please see [CONTRIBUTING.md](CONTRIBUTING.md).
