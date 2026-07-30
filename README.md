@@ -14,7 +14,7 @@ Double click any trace point to navigate to its source, with support for multipl
 <!-- Plugin description end -->
 
 # Preview
-![](./docs/assets/preview.png)
+![](docs/assets/preview.png)
 
 # How to use
 
