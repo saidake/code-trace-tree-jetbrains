@@ -34,12 +34,3 @@ Double click any trace point to navigate to its source, with support for multipl
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commits, and pull requests.
-
-# Release
-
-Push a version tag to trigger build and Marketplace publish:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
