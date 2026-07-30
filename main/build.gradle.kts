@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.1"
+val pluginVersion = "1.0.2"
 version = pluginVersion
 
 repositories {
@@ -50,6 +50,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.0.2</h3>
+            <ul>
+              <li>Add Marketplace / Plugin Manager logos (<code>pluginIcon.svg</code>)</li>
+            </ul>
             <h3>1.0.1</h3>
             <ul>
               <li>Add Trace Profiles so you can keep multiple independent trace trees (default: <code>main</code>)</li>
