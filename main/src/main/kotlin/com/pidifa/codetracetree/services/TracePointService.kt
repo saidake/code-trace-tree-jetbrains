@@ -44,6 +44,10 @@ import java.util.*
 )
 class TracePointService(private val project: Project) : PersistentStateComponent<TracePointService.TracePointState> {
 
+    companion object {
+        const val DEFAULT_PROFILE_NAME = "main"
+    }
+
     @Tag("tracePoint")
     data class TracePoint(
         @Tag("name") val name: String = "",
@@ -97,24 +101,47 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         var children: MutableList<TracePointNode> = mutableListOf()
     )
 
-    @Tag("tracePointState")
-    data class TracePointState(
+    @Tag("traceProfile")
+    data class TraceProfile(
+        @Tag("name")
+        var name: String = DEFAULT_PROFILE_NAME,
+
         @Tag("tracePointNodes")
         @XCollection(elementName = "tracePointNode")
         var tracePointNodes: MutableList<TracePointNode> = mutableListOf(),
 
         @Tag("expandedTracePointIds")
-        @XCollection(elementName = "id",valueAttributeName = "")
-        var expandedTracePointIds: MutableSet<String> = mutableSetOf(),
+        @XCollection(elementName = "id", valueAttributeName = "")
+        var expandedTracePointIds: MutableSet<String> = mutableSetOf()
+    )
+
+    @Tag("tracePointState")
+    data class TracePointState(
+        @Tag("profiles")
+        @XCollection(elementName = "traceProfile")
+        var profiles: MutableList<TraceProfile> = mutableListOf(),
+
+        @Tag("activeProfileName")
+        var activeProfileName: String = DEFAULT_PROFILE_NAME,
 
         @Tag("highlightingEnabled")
         var highlightingEnabled: Boolean = true,
 
         @Tag("descriptionAreaOpened")
-        var descriptionAreaOpened: Boolean = false
+        var descriptionAreaOpened: Boolean = false,
+
+        // Legacy fields kept for migrating configs saved before profiles existed
+        @Tag("tracePointNodes")
+        @XCollection(elementName = "tracePointNode")
+        var legacyTracePointNodes: MutableList<TracePointNode> = mutableListOf(),
+
+        @Tag("expandedTracePointIds")
+        @XCollection(elementName = "id", valueAttributeName = "")
+        var legacyExpandedTracePointIds: MutableSet<String> = mutableSetOf()
     )
 
     private val listenersMap =mutableMapOf<NodeListenerEventType, MutableList<(List<TracePointNode>, Boolean) -> Unit>>()
+    private val profileListeners = mutableListOf<() -> Unit>()
     private val selectedTracePointIds = mutableSetOf<String>()
     private var expandedTracePointIds = mutableSetOf<String>()
     private val monitoredDocuments = mutableMapOf<VirtualFile, DocumentListener>()
@@ -123,6 +150,8 @@ class TracePointService(private val project: Project) : PersistentStateComponent
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
 
+    private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
+    private var activeProfileName: String = DEFAULT_PROFILE_NAME
     private var tracePointNodes: MutableList<TracePointNode> = mutableListOf()
     private val nodeMap = mutableMapOf<String, TracePointNode>()
     private val fileNodesMap = mutableMapOf<String, MutableList<TracePointNode>>()
@@ -649,6 +678,225 @@ class TracePointService(private val project: Project) : PersistentStateComponent
 
     fun getExpandedTracePointIds(): Set<String> = expandedTracePointIds
 
+    // === Trace Profiles ===
+
+    fun getProfileNames(): List<String> = profiles.map { it.name }
+
+    fun getActiveProfileName(): String = activeProfileName
+
+    fun addProfileListener(listener: () -> Unit) {
+        profileListeners.add(listener)
+    }
+
+    private fun notifyProfileListeners() {
+        profileListeners.forEach { it() }
+    }
+
+    private fun syncActiveProfileToStore() {
+        val profile = profiles.find { it.name == activeProfileName } ?: return
+        profile.tracePointNodes = tracePointNodes
+        profile.expandedTracePointIds = expandedTracePointIds.toMutableSet()
+    }
+
+    private fun loadActiveProfileFromStore() {
+        val profile = profiles.find { it.name == activeProfileName }
+            ?: profiles.firstOrNull()?.also { activeProfileName = it.name }
+            ?: TraceProfile(name = DEFAULT_PROFILE_NAME).also {
+                profiles.clear()
+                profiles.add(it)
+                activeProfileName = it.name
+            }
+        clearAllHighlights()
+        selectedTracePointIds.clear()
+        tracePointNodes = profile.tracePointNodes
+        expandedTracePointIds = profile.expandedTracePointIds.toMutableSet()
+        rebuildNodeMapAndFileNodesMap()
+        validateTracePointsOnLoad()
+        FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+        reattachListenersAndHighlights()
+        notifyListeners()
+    }
+
+    private fun clearAllHighlights() {
+        ApplicationManager.getApplication().runReadAction {
+            FileEditorManager.getInstance(project).openFiles.forEach { removeHighlights(it) }
+        }
+    }
+
+    fun switchProfile(name: String) {
+        if (name == activeProfileName || profiles.none { it.name == name }) return
+        syncActiveProfileToStore()
+        activeProfileName = name
+        loadActiveProfileFromStore()
+        notifyProfileListeners()
+    }
+
+    fun addProfile(name: String): Boolean {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || profiles.any { it.name.equals(trimmed, ignoreCase = true) }) {
+            return false
+        }
+        syncActiveProfileToStore()
+        profiles.add(TraceProfile(name = trimmed))
+        activeProfileName = trimmed
+        loadActiveProfileFromStore()
+        notifyProfileListeners()
+        return true
+    }
+
+    fun deleteProfile(name: String): Boolean {
+        if (profiles.size <= 1) return false
+        val index = profiles.indexOfFirst { it.name == name }
+        if (index < 0) return false
+        profiles.removeAt(index)
+        if (activeProfileName == name) {
+            activeProfileName = profiles.first().name
+            loadActiveProfileFromStore()
+        }
+        notifyProfileListeners()
+        return true
+    }
+
+    fun replaceActiveProfileTree(
+        nodes: MutableList<TracePointNode>,
+        expandedIds: MutableSet<String>
+    ) {
+        clearAllHighlights()
+        selectedTracePointIds.clear()
+        tracePointNodes = nodes
+        expandedTracePointIds = expandedIds
+        rebuildNodeMapAndFileNodesMap()
+        validateTracePointsOnLoad()
+        FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+        reattachListenersAndHighlights()
+        syncActiveProfileToStore()
+        notifyListeners()
+    }
+
+    /** Snapshot of every profile (active tree is synced first). */
+    fun getProfilesSnapshot(): List<TraceProfile> {
+        syncActiveProfileToStore()
+        return profiles.map {
+            TraceProfile(
+                name = it.name,
+                tracePointNodes = it.tracePointNodes,
+                expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
+            )
+        }
+    }
+
+    fun allocateUniqueProfileName(desired: String): String {
+        val base = desired.trim().ifEmpty { "imported" }
+        if (profiles.none { it.name.equals(base, ignoreCase = true) }) return base
+        var i = 2
+        while (profiles.any { it.name.equals("$base ($i)", ignoreCase = true) }) {
+            i++
+        }
+        return "$base ($i)"
+    }
+
+    /**
+     * Creates a new profile from imported data and switches to it.
+     * @return the actual profile name used (may be renamed on conflict)
+     */
+    fun importAsNewProfile(
+        desiredName: String,
+        nodes: MutableList<TracePointNode>,
+        expandedIds: MutableSet<String>
+    ): String {
+        syncActiveProfileToStore()
+        val name = allocateUniqueProfileName(desiredName)
+        profiles.add(
+            TraceProfile(
+                name = name,
+                tracePointNodes = nodes,
+                expandedTracePointIds = expandedIds
+            )
+        )
+        activeProfileName = name
+        loadActiveProfileFromStore()
+        notifyProfileListeners()
+        return name
+    }
+
+    /**
+     * Imports many profiles as new ones (renames on name conflict).
+     * Switches to the first imported profile.
+     * @return names actually created
+     */
+    fun importAsNewProfiles(imported: List<TraceProfile>): List<String> {
+        if (imported.isEmpty()) return emptyList()
+        syncActiveProfileToStore()
+        val created = mutableListOf<String>()
+        for (profile in imported) {
+            val name = allocateUniqueProfileName(profile.name)
+            profiles.add(
+                TraceProfile(
+                    name = name,
+                    tracePointNodes = profile.tracePointNodes,
+                    expandedTracePointIds = profile.expandedTracePointIds.toMutableSet()
+                )
+            )
+            created.add(name)
+        }
+        activeProfileName = created.first()
+        loadActiveProfileFromStore()
+        notifyProfileListeners()
+        return created
+    }
+
+    /**
+     * Merges imported profiles into local ones.
+     * Same-named profiles are overwritten; new names are added.
+     * Local-only profiles are kept. Switches to [preferredActiveName] when present.
+     */
+    fun mergeProfiles(imported: List<TraceProfile>, preferredActiveName: String? = null) {
+        if (imported.isEmpty()) return
+        syncActiveProfileToStore()
+        for (incoming in imported) {
+            val existing = profiles.find { it.name.equals(incoming.name, ignoreCase = true) }
+            if (existing != null) {
+                existing.tracePointNodes = incoming.tracePointNodes
+                existing.expandedTracePointIds = incoming.expandedTracePointIds.toMutableSet()
+            } else {
+                profiles.add(
+                    TraceProfile(
+                        name = incoming.name,
+                        tracePointNodes = incoming.tracePointNodes,
+                        expandedTracePointIds = incoming.expandedTracePointIds.toMutableSet()
+                    )
+                )
+            }
+        }
+        val preferred = preferredActiveName?.takeIf { name -> profiles.any { it.name == name } }
+        if (preferred != null) {
+            activeProfileName = preferred
+        } else if (profiles.none { it.name == activeProfileName }) {
+            activeProfileName = profiles.first().name
+        }
+        loadActiveProfileFromStore()
+        notifyProfileListeners()
+    }
+
+    /**
+     * Replaces all local profiles with [imported]. Requires a non-empty list.
+     */
+    fun replaceAllProfiles(imported: List<TraceProfile>, preferredActiveName: String? = null) {
+        if (imported.isEmpty()) return
+        profiles = imported.map {
+            TraceProfile(
+                name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
+                tracePointNodes = it.tracePointNodes,
+                expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
+            )
+        }.toMutableList()
+        activeProfileName = preferredActiveName
+            ?.takeIf { name -> profiles.any { it.name == name } }
+            ?: profiles.first().name
+        loadActiveProfileFromStore()
+        notifyProfileListeners()
+    }
+
     fun addNodeListener(nodeListenerEventType: NodeListenerEventType,
                         listener: (List<TracePointNode>,  Boolean) -> Unit) {
         listenersMap.getOrPut(nodeListenerEventType) { mutableListOf() }.add(listener)
@@ -677,25 +925,52 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         listeners?.forEach { it(tracePoints,  false) }
     }
 
-    override fun getState(): TracePointState = TracePointState(
-        tracePointNodes = tracePointNodes,
-        expandedTracePointIds = expandedTracePointIds,
-        highlightingEnabled = isHighlightingEnabled,
-        descriptionAreaOpened = isDescriptionAreaOpened
-    )
+    override fun getState(): TracePointState {
+        syncActiveProfileToStore()
+        return TracePointState(
+            profiles = profiles.map {
+                TraceProfile(
+                    name = it.name,
+                    tracePointNodes = it.tracePointNodes,
+                    expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
+                )
+            }.toMutableList(),
+            activeProfileName = activeProfileName,
+            highlightingEnabled = isHighlightingEnabled,
+            descriptionAreaOpened = isDescriptionAreaOpened
+        )
+    }
 
     override fun loadState(state: TracePointState) {
         ApplicationManager.getApplication().runReadAction {
-            tracePointNodes.clear()
-            tracePointNodes.addAll(state.tracePointNodes)
-            rebuildNodeMapAndFileNodesMap()
-            expandedTracePointIds.clear(); expandedTracePointIds.addAll(state.expandedTracePointIds)
             isHighlightingEnabled = state.highlightingEnabled
             isDescriptionAreaOpened = state.descriptionAreaOpened
-            validateTracePointsOnLoad()
-            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
-            reattachListenersAndHighlights()
-            notifyListeners()
+
+            if (state.profiles.isNotEmpty()) {
+                profiles = state.profiles.map {
+                    TraceProfile(
+                        name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
+                        tracePointNodes = it.tracePointNodes,
+                        expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
+                    )
+                }.toMutableList()
+                activeProfileName = state.activeProfileName
+                    .takeIf { name -> profiles.any { it.name == name } }
+                    ?: profiles.first().name
+            } else {
+                // Migrate pre-profile configs into the default "main" profile
+                profiles = mutableListOf(
+                    TraceProfile(
+                        name = DEFAULT_PROFILE_NAME,
+                        tracePointNodes = state.legacyTracePointNodes,
+                        expandedTracePointIds = state.legacyExpandedTracePointIds.toMutableSet()
+                    )
+                )
+                activeProfileName = DEFAULT_PROFILE_NAME
+            }
+
+            loadActiveProfileFromStore()
+            notifyProfileListeners()
         }
     }
 

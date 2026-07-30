@@ -514,11 +514,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"
-                    templatePresentation.description = "Export all trace points to an XML file"
+                    templatePresentation.description = "Export the current profile or all profiles to an XML file"
                 })
                 add(ImportTracePointsAction().apply {
                     templatePresentation.text = "Import Trace Points"
-                    templatePresentation.description = "Import trace points from an XML file"
+                    templatePresentation.description = "Import trace points from a single- or multi-profile XML file"
                 })
                 add(ExpandSelectedTracePointAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Expand Selected"
@@ -537,6 +537,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             actionToolbar.setTargetComponent(tree)
             actionToolbar.component.isOpaque = false
 
+            val profilePanel = TraceProfilePanel(project, service)
+
             val panel = JBPanel<JBPanel<*>>().apply {
                 layout = BoxLayout(this, BoxLayout.Y_AXIS)
 
@@ -544,6 +546,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 actionToolbar.component.minimumSize = actionToolbar.component.preferredSize
                 actionToolbar.component.alignmentX = Component.LEFT_ALIGNMENT
                 add(actionToolbar.component)
+
+                add(profilePanel)
 
                 descriptionScrollPane.alignmentX = Component.LEFT_ALIGNMENT
                 add(descriptionScrollPane)

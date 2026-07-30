@@ -23,12 +23,15 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.pidifa.codetracetree.services.TracePointService
-import org.jdom.Element
 import org.jdom.input.SAXBuilder
-import java.util.*
 
+/**
+ * Import single-profile (`<tracePointState>`) or multi-profile (`<traceProfiles>`) files.
+ * Always asks how to apply the data — never auto-overwrites.
+ */
 class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.Actions.Download) {
 
     init {
@@ -42,82 +45,113 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
 
         val descriptor = FileChooserDescriptor(true, false, false, false, false, false)
             .withTitle("Import Trace Points – Select XML File")
-            .withDescription("Choose the exported trace-points XML file")
+            .withDescription("Choose a single-profile or multi-profile export file")
             .withFileFilter { it.extension?.lowercase() == "xml" }
 
         FileChooser.chooseFile(descriptor, project, null) { file ->
             try {
-                val doc = SAXBuilder().build(file.path)
-                val root = doc.rootElement
-
-                if (root.name != "tracePointState") {
-                    Messages.showErrorDialog(project, "Invalid file – root element must be <tracePointState>", "Import Failed")
-                    return@chooseFile
+                val root = SAXBuilder().build(file.path).rootElement
+                when (root.name) {
+                    TraceProfileXml.ROOT_SINGLE -> importSingle(project, service, TraceProfileXml.parseSingle(root))
+                    TraceProfileXml.ROOT_MULTI -> importMulti(project, service, TraceProfileXml.parseMulti(root))
+                    else -> Messages.showErrorDialog(
+                        project,
+                        "Invalid file – root element must be <${TraceProfileXml.ROOT_SINGLE}> " +
+                            "or <${TraceProfileXml.ROOT_MULTI}>",
+                        "Import Failed"
+                    )
                 }
-
-                // 1. Build the full TracePointState object (same shape as getState())
-                val state = TracePointService.TracePointState().apply {
-                    // root nodes (the tree)
-                    val tracePointNodesEl = root.getChild("tracePointNodes") ?: run {
-                        Messages.showWarningDialog(project, "No <tracePointNodes> element found", "Import Warning")
-                        return@chooseFile
-                    }
-                    tracePointNodesEl.getChildren("tracePointNode").forEach { nodeEl ->
-                        tracePointNodes.add(importNode(nodeEl, null))
-                    }
-
-                    // expanded ids
-                    root.getChild("expandedTracePointIds")?.getChildren("id")?.forEach { idEl ->
-                        val id = idEl.textTrim
-                        if (id.isNotBlank()) expandedTracePointIds.add(id)
-                    }
-
-                    // keep defaults for the rest (or read them if you add them later)
-                    highlightingEnabled = true
-                    descriptionAreaOpened = true
-                }
-
-                // 2. Load the state exactly like the plugin does internally
-                service.loadState(state)
-
-                Messages.showInfoMessage(project, "Trace points imported successfully", "Import Finished")
             } catch (ex: Exception) {
                 Messages.showErrorDialog(project, "Failed to import: ${ex.message}", "Import Error")
             }
         }
     }
 
-    /** Recursively turn <tracePointNode> → TracePointNode */
-    private fun importNode(
-        nodeEl: Element,
-        parentId: String?
-    ): TracePointService.TracePointNode {
-        val id = nodeEl.getChildTextTrim("id") ?: UUID.randomUUID().toString()
-        val parentId = nodeEl.getChildTextTrim("parentId")?.takeIf { it.isNotBlank() }
-        val tpEl = nodeEl.getChild("tracePoint")
-            ?: throw IllegalArgumentException("Missing <tracePoint> element in node $id")
-
-        val tp = TracePointService.TracePoint(
-            name = tpEl.getChildTextTrim("name") ?: "",
-            fileName = tpEl.getChildTextTrim("fileName") ?: "",
-            filePath = tpEl.getChildTextTrim("filePath") ?: "",
-            lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1,
-            projectPath = tpEl.getChildTextTrim("projectPath") ?: "",
-            lineContent = tpEl.getChildTextTrim("lineContent") ?: "",
-            isValid = tpEl.getChildTextTrim("isValid")?.toBoolean() ?: true,
-            totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1,
-            occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1,
-            description = tpEl.getChildTextTrim("description") ?: ""
+    private fun importSingle(
+        project: Project,
+        service: TracePointService,
+        parsed: TraceProfileXml.ParsedSingle
+    ) {
+        val suggestedName = parsed.profileName ?: "imported"
+        val choice = Messages.showDialog(
+            project,
+            "This file contains a single profile" +
+                (parsed.profileName?.let { " (\"$it\")" } ?: "") + ".\n\n" +
+                "• Replace Current Profile – overwrite \"${service.getActiveProfileName()}\".\n" +
+                "• Import as New Profile – keep existing profiles and add a new one.",
+            "Import Trace Points",
+            arrayOf("Replace Current Profile", "Import as New Profile", "Cancel"),
+            0,
+            Messages.getQuestionIcon()
         )
-
-        val node = TracePointService.TracePointNode(id,tp,parentId)
-
-        // children
-        nodeEl.getChild("children")?.getChildren("tracePointNode")?.forEach { childEl ->
-            node.children.add(importNode(childEl, node.id))
+        when (choice) {
+            0 -> {
+                service.replaceActiveProfileTree(parsed.nodes, parsed.expandedIds)
+                Messages.showInfoMessage(
+                    project,
+                    "Replaced profile \"${service.getActiveProfileName()}\".",
+                    "Import Finished"
+                )
+            }
+            1 -> {
+                val name = service.importAsNewProfile(suggestedName, parsed.nodes, parsed.expandedIds)
+                Messages.showInfoMessage(project, "Imported as new profile \"$name\".", "Import Finished")
+            }
+            else -> return
         }
+    }
 
-        return node
+    private fun importMulti(
+        project: Project,
+        service: TracePointService,
+        parsed: TraceProfileXml.ParsedMulti
+    ) {
+        val names = parsed.profiles.joinToString(", ") { "\"${it.name}\"" }
+        val choice = Messages.showDialog(
+            project,
+            "This file contains ${parsed.profiles.size} profile(s): $names.\n\n" +
+                "• Import as New Profiles – add all; rename on name conflicts.\n" +
+                "• Merge All Profiles – overwrite same-named profiles; add the rest; keep local-only profiles.\n" +
+                "• Replace All Profiles – discard local profiles and use the file’s profiles.",
+            "Import Trace Points",
+            arrayOf("Import as New Profiles", "Merge All Profiles", "Replace All Profiles", "Cancel"),
+            0,
+            Messages.getQuestionIcon()
+        )
+        when (choice) {
+            0 -> {
+                val created = service.importAsNewProfiles(parsed.profiles)
+                Messages.showInfoMessage(
+                    project,
+                    "Imported ${created.size} profile(s): ${created.joinToString(", ") { "\"$it\"" }}.",
+                    "Import Finished"
+                )
+            }
+            1 -> {
+                service.mergeProfiles(parsed.profiles, parsed.activeProfileName)
+                Messages.showInfoMessage(
+                    project,
+                    "Merged ${parsed.profiles.size} profile(s) into the project.",
+                    "Import Finished"
+                )
+            }
+            2 -> {
+                val confirm = Messages.showYesNoDialog(
+                    project,
+                    "This will delete all existing local profiles and replace them with the file’s profiles. Continue?",
+                    "Replace All Profiles",
+                    null
+                )
+                if (confirm != Messages.YES) return
+                service.replaceAllProfiles(parsed.profiles, parsed.activeProfileName)
+                Messages.showInfoMessage(
+                    project,
+                    "Replaced all profiles with ${parsed.profiles.size} profile(s) from the file.",
+                    "Import Finished"
+                )
+            }
+            else -> return
+        }
     }
 
     override fun update(e: AnActionEvent) {
