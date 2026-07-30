@@ -33,7 +33,7 @@ intellijPlatform {
         name = "Code Trace Tree"
         version = pluginVersion
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
-        description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
+        description = providers.fileContents(rootProject.layout.projectDirectory.file("README.md")).asText.map {
             val start = "<!-- Plugin description -->"
             val end = "<!-- Plugin description end -->"
 
@@ -51,7 +51,8 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild = "251"
-            untilBuild = "253.*"
+            // Open-ended: compatible with all IDE builds from sinceBuild onward (incl. latest)
+            untilBuild = provider { null }
         }
     }
 }

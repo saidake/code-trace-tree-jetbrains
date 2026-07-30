@@ -248,13 +248,15 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 // Skip if trying to drop inside itself or its descendant
                                 var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
                                 var invalid = false
-                                while (ancestorTreeNode != null && ancestorTreeNode != rootTreeNode) {
-                                    val ancestorTracePoint = ancestorTreeNode.userObject as? TracePointService.TracePointNode
+                                while (true) {
+                                    val current = ancestorTreeNode ?: break
+                                    if (current == rootTreeNode) break
+                                    val ancestorTracePoint = current.userObject as? TracePointService.TracePointNode
                                     if (ancestorTracePoint?.id == draggedTracePointNode.id) {
                                         invalid = true
                                         break
                                     }
-                                    ancestorTreeNode = ancestorTreeNode.parent as? DefaultMutableTreeNode
+                                    ancestorTreeNode = current.parent as? DefaultMutableTreeNode
                                 }
                                 if (invalid) continue
 
