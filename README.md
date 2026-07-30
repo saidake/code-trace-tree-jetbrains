@@ -9,24 +9,30 @@
 ----
 
 <!-- Plugin description -->
-Code Trace Tree is a JetBrains plugin that lets you trace code in a tree structure.
-Double click any trace point to navigate to its source, with support for multiple trace levels.
+<p>
+  Code Trace Tree is a JetBrains plugin that lets you trace code in a tree structure.
+  Double click any trace point to navigate to its source, with support for multiple trace levels.
+</p>
+
+<h3>How to use</h3>
+<ol>
+  <li>Open the <b>Code Trace Tree</b> tool window (right side of the IDE).</li>
+  <li>Use the <b>Profile</b> selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.</li>
+  <li>In the editor, right-click a line and choose:
+    <ul>
+      <li><b>Create a Root Trace Point</b> — start a new trace tree</li>
+      <li><b>Create a Trace Point (Under Selected)</b> — add a child under the selected node(s) in the tree</li>
+      <li><b>Update the selected code trace point</b> — move the selected tree node(s) to the current line</li>
+      <li><b>Go to the Trace Point in the tree panel</b> — shown only when the current single line is a highlighted trace point; selects and reveals that node in the tree</li>
+    </ul>
+  </li>
+  <li>Double-click a node in the tree to jump to that location in the source.</li>
+  <li>Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.</li>
+</ol>
 <!-- Plugin description end -->
 
 # Preview
 ![](docs/assets/preview.png)
-
-# How to use
-
-1. Open the **Code Trace Tree** tool window (right side of the IDE).
-2. Use the **Profile** selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.
-3. In the editor, right-click a line and choose:
-   - **Create a Root Trace Point** — start a new trace tree
-   - **Create a Trace Point (Under Selected)** — add a child under the selected node(s) in the tree
-   - **Update the selected code trace point** — move the selected tree node(s) to the current line
-   - **Go to the Trace Point in the tree panel** — shown only when the current single line is a highlighted trace point; selects and reveals that node in the tree
-4. Double-click a node in the tree to jump to that location in the source.
-5. Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.
 
 # Development
 
