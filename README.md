@@ -1,4 +1,5 @@
 # Code Trace Tree
+![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saidake/code-trace-tree-jetbrains?sort=semver)
 ![Build](https://github.com/saidake/code-trace-tree-jetbrains/actions/workflows/release.yml/badge.svg)
 [![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
@@ -12,35 +13,29 @@ Code Trace Tree is a JetBrains plugin that lets you trace code in a tree structu
 Double click any trace point to navigate to its source, with support for multiple trace levels.
 <!-- Plugin description end -->
 
-----
+# Preview
+![](./docs/assets/preview.png)
 
-## How to use
+# How to use
 
 1. Open the **Code Trace Tree** tool window (right side of the IDE).
 2. In the editor, right-click a line and choose:
    - **Create a Root Trace Point** — start a new trace tree
-   - **Create a Trace Point (Under Selected)** — add a child under the selected node(s)
-   - **Update the selected code trace point** — move selected nodes to the current line
+   - **Create a Trace Point (Under Selected)** — add a child under the selected node(s) in the tree
+   - **Update the selected code trace point** — move the selected tree node(s) to the current line
+   - **Go to the Trace Point in the tree panel** — shown only when the current single line is a highlighted trace point; selects and reveals that node in the tree
 3. Double-click a node in the tree to jump to that location in the source.
 4. Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.
 
-### Screenshots
-
-> Replace these placeholders with real screenshots when available.
-
-![Tool window overview](docs/assets/screenshot-tool-window.png)
-
-![Create trace point from editor](docs/assets/screenshot-create-trace-point.png)
-
-![Navigate by double-click](docs/assets/screenshot-navigate.png)
-
-## Development
+# Development
 
 - JDK 21
 - Open the project root in IntelliJ IDEA and import as a Gradle project
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
 
-## Release
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commits, and pull requests.
+
+# Release
 
 Push a version tag to trigger build and Marketplace publish:
 
