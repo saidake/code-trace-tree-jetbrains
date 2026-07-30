@@ -704,4 +704,25 @@ class TracePointService(private val project: Project) : PersistentStateComponent
         return fileNodesMap[filePath]
     }
 
+    fun findValidTracePointsAt(filePath: String, lineNumber: Int): List<TracePointNode> {
+        return fileNodesMap[filePath]
+            ?.filter { it.tracePoint.isValid && it.tracePoint.lineNumber == lineNumber }
+            ?: emptyList()
+    }
+
+    @Volatile
+    private var treeRevealer: ((Set<String>) -> Unit)? = null
+
+    fun setTreeRevealer(revealer: ((Set<String>) -> Unit)?) {
+        treeRevealer = revealer
+    }
+
+    fun revealTracePointsInTree(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        selectTracePoints(ids)
+        ApplicationManager.getApplication().invokeLater {
+            treeRevealer?.invoke(ids)
+        }
+    }
+
 }

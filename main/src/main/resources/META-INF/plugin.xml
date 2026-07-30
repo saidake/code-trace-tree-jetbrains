@@ -20,13 +20,6 @@
     </extensions>
 
     <actions>
-        <action id="com.pidifa.codetracetree.UpdateTracePointAction"
-                class="com.pidifa.codetracetree.actions.UpdateTracePointAction"
-                text="Update the selected code trace point"
-                description="Updates the selected code trace point(s) to the current line">
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-        </action>
-
         <action id="com.pidifa.codetracetree.CreateRootTracePointAction"
                 class="com.pidifa.codetracetree.actions.CreateRootTracePointAction"
                 text="Create a Root Trace Point"
@@ -38,6 +31,20 @@
                 class="com.pidifa.codetracetree.actions.CreateTracePointUnderSelectedAction"
                 text="Create a Trace Point (Under Selected)"
                 description="Adds the current line as a child of every selected trace point">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.pidifa.codetracetree.UpdateTracePointAction"
+                class="com.pidifa.codetracetree.actions.UpdateTracePointAction"
+                text="Update the selected code trace point"
+                description="Updates the selected code trace point(s) to the current line">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.pidifa.codetracetree.GoToTracePointInTreeAction"
+                class="com.pidifa.codetracetree.actions.GoToTracePointInTreeAction"
+                text="Go to the Trace Point in the tree panel"
+                description="Selects the trace point for the current line in the Code Trace Tree tool window">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>

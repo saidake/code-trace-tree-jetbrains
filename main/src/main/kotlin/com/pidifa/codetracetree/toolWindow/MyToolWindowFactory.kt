@@ -56,6 +56,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         val content = ContentFactory.getInstance().createContent(myToolWindow.getContent(), null, false)
         toolWindow.contentManager.addContent(content)
 
+        val service = project.service<TracePointService>()
+        service.setTreeRevealer { ids -> myToolWindow.revealTracePoints(ids) }
+
         // Listen for tool window activation/deactivation to update icon
         ApplicationManager.getApplication().messageBus.connect(project).subscribe(
             ToolWindowManagerListener.TOPIC,
@@ -540,6 +543,27 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         }
 
         fun getTree(): JTree = tree
+
+        fun revealTracePoints(ids: Set<String>) {
+            if (ids.isEmpty()) return
+            val pathsToSelect = mutableListOf<TreePath>()
+            for (id in ids) {
+                val node = treeNodeMap[id] ?: continue
+                val path = TreePath(node.path)
+                // Expand ancestors so the node is visible
+                var parent = path.parentPath
+                while (parent != null) {
+                    tree.expandPath(parent)
+                    parent = parent.parentPath
+                }
+                pathsToSelect.add(path)
+            }
+            if (pathsToSelect.isEmpty()) return
+            tree.selectionPaths = pathsToSelect.toTypedArray()
+            tree.scrollPathToVisible(pathsToSelect.first())
+            tree.requestFocusInWindow()
+            updateDescriptionArea()
+        }
 
         fun setDescriptionAreaVisible(visible: Boolean) {
             service.setDescriptionAreaOpened(visible)
