@@ -41,6 +41,8 @@ data class ProjectDocument(
     val activeProfileName: String,
     val descriptionAreaOpened: Boolean = false,
     val highlightingEnabled: Boolean = true,
+    /** When true, creating a trace point prompts for a name; when false, creates with an empty name. */
+    val namePromptEnabled: Boolean = true,
     /** Absolute path of the XML file this document was loaded from / should be saved to. */
     val storageFile: Path? = null
 ) {
@@ -86,6 +88,8 @@ object ProjectDataXml {
             root.getChildTextTrim("descriptionAreaOpened")?.toBooleanStrictOrNull() ?: false
         val highlightingEnabled =
             root.getChildTextTrim("highlightingEnabled")?.toBooleanStrictOrNull() ?: true
+        val namePromptEnabled =
+            root.getChildTextTrim("namePromptEnabled")?.toBooleanStrictOrNull() ?: true
 
         return ProjectDocument(
             version = version,
@@ -100,6 +104,7 @@ object ProjectDataXml {
             activeProfileName = activeProfileName,
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
+            namePromptEnabled = namePromptEnabled,
             storageFile = storageFile
         )
     }
@@ -112,6 +117,7 @@ object ProjectDataXml {
         root.addContent(Element("updatedAt").setText(doc.updatedAt.toString()))
         root.addContent(Element("activeProfileName").setText(doc.activeProfileName))
         root.addContent(Element("highlightingEnabled").setText(doc.highlightingEnabled.toString()))
+        root.addContent(Element("namePromptEnabled").setText(doc.namePromptEnabled.toString()))
 
         val profilesEl = Element("traceProfiles")
         for (profile in doc.profiles) {

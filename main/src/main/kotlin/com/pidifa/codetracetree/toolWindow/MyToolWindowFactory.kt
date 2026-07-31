@@ -32,6 +32,7 @@ import com.pidifa.codetracetree.actions.ExportTracePointsAction
 import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
+import com.pidifa.codetracetree.actions.ToggleNamePromptAction
 import com.pidifa.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
@@ -541,6 +542,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 add(ToggleDescriptionAreaAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Toggle Description"
                     templatePresentation.description = "Show or hide the description area for the selected trace point"
+                })
+                add(ToggleNamePromptAction().apply {
+                    templatePresentation.text = "Prompt for Name"
+                    templatePresentation.description =
+                        "When enabled, ask for a name when creating a trace point; when disabled, create with an empty name"
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"

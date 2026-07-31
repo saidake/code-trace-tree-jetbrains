@@ -55,13 +55,12 @@ class CreatePathTracePointUnderSelectedAction : AnAction() {
         }
 
         val kindLabel = if (file.isDirectory) "directory" else "file"
-        val tracePointName = Messages.showInputDialog(
+        val tracePointName = resolveNewTracePointName(
             project,
+            service,
             "Enter name for the $kindLabel trace point:",
             "Create Trace Point (Under Selected)",
-            null,
-            file.name,
-            null
+            file.name
         ) ?: return
 
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)

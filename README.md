@@ -39,7 +39,7 @@
   </li>
   <li>Double-click a node in the tree to jump to that location (line, file, or Project View for directories).</li>
   <li>Right-click a node and choose <b>Copy</b> (or use Ctrl/Cmd+C) to copy its display text, e.g. <code>test233 (TestControllerWebFlux.java:54)</code>.</li>
-  <li>Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.</li>
+  <li>Use the tool window toolbar to expand/collapse, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
 </ol>
 
 <h3>Storage</h3>

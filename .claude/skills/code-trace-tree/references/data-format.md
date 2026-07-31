@@ -12,6 +12,7 @@ Root document (`version="4"`) stored under global central storage.
   <updatedAt>1722340000000</updatedAt>
   <activeProfileName>main</activeProfileName>
   <highlightingEnabled>true</highlightingEnabled>
+  <namePromptEnabled>true</namePromptEnabled>
   <traceProfiles>
     <traceProfile>
       <name>main</name>

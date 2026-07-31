@@ -45,11 +45,11 @@ class CreateRootTracePointAction : AnAction() {
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
         val service = project.service<TracePointService>()
 
-        val tracePointName = Messages.showInputDialog(
+        val tracePointName = resolveNewTracePointName(
             project,
+            service,
             "Enter name for the trace point:",
-            "Create Root Trace Point",
-            null
+            "Create Root Trace Point"
         ) ?: return
 
         // **root** → parentId = null

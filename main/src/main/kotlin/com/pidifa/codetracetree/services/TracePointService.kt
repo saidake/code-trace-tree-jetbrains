@@ -139,6 +139,7 @@ class TracePointService(private val project: Project) {
     private var isFileSystemRefreshing = false
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
+    private var isNamePromptEnabled = true
 
     private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
     private var activeProfileName: String = DEFAULT_PROFILE_NAME
@@ -254,6 +255,7 @@ class TracePointService(private val project: Project) {
     private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean) {
         isHighlightingEnabled = doc.highlightingEnabled
         isDescriptionAreaOpened = doc.descriptionAreaOpened
+        isNamePromptEnabled = doc.namePromptEnabled
         profiles = doc.profiles.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
@@ -319,7 +321,8 @@ class TracePointService(private val project: Project) {
             profiles = profiles,
             activeProfileName = activeProfileName,
             descriptionAreaOpened = isDescriptionAreaOpened,
-            highlightingEnabled = isHighlightingEnabled
+            highlightingEnabled = isHighlightingEnabled,
+            namePromptEnabled = isNamePromptEnabled
         )
         externalStorageWatcher?.refreshRegistrations()
     }
@@ -328,8 +331,14 @@ class TracePointService(private val project: Project) {
 
     fun isHighlightingEnabled(): Boolean = isHighlightingEnabled
     fun isDescriptionAreaOpened(): Boolean = isDescriptionAreaOpened
+    fun isNamePromptEnabled(): Boolean = isNamePromptEnabled
     fun setDescriptionAreaOpened(opened: Boolean) {
         isDescriptionAreaOpened = opened
+        schedulePersist()
+    }
+
+    fun setNamePromptEnabled(enabled: Boolean) {
+        isNamePromptEnabled = enabled
         schedulePersist()
     }
 

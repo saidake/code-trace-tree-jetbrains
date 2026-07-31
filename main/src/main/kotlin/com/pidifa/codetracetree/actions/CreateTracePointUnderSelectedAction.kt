@@ -57,11 +57,11 @@ class CreateTracePointUnderSelectedAction : AnAction() {
             return
         }
 
-        val tracePointName = Messages.showInputDialog(
+        val tracePointName = resolveNewTracePointName(
             project,
+            service,
             "Enter name for the trace point:",
-            "Create Trace Point (Under Selected)",
-            null
+            "Create Trace Point (Under Selected)"
         ) ?: return
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
         selectedIds.forEach { parentId ->

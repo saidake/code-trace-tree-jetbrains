@@ -137,7 +137,8 @@ class ProjectStorage(private val projectBasePath: String) {
         profiles: List<TracePointService.TraceProfile>,
         activeProfileName: String,
         descriptionAreaOpened: Boolean,
-        highlightingEnabled: Boolean
+        highlightingEnabled: Boolean,
+        namePromptEnabled: Boolean
     ) {
         val file = boundFile ?: return
         val projectId = boundProjectId ?: return
@@ -155,6 +156,7 @@ class ProjectStorage(private val projectBasePath: String) {
             activeProfileName = activeProfileName,
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
+            namePromptEnabled = namePromptEnabled,
             storageFile = file
         )
         save(doc)

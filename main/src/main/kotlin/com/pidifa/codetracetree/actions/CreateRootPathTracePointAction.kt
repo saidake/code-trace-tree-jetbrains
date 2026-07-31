@@ -44,16 +44,15 @@ class CreateRootPathTracePointAction : AnAction() {
         }
 
         val kindLabel = if (file.isDirectory) "directory" else "file"
-        val tracePointName = Messages.showInputDialog(
+        val service = project.service<TracePointService>()
+        val tracePointName = resolveNewTracePointName(
             project,
+            service,
             "Enter name for the $kindLabel trace point:",
             "Create Root Trace Point",
-            null,
-            file.name,
-            null
+            file.name
         ) ?: return
 
-        val service = project.service<TracePointService>()
         service.addPathTracePoint(tracePointName, file, parentId = null)
         service.notifyListeners()
     }
