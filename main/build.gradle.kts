@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.0"
+val pluginVersion = "1.1.1"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,14 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.1</h3>
+            <ul>
+              <li>Color trace point names in the tree and add a space before the location suffix</li>
+              <li>Copy a node's display text from the context menu or with Ctrl/Cmd+C</li>
+              <li>Add a toolbar toggle to skip the name prompt when creating trace points</li>
+              <li>Remove the optional description dialog when creating file or directory traces</li>
+              <li>Update Marketplace plugin icons</li>
+            </ul>
             <h3>1.1.0</h3>
             <ul>
               <li>Update Marketplace plugin icons</li>

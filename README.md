@@ -59,6 +59,22 @@
   <code>.idea/code-trace-tree.refresh-request</code> (or by saving the XML while the project is open).
   See <code>.claude/skills/code-trace-tree/</code> for the Claude Code skill and helper scripts.
 </p>
+
+<h3>Install Claude Skill (Linux &amp; macOS)</h3>
+<p>
+  Download the Code Trace Tree Claude Skill <code>zip</code> file, and extract it into your Claude skills directory.
+</p>
+<p>For a global installation:</p>
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip -o code-trace-tree-skill-1.1.1.zip
+unzip code-trace-tree-skill-1.1.1.zip -d ~/.claude/skills/
+rm code-trace-tree-skill-1.1.1.zip
+</code></pre>
+<p>For a project-level installation:</p>
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip -o code-trace-tree-skill-1.1.1.zip
+mkdir -p .claude/skills
+unzip code-trace-tree-skill-1.1.1.zip -d .claude/skills/
+rm code-trace-tree-skill-1.1.1.zip
+</code></pre>
 <!-- Plugin description end -->
 
 # Development
@@ -73,11 +89,11 @@ Download `code-trace-tree-skill-<version>.zip` from the [GitHub Releases](https:
 
 ```bash
 # Personal (all projects)
-unzip code-trace-tree-skill-1.1.0.zip -d ~/.claude/skills/
+unzip code-trace-tree-skill-1.1.1.zip -d ~/.claude/skills/
 
 # Or project-local
 mkdir -p .claude/skills
-unzip code-trace-tree-skill-1.1.0.zip -d .claude/skills/
+unzip code-trace-tree-skill-1.1.1.zip -d .claude/skills/
 ```
 
 Then in a project that uses Code Trace Tree:
