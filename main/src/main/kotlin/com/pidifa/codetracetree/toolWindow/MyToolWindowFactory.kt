@@ -57,12 +57,18 @@ import javax.swing.JComponent
 import javax.swing.JTextArea
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import java.awt.Component
 import java.awt.Dimension
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.UnsupportedFlavorException
+import java.awt.event.KeyEvent
+import javax.swing.AbstractAction
 import javax.swing.BoxLayout
+import javax.swing.KeyStroke
 import javax.swing.TransferHandler
 
 
@@ -154,6 +160,16 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
                 isEditable = false
                 dragEnabled = true
+                val copyKeyStroke = KeyStroke.getKeyStroke(
+                    KeyEvent.VK_C,
+                    Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx
+                )
+                getInputMap(JComponent.WHEN_FOCUSED).put(copyKeyStroke, "copyTraceDisplayText")
+                actionMap.put("copyTraceDisplayText", object : AbstractAction() {
+                    override fun actionPerformed(e: java.awt.event.ActionEvent?) {
+                        copySelectedTraceDisplayText()
+                    }
+                })
                 transferHandler = object : TransferHandler() {
                     override fun createTransferable(c: JComponent): Transferable? {
                         val tree = c as? JTree ?: return null
@@ -358,6 +374,20 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                         service.selectTracePoints(selectedIds)
                         val popupMenu = JPopupMenu()
+                        val copyItem = JMenuItem("Copy")
+                        copyItem.addActionListener {
+                            val toCopy = if (selectedTracePoints.any { it.id == tracePointNode.id }) {
+                                selectedTracePoints
+                            } else {
+                                listOf(tracePointNode)
+                            }
+                            val text = toCopy.joinToString("\n") {
+                                TracePointTreeRenderer.formatDisplayText(it.tracePoint)
+                            }
+                            CopyPasteManager.getInstance().setContents(StringSelection(text))
+                        }
+                        popupMenu.add(copyItem)
+                        popupMenu.addSeparator()
                         if (selectedTracePoints.size > 1) {
                             val deleteItem = JMenuItem("Delete")
                             deleteItem.addActionListener {
@@ -563,6 +593,15 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
         }
 
         fun getTree(): JTree = tree
+
+        private fun copySelectedTraceDisplayText() {
+            val selected = tree.selectionPaths
+                ?.mapNotNull { (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode }
+                .orEmpty()
+            if (selected.isEmpty()) return
+            val text = selected.joinToString("\n") { TracePointTreeRenderer.formatDisplayText(it.tracePoint) }
+            CopyPasteManager.getInstance().setContents(StringSelection(text))
+        }
 
         fun revealTracePoints(ids: Set<String>) {
             if (ids.isEmpty()) return
