@@ -34,9 +34,9 @@ class GoToTracePointInTreeAction : AnAction() {
 
         val service = project.service<TracePointService>()
         val projectPath = project.basePath ?: return
-        val filePath = file.path.removePrefix("$projectPath/")
+        val relativePath = file.path.removePrefix("$projectPath/")
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
-        val matches = service.findValidTracePointsAt(filePath, lineNumber)
+        val matches = service.findValidTracePointsAt(relativePath, lineNumber)
         if (matches.isEmpty()) return
 
         val ids = matches.map { it.id }.toSet()

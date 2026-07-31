@@ -24,6 +24,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.services.TracePointService
 import com.pidifa.codetracetree.services.TracePointService.TracePointNode
 
@@ -57,8 +58,8 @@ class UpdateTracePointAction : AnAction() {
         val endOffset = document.getLineEndOffset(lineNumber - 1)
         val lineContent = document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trim()
         val projectPath = project.basePath ?: return
-        val filePath = file.path.removePrefix("$projectPath/")
-        val fileName = file.name
+        val relativePath = file.path.removePrefix("$projectPath/")
+        val baseName = file.name
         val (totalOccurrences, matchingLines) = service.getLineOccurrences(document, lineContent)
         val occurrenceIndex = matchingLines.indexOf(lineNumber) + 1
 
@@ -67,22 +68,22 @@ class UpdateTracePointAction : AnAction() {
             val tp=service.getTracePointNodeById(id)
             if(tp==null)continue
             updatedNodes.add(tp)
-            val prevFilePath = tp.tracePoint.filePath
+            val prevFilePath = tp.tracePoint.tracePath
             tp.tracePoint=tp.tracePoint.copy(
-                fileName = fileName,
-                filePath = filePath,
+                traceType = TraceType.LINE,
+                baseName = baseName,
+                tracePath = relativePath,
                 lineNumber = lineNumber,
                 lineContent = lineContent,
                 isValid = true,
                 totalOccurrences = totalOccurrences,
-                occurrenceIndex = if (occurrenceIndex >= 0) occurrenceIndex else 0,
-                description = null
+                occurrenceIndex = if (occurrenceIndex >= 0) occurrenceIndex else 0
             )
             service.updateInFileNodesMap(prevFilePath, tp)
         }
         service.selectTracePoints(selectedTracePointIds) // Preserve selection
         service.notifyListeners(NodeListenerEventType.PARTIAL_UPDATE,updatedNodes )
-        service.refreshDocumentListener(mutableSetOf(filePath))
+        service.refreshDocumentListener(mutableSetOf(relativePath))
     }
 
     override fun update(e: AnActionEvent) {

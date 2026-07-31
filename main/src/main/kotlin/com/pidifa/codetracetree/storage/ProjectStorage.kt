@@ -18,7 +18,6 @@ package com.pidifa.codetracetree.storage
 
 import com.intellij.openapi.diagnostic.Logger
 import com.pidifa.codetracetree.services.TracePointService
-import org.jdom.input.SAXBuilder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -32,7 +31,6 @@ import java.util.stream.Collectors
  * Resolution on project open:
  * - Case A: match by project id → update path/updatedAt
  * - Case B: match by path (copy-on-write) → new id + new XML file
- * - Legacy: migrate `.idea/code-trace-tree-config.xml` when present
  * - Case C: create a fresh project document
  */
 class ProjectStorage(private val projectBasePath: String) {
@@ -92,14 +90,6 @@ class ProjectStorage(private val projectBasePath: String) {
             bind(copied)
             save(copied)
             return copied
-        }
-
-        // Legacy migration from IntelliJ PersistentStateComponent file
-        val migrated = tryMigrateLegacyConfig()
-        if (migrated != null) {
-            bind(migrated)
-            save(migrated)
-            return migrated
         }
 
         // Case C: new project
@@ -250,147 +240,4 @@ class ProjectStorage(private val projectBasePath: String) {
 
     private fun isWindows(): Boolean =
         System.getProperty("os.name").orEmpty().lowercase(Locale.ROOT).contains("win")
-
-    /**
-     * Migrates legacy `.idea/code-trace-tree-config.xml` (PersistentStateComponent) into
-     * global storage and writes a new project id.
-     */
-    private fun tryMigrateLegacyConfig(): ProjectDocument? {
-        val legacyFile = projectBase.resolve(".idea").resolve("code-trace-tree-config.xml")
-        if (!Files.isRegularFile(legacyFile)) return null
-        return try {
-            val root = SAXBuilder().build(legacyFile.toFile()).rootElement
-            val component = when {
-                root.name == "component" -> root
-                else -> root.getChildren("component")
-                    .firstOrNull { it.getAttributeValue("name") == "TracePointService" }
-                    ?: root
-            }
-
-            val profiles = mutableListOf<TracePointService.TraceProfile>()
-            component.getChild("traceProfiles")?.getChildren("traceProfile")?.forEach { profileEl ->
-                val name = profileEl.getChildTextTrim("name")?.takeIf { it.isNotBlank() }
-                    ?: TracePointService.DEFAULT_PROFILE_NAME
-                val nodes = mutableListOf<TracePointService.TracePointNode>()
-                profileEl.getChild("tracePointNodes")?.getChildren("tracePointNode")?.forEach {
-                    nodes.add(parseLegacyNode(it))
-                }
-                val expanded = mutableSetOf<String>()
-                profileEl.getChild("expandedTracePointIds")?.getChildren("id")?.forEach {
-                    val id = it.textTrim
-                    if (id.isNotBlank()) expanded.add(id)
-                }
-                profiles.add(
-                    TracePointService.TraceProfile(
-                        name = name,
-                        tracePointNodes = nodes,
-                        expandedTracePointIds = expanded
-                    )
-                )
-            }
-
-            // Pre-profile legacy fields
-            if (profiles.isEmpty()) {
-                val nodes = mutableListOf<TracePointService.TracePointNode>()
-                component.getChild("tracePointNodes")?.getChildren("tracePointNode")?.forEach {
-                    nodes.add(parseLegacyNode(it))
-                }
-                val expanded = mutableSetOf<String>()
-                component.getChild("expandedTracePointIds")?.getChildren("id")?.forEach {
-                    val id = it.textTrim
-                    if (id.isNotBlank()) expanded.add(id)
-                }
-                profiles.add(
-                    TracePointService.TraceProfile(
-                        name = TracePointService.DEFAULT_PROFILE_NAME,
-                        tracePointNodes = nodes,
-                        expandedTracePointIds = expanded
-                    )
-                )
-            }
-
-            val active = component.getChildTextTrim("activeProfileName")
-                ?.takeIf { it.isNotBlank() }
-                ?: profiles.first().name
-            val descriptionOpened =
-                component.getChildTextTrim("descriptionAreaOpened")?.toBooleanStrictOrNull() ?: false
-            val highlighting =
-                component.getChildTextTrim("highlightingEnabled")?.toBooleanStrictOrNull() ?: true
-
-            val newId = generateProjectId()
-            val newFile = allocateStorageFile(projectBase.fileName.toString())
-            ProjectIdFiles.writeProjectId(projectBase, newId)
-
-            ProjectDocument(
-                projectId = newId,
-                path = projectBase.toString(),
-                updatedAt = System.currentTimeMillis(),
-                profiles = profiles,
-                activeProfileName = active,
-                descriptionAreaOpened = descriptionOpened,
-                highlightingEnabled = highlighting,
-                storageFile = newFile
-            )
-        } catch (e: Exception) {
-            log.warn("Failed to migrate legacy code-trace-tree-config.xml", e)
-            null
-        }
-    }
-
-    private fun parseLegacyNode(nodeEl: org.jdom.Element): TracePointService.TracePointNode {
-        val id = nodeEl.getChildTextTrim("id") ?: UUID.randomUUID().toString()
-        val parentId = nodeEl.getChildTextTrim("parentId")?.takeIf { it.isNotBlank() }
-        // XMLB may flatten TracePoint with surroundWithTag=false — fields can be direct children
-        val tpEl = nodeEl.getChild("tracePoint")
-        val name: String
-        val fileName: String
-        val filePath: String
-        val lineNumber: Int
-        val lineContent: String
-        val totalOccurrences: Int
-        val occurrenceIndex: Int
-        val description: String
-
-        if (tpEl != null) {
-            name = tpEl.getChildTextTrim("name") ?: ""
-            fileName = tpEl.getChildTextTrim("fileName") ?: ""
-            filePath = tpEl.getChildTextTrim("filePath") ?: ""
-            lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1
-            lineContent = tpEl.getChildTextTrim("lineContent") ?: ""
-            totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1
-            occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1
-            description = tpEl.getChildTextTrim("description") ?: ""
-        } else {
-            name = nodeEl.getChildTextTrim("name") ?: ""
-            fileName = nodeEl.getChildTextTrim("fileName") ?: ""
-            filePath = nodeEl.getChildTextTrim("filePath") ?: ""
-            lineNumber = nodeEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1
-            lineContent = nodeEl.getChildTextTrim("lineContent") ?: ""
-            totalOccurrences = nodeEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1
-            occurrenceIndex = nodeEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1
-            description = nodeEl.getChildTextTrim("description") ?: ""
-        }
-
-        val node = TracePointService.TracePointNode(
-            id,
-            TracePointService.TracePoint(
-                name = name,
-                fileName = fileName,
-                filePath = filePath,
-                lineNumber = lineNumber,
-                lineContent = lineContent,
-                isValid = true,
-                totalOccurrences = totalOccurrences,
-                occurrenceIndex = occurrenceIndex,
-                description = description
-            ),
-            parentId
-        )
-        nodeEl.getChild("children")?.getChildren("tracePointNode")?.forEach { childEl ->
-            val child = parseLegacyNode(childEl)
-            if (child.parentId == null) child.parentId = id
-            node.children.add(child)
-        }
-        return node
-    }
 }

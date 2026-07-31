@@ -16,6 +16,7 @@
  */
 package com.pidifa.codetracetree.storage
 
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.services.TracePointService
 import org.jdom.Element
 import org.jdom.input.SAXBuilder
@@ -178,18 +179,33 @@ object ProjectDataXml {
         val tpEl = nodeEl.getChild("tracePoint")
             ?: throw IllegalArgumentException("Missing <tracePoint> in node $id")
 
-        val tp = TracePointService.TracePoint(
-            name = tpEl.getChildTextTrim("name") ?: "",
-            fileName = tpEl.getChildTextTrim("fileName") ?: "",
-            filePath = tpEl.getChildTextTrim("filePath") ?: "",
-            lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1,
-            // Legacy <projectPath> / <isValid> ignored; resolve path via project.basePath, revalidate on load
-            lineContent = tpEl.getChildTextTrim("lineContent") ?: "",
-            isValid = true,
-            totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1,
-            occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1,
-            description = tpEl.getChildTextTrim("description") ?: ""
-        )
+        val kind = TraceType.fromXml(tpEl.getChildTextTrim("traceType"))
+        val tp = when (kind) {
+            TraceType.LINE -> TracePointService.TracePoint(
+                traceName = tpEl.getChildTextTrim("traceName") ?: "",
+                traceType = TraceType.LINE,
+                baseName = tpEl.getChildTextTrim("baseName") ?: "",
+                tracePath = tpEl.getChildTextTrim("tracePath") ?: "",
+                lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1,
+                lineContent = tpEl.getChildTextTrim("lineContent") ?: "",
+                isValid = true,
+                totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1,
+                occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1,
+                description = tpEl.getChildTextTrim("description") ?: ""
+            )
+            TraceType.FILE, TraceType.DIRECTORY -> TracePointService.TracePoint(
+                traceName = tpEl.getChildTextTrim("traceName") ?: "",
+                traceType = kind,
+                baseName = tpEl.getChildTextTrim("baseName") ?: "",
+                tracePath = tpEl.getChildTextTrim("tracePath") ?: "",
+                lineNumber = 0,
+                lineContent = null,
+                isValid = true,
+                totalOccurrences = 0,
+                occurrenceIndex = 0,
+                description = tpEl.getChildTextTrim("description") ?: ""
+            )
+        }
 
         val node = TracePointService.TracePointNode(id, tp, parentId)
         nodeEl.getChild("children")?.getChildren("tracePointNode")?.forEach { childEl ->
@@ -209,13 +225,16 @@ object ProjectDataXml {
         val tp = node.tracePoint
         nodeEl.addContent(
             Element("tracePoint").apply {
-                addContent(Element("name").setText(tp.name))
-                addContent(Element("fileName").setText(tp.fileName))
-                addContent(Element("filePath").setText(tp.filePath))
-                addContent(Element("lineNumber").setText(tp.lineNumber.toString()))
-                addContent(Element("lineContent").setText(tp.lineContent ?: ""))
-                addContent(Element("totalOccurrences").setText(tp.totalOccurrences.toString()))
-                addContent(Element("occurrenceIndex").setText(tp.occurrenceIndex.toString()))
+                addContent(Element("traceName").setText(tp.traceName))
+                addContent(Element("traceType").setText(tp.traceType.name))
+                addContent(Element("baseName").setText(tp.baseName))
+                addContent(Element("tracePath").setText(tp.tracePath))
+                if (tp.traceType == TraceType.LINE) {
+                    addContent(Element("lineNumber").setText(tp.lineNumber.toString()))
+                    addContent(Element("lineContent").setText(tp.lineContent ?: ""))
+                    addContent(Element("totalOccurrences").setText(tp.totalOccurrences.toString()))
+                    addContent(Element("occurrenceIndex").setText(tp.occurrenceIndex.toString()))
+                }
                 if (!tp.description.isNullOrEmpty()) {
                     addContent(Element("description").setText(tp.description))
                 }

@@ -63,5 +63,19 @@
                 description="Selects the trace point for the current line in the Code Trace Tree tool window">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+
+        <action id="com.pidifa.codetracetree.CreateRootPathTracePointAction"
+                class="com.pidifa.codetracetree.actions.CreateRootPathTracePointAction"
+                text="Create a Root Trace Point"
+                description="Creates a root-level file or directory trace point from the Project View">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.pidifa.codetracetree.CreatePathTracePointUnderSelectedAction"
+                class="com.pidifa.codetracetree.actions.CreatePathTracePointUnderSelectedAction"
+                text="Create a Trace Point (Under Selected)"
+                description="Adds the selected file or directory as a child of every selected trace point">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.6"
+val pluginVersion = "1.0.7"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,12 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.0.7</h3>
+            <ul>
+              <li>Add file and directory trace points from the Project View</li>
+              <li>Introduce <code>traceType</code> (<code>LINE</code> / <code>FILE</code> / <code>DIRECTORY</code>) with <code>traceName</code>, <code>baseName</code>, and <code>tracePath</code></li>
+              <li>Support descriptions for all trace types; remove legacy config migration</li>
+            </ul>
             <h3>1.0.6</h3>
             <ul>
               <li>Reload plugin data when the global storage XML changes or <code>.idea/code-trace-tree.refresh-request</code> is written</li>

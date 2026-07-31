@@ -380,7 +380,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                     "Enter new name for trace point:",
                                     "Rename Trace Point",
                                     null,
-                                    tracePoint.name,
+                                    tracePoint.traceName,
                                     null
                                 )
                                 if (!newName.isNullOrBlank()) {
@@ -393,7 +393,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             deleteItem.addActionListener {
                                 val confirm = Messages.showYesNoDialog(
                                     toolWindow.project,
-                                    "Are you sure you want to delete trace point '${tracePoint.name}'?",
+                                    "Are you sure you want to delete trace point '${tracePoint.traceName}'?",
                                     "Confirm Delete",
                                     null
                                 )
@@ -685,7 +685,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         rootTreeNode.add(node)
                     } else {
                         treeNodeMap[tp.parentId]?.add(node)
-                            ?: thisLogger().warn("Parent not found for ${tp.tracePoint.name} (${tp.parentId})")
+                            ?: thisLogger().warn("Parent not found for ${tp.tracePoint.traceName} (${tp.parentId})")
                     }
                 }
                 tp

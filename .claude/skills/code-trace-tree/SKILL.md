@@ -2,8 +2,9 @@
 name: code-trace-tree
 description: >
   Read, edit, and refresh Code Trace Tree plugin data (JetBrains / VS Code shared storage).
-  Use when the user asks to add/update/remove trace points, inspect or modify Code Trace Tree
-  profiles, sync agent-written traces into the IDE, or notify IntelliJ IDEA to reload plugin data.
+  Use when the user asks to add/update/remove trace points (line, file, or directory), inspect or
+  modify Code Trace Tree profiles, sync agent-written traces into the IDE, or notify IntelliJ IDEA
+  to reload plugin data.
 ---
 
 # Code Trace Tree
@@ -54,28 +55,27 @@ Editing the global XML alone is usually enough (the plugin watches it). Always w
 
 - Keep `<project version="4">`, `<projectId>`, and `<path>` unless you intentionally rebind storage.
 - Bump `<updatedAt>` to the current epoch milliseconds when you change content.
-- `filePath` is **relative to the project root** (forward slashes preferred).
-- `lineContent` is **trimmed** (leading/trailing whitespace removed) when saved; store the trimmed line text.
+- Every `<tracePoint>` needs `<traceType>`: `LINE`, `FILE`, or `DIRECTORY`.
+- `traceName` is the user label; `baseName` is the last path segment; `tracePath` is **relative to the project root** (forward slashes preferred).
+- For `LINE`: store trimmed `lineContent`, 1-based `lineNumber`, `totalOccurrences`, and `occurrenceIndex`.
+- For `FILE` / `DIRECTORY`: omit line fields; `tracePath` is the file or directory path.
 - Every `<tracePointNode>` needs `<id>` (UUID) and `<parentId>` (empty for roots).
 - Nest children under `<children>`; child `parentId` must equal the parent node id.
-- Do **not** persist `isValid` (runtime-only; see [references/data-format.md](references/data-format.md#isvalid-runtime)).
+- Do **not** persist `isValid` (runtime-only).
 - Do not delete unrelated profiles. Default profile name is `main`.
 - If the IDE has the project open, finish XML edits **before** writing the refresh request.
 
 ## Content matching and `isValid`
 
-`isValid` is **never stored** in XML. The IDE recomputes it on load/reload and while editing.
+`isValid` is never stored. On load/reload:
 
-On load / external reload, for each node:
+| `traceType` | Valid when |
+|--------------|------------|
+| `LINE` | Path is a file and trimmed line at `lineNumber` matches `lineContent`, or occurrence rebinding succeeds |
+| `FILE` | Path exists and is a file |
+| `DIRECTORY` | Path exists and is a directory |
 
-1. Missing `id`, `filePath`, or `lineContent`, or unreadable file → `isValid = false`.
-2. Else open `projectRoot/filePath` and compare **trimmed** text:
-   - If `lines[lineNumber - 1].trim() == lineContent.trim()` → stay valid (keep stored line).
-   - Else search all lines where `line.trim() == lineContent.trim()`:
-     - If `totalOccurrences` still matches and `occurrenceIndex` is in `1..total` → move `lineNumber` to that occurrence and set `isValid = true`.
-     - Otherwise → `isValid = false` (and `occurrenceIndex = 0`).
-
-When writing agent-created nodes, set accurate trimmed `lineContent`, `lineNumber`, `totalOccurrences`, and `occurrenceIndex` so the plugin can re-bind after code moves.
+For `LINE` nodes, set accurate trimmed `lineContent`, `lineNumber`, `totalOccurrences`, and `occurrenceIndex` so the plugin can re-bind after code moves. Details: [references/data-format.md](references/data-format.md).
 
 ## Safe operations
 
@@ -84,7 +84,7 @@ When writing agent-created nodes, set accurate trimmed `lineContent`, `lineNumbe
 | List traces | Parse active profile’s `<tracePointNodes>` |
 | Add root | Append a root `<tracePointNode>` with empty `<parentId>` |
 | Add child | Append under parent’s `<children>`, set `<parentId>` |
-| Update location | Change `filePath` / `fileName` / `lineNumber` / `lineContent` |
+| Update location | Change `tracePath` / `baseName` / `traceName` / (`lineNumber` / `lineContent` for `LINE`) |
 | Remove node | Delete the node and its `<children>` subtree |
 | Switch profile | Set `<activeProfileName>` to an existing profile `<name>` |
 

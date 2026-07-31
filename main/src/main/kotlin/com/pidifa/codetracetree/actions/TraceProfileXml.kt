@@ -16,6 +16,7 @@
  */
 package com.pidifa.codetracetree.actions
 
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.services.TracePointService
 import org.jdom.Element
 import java.util.UUID
@@ -131,20 +132,24 @@ object TraceProfileXml {
     private fun exportNode(node: TracePointService.TracePointNode, parentEl: Element) {
         val nodeEl = Element("tracePointNode")
         nodeEl.addContent(Element("id").setText(node.id))
-        // Always include parentId (empty for roots) for clarity
         nodeEl.addContent(Element("parentId").setText(node.parentId ?: ""))
 
         val tp = node.tracePoint
         nodeEl.addContent(
             Element("tracePoint").apply {
-                addContent(Element("name").setText(tp.name))
-                addContent(Element("fileName").setText(tp.fileName))
-                addContent(Element("filePath").setText(tp.filePath))
-                addContent(Element("lineNumber").setText(tp.lineNumber.toString()))
-                addContent(Element("lineContent").setText(tp.lineContent ?: ""))
-                addContent(Element("totalOccurrences").setText(tp.totalOccurrences.toString()))
-                addContent(Element("occurrenceIndex").setText(tp.occurrenceIndex.toString()))
-                addContent(Element("description").setText(tp.description ?: ""))
+                addContent(Element("traceName").setText(tp.traceName))
+                addContent(Element("traceType").setText(tp.traceType.name))
+                addContent(Element("baseName").setText(tp.baseName))
+                addContent(Element("tracePath").setText(tp.tracePath))
+                if (tp.traceType == TraceType.LINE) {
+                    addContent(Element("lineNumber").setText(tp.lineNumber.toString()))
+                    addContent(Element("lineContent").setText(tp.lineContent ?: ""))
+                    addContent(Element("totalOccurrences").setText(tp.totalOccurrences.toString()))
+                    addContent(Element("occurrenceIndex").setText(tp.occurrenceIndex.toString()))
+                }
+                if (!tp.description.isNullOrEmpty()) {
+                    addContent(Element("description").setText(tp.description))
+                }
             }
         )
 
@@ -163,17 +168,33 @@ object TraceProfileXml {
         val tpEl = nodeEl.getChild("tracePoint")
             ?: throw IllegalArgumentException("Missing <tracePoint> element in node $id")
 
-        val tp = TracePointService.TracePoint(
-            name = tpEl.getChildTextTrim("name") ?: "",
-            fileName = tpEl.getChildTextTrim("fileName") ?: "",
-            filePath = tpEl.getChildTextTrim("filePath") ?: "",
-            lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1,
-            lineContent = tpEl.getChildTextTrim("lineContent") ?: "",
-            isValid = true,
-            totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1,
-            occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1,
-            description = tpEl.getChildTextTrim("description") ?: ""
-        )
+        val kind = TraceType.fromXml(tpEl.getChildTextTrim("traceType"))
+        val tp = when (kind) {
+            TraceType.LINE -> TracePointService.TracePoint(
+                traceName = tpEl.getChildTextTrim("traceName") ?: "",
+                traceType = TraceType.LINE,
+                baseName = tpEl.getChildTextTrim("baseName") ?: "",
+                tracePath = tpEl.getChildTextTrim("tracePath") ?: "",
+                lineNumber = tpEl.getChildTextTrim("lineNumber")?.toIntOrNull() ?: -1,
+                lineContent = tpEl.getChildTextTrim("lineContent") ?: "",
+                isValid = true,
+                totalOccurrences = tpEl.getChildTextTrim("totalOccurrences")?.toIntOrNull() ?: 1,
+                occurrenceIndex = tpEl.getChildTextTrim("occurrenceIndex")?.toIntOrNull() ?: 1,
+                description = tpEl.getChildTextTrim("description") ?: ""
+            )
+            TraceType.FILE, TraceType.DIRECTORY -> TracePointService.TracePoint(
+                traceName = tpEl.getChildTextTrim("traceName") ?: "",
+                traceType = kind,
+                baseName = tpEl.getChildTextTrim("baseName") ?: "",
+                tracePath = tpEl.getChildTextTrim("tracePath") ?: "",
+                lineNumber = 0,
+                lineContent = null,
+                isValid = true,
+                totalOccurrences = 0,
+                occurrenceIndex = 0,
+                description = tpEl.getChildTextTrim("description") ?: ""
+            )
+        }
 
         val node = TracePointService.TracePointNode(id, tp, parentId)
         nodeEl.getChild("children")?.getChildren("tracePointNode")?.forEach { childEl ->

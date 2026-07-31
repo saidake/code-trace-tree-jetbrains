@@ -16,6 +16,7 @@
  */
 package com.pidifa.codetracetree.services
 
+import com.intellij.ide.projectView.ProjectView
 import com.intellij.openapi.vfs.VirtualFileManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -33,8 +34,11 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.wm.ToolWindowId
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectIdFiles
@@ -53,9 +57,10 @@ class TracePointService(private val project: Project) {
     }
 
     data class TracePoint(
-        val name: String = "",
-        val fileName: String = "",
-        val filePath: String = "",
+        val traceName: String = "",
+        val traceType: TraceType = TraceType.LINE,
+        val baseName: String = "",
+        val tracePath: String = "",
         val lineNumber: Int = 0,
         val lineContent: String? = null,
         val isValid: Boolean = true,
@@ -76,23 +81,37 @@ class TracePointService(private val project: Project) {
                     }
                     return@runReadAction
                 }
-                val fileUrl = "file:///$basePath/$filePath"
+                val fileUrl = "file:///$basePath/$tracePath"
                 val file = VirtualFileManager.getInstance().findFileByUrl(fileUrl)
                 if (file == null) {
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showErrorDialog(
                             project,
-                            "Cannot find file: $fileName in project path $basePath",
+                            "Cannot find path: $tracePath in project $basePath",
                             "Navigate to Trace Point"
                         )
                     }
                     return@runReadAction
                 }
                 ApplicationManager.getApplication().invokeLater {
-                    val editorManager = FileEditorManager.getInstance(project)
-                    editorManager.openFile(file, true)
-                    val descriptor = OpenFileDescriptor(project, file, lineNumber - 1, 0)
-                    descriptor.navigate(true)
+                    when (traceType) {
+                        TraceType.DIRECTORY -> {
+                            ToolWindowManager.getInstance(project)
+                                .getToolWindow(ToolWindowId.PROJECT_VIEW)
+                                ?.activate {
+                                    ProjectView.getInstance(project).select(null, file, true)
+                                }
+                                ?: ProjectView.getInstance(project).select(null, file, true)
+                        }
+                        TraceType.FILE -> {
+                            FileEditorManager.getInstance(project).openFile(file, true)
+                        }
+                        TraceType.LINE -> {
+                            FileEditorManager.getInstance(project).openFile(file, true)
+                            OpenFileDescriptor(project, file, (lineNumber - 1).coerceAtLeast(0), 0)
+                                .navigate(true)
+                        }
+                    }
                 }
             }
         }
@@ -330,8 +349,10 @@ class TracePointService(private val project: Project) {
             // Remove existing highlighters for this file
             removeHighlights(file)
 
-            val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val relevant = fileNodesMap[filePath]?.filter { it.tracePoint.isValid } ?: emptyList()
+            val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
+            val relevant = fileNodesMap[relativePath]
+                ?.filter { it.tracePoint.traceType == TraceType.LINE && it.tracePoint.isValid }
+                ?: emptyList()
             val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
             val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
             if (editors.isEmpty()) return@runReadAction
@@ -383,7 +404,7 @@ class TracePointService(private val project: Project) {
         fileNodesMap.clear()
         fun walk(node: TracePointNode) {
             nodeMap[node.id] = node
-            fileNodesMap.getOrPut(node.tracePoint.filePath) { mutableListOf() }
+            fileNodesMap.getOrPut(node.tracePoint.tracePath) { mutableListOf() }
                 .add(node)
             node.children.forEach { child ->
                 child.parentId = node.id
@@ -397,10 +418,11 @@ class TracePointService(private val project: Project) {
     // A document listener will not be added for the same file
     fun attachDocumentListener(file: VirtualFile) {
         ApplicationManager.getApplication().runReadAction {
-            val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val affectedFileNodes = fileNodesMap[filePath]
-            val hasTracePointsInFile = affectedFileNodes!=null && affectedFileNodes.isNotEmpty()
-            if (hasTracePointsInFile && !monitoredDocuments.containsKey(file)) {
+            val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
+            val affectedFileNodes = fileNodesMap[relativePath]
+            val hasLineTracePoints = affectedFileNodes.orEmpty()
+                .any { it.tracePoint.traceType == TraceType.LINE }
+            if (hasLineTracePoints && !monitoredDocuments.containsKey(file)) {
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
                     override fun documentChanged(event: DocumentEvent) {
@@ -445,8 +467,10 @@ class TracePointService(private val project: Project) {
         changedLine: Int,
         updatedNodes: MutableList<TracePointNode>
     ) {
-        if (node.tracePoint.filePath != filePath) {
-            //node.children.forEach { updateNodeRecursively(document, offset,it, filePath, newLines, lineOffset, changedLine, updatedNodes) }
+        if (node.tracePoint.tracePath != filePath) {
+            return
+        }
+        if (node.tracePoint.traceType != TraceType.LINE) {
             return
         }
 
@@ -526,36 +550,62 @@ class TracePointService(private val project: Project) {
             fun validateNode(node: TracePointNode) {
                 val tp = node.tracePoint
                 val basePath = project.basePath
-                if (node.id.isEmpty() || tp.filePath.isEmpty() || basePath.isNullOrBlank() || tp.lineContent == null) {
+                if (node.id.isEmpty() || tp.tracePath.isEmpty() || basePath.isNullOrBlank()) {
                     node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                     return
                 }
 
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${basePath}/${tp.filePath}")
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${basePath}/${tp.tracePath}")
                 if (file == null) {
                     node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                     return
                 }
 
-                val doc = FileDocumentManager.getInstance().getDocument(file) ?: run {
-                    node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
-                    return
-                }
+                when (tp.traceType) {
+                    TraceType.DIRECTORY -> {
+                        node.tracePoint = tp.copy(
+                            isValid = file.isDirectory,
+                            totalOccurrences = 0,
+                            occurrenceIndex = 0,
+                            lineNumber = 0,
+                            lineContent = null
+                        )
+                    }
+                    TraceType.FILE -> {
+                        node.tracePoint = tp.copy(
+                            isValid = !file.isDirectory,
+                            totalOccurrences = 0,
+                            occurrenceIndex = 0,
+                            lineNumber = 0,
+                            lineContent = null
+                        )
+                    }
+                    TraceType.LINE -> {
+                        if (tp.lineContent == null || file.isDirectory) {
+                            node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
+                            return
+                        }
+                        val doc = FileDocumentManager.getInstance().getDocument(file) ?: run {
+                            node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
+                            return
+                        }
 
-                val lines = doc.text.split("\n")
-                if (tp.lineNumber <= lines.size && lines[tp.lineNumber - 1].trim() == tp.lineContent.trim()) {
-                    return
-                }
+                        val lines = doc.text.split("\n")
+                        if (tp.lineNumber <= lines.size && lines[tp.lineNumber - 1].trim() == tp.lineContent.trim()) {
+                            return
+                        }
 
-                val (total, matches) = getLineOccurrences(doc, tp.lineContent)
-                if (total == tp.totalOccurrences && tp.occurrenceIndex in 1..total) {
-                    node.tracePoint = tp.copy(
-                        lineNumber = matches[tp.occurrenceIndex - 1],
-                        totalOccurrences = total,
-                        isValid = true
-                    )
-                } else {
-                    node.tracePoint = tp.copy(isValid = false, totalOccurrences = total, occurrenceIndex = 0)
+                        val (total, matches) = getLineOccurrences(doc, tp.lineContent)
+                        if (total == tp.totalOccurrences && tp.occurrenceIndex in 1..total) {
+                            node.tracePoint = tp.copy(
+                                lineNumber = matches[tp.occurrenceIndex - 1],
+                                totalOccurrences = total,
+                                isValid = true
+                            )
+                        } else {
+                            node.tracePoint = tp.copy(isValid = false, totalOccurrences = total, occurrenceIndex = 0)
+                        }
+                    }
                 }
             }
 
@@ -587,13 +637,14 @@ class TracePointService(private val project: Project) {
             } else Pair(0, emptyList())
             val occurrenceIndex = if (lineContent != null) matchingLines.indexOf(lineNumber) + 1 else 0
 
-            val filePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
-            val fileName = file.name
+            val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
+            val baseName = file.name
 
             val tracePoint = TracePoint(
-                name = name,
-                filePath = filePath,
-                fileName = fileName,
+                traceName = name,
+                traceType = TraceType.LINE,
+                tracePath = relativePath,
+                baseName = baseName,
                 lineNumber = lineNumber,
                 lineContent = lineContent,
                 isValid = document != null,
@@ -602,17 +653,47 @@ class TracePointService(private val project: Project) {
                 description = description
             )
 
-            val newNode = TracePointNode(UUID.randomUUID().toString(), tracePoint)
-
-            if (parentId == null) {
-                tracePointNodes.add(newNode)
-            } else {
-                nodeMap[parentId]?.children?.add(newNode)?.also { newNode.parentId = nodeMap[parentId]?.id }
-            }
-            nodeMap[newNode.id] = newNode
-            fileNodesMap.getOrPut(newNode.tracePoint.filePath) { mutableListOf() }
-                .add(newNode)
+            insertTracePointNode(TracePointNode(UUID.randomUUID().toString(), tracePoint), parentId)
         }
+    }
+
+    /**
+     * Adds a FILE or DIRECTORY trace point from Project View (no line anchor).
+     */
+    fun addPathTracePoint(
+        name: String,
+        file: VirtualFile,
+        parentId: String? = null,
+        description: String = ""
+    ) {
+        ApplicationManager.getApplication().runReadAction {
+            val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
+            val kind = if (file.isDirectory) TraceType.DIRECTORY else TraceType.FILE
+            val tracePoint = TracePoint(
+                traceName = name,
+                traceType = kind,
+                tracePath = relativePath,
+                baseName = file.name,
+                lineNumber = 0,
+                lineContent = null,
+                isValid = true,
+                totalOccurrences = 0,
+                occurrenceIndex = 0,
+                description = description
+            )
+            insertTracePointNode(TracePointNode(UUID.randomUUID().toString(), tracePoint), parentId)
+        }
+    }
+
+    private fun insertTracePointNode(newNode: TracePointNode, parentId: String?) {
+        if (parentId == null) {
+            tracePointNodes.add(newNode)
+        } else {
+            nodeMap[parentId]?.children?.add(newNode)?.also { newNode.parentId = nodeMap[parentId]?.id }
+        }
+        nodeMap[newNode.id] = newNode
+        fileNodesMap.getOrPut(newNode.tracePoint.tracePath) { mutableListOf() }
+            .add(newNode)
     }
 
     fun updateTracePointDescription(id: String, newDescription: String) {
@@ -627,7 +708,7 @@ class TracePointService(private val project: Project) {
     fun renameTracePoint(id: String, newName: String) {
         ApplicationManager.getApplication().runReadAction {
             nodeMap[id]?.let {
-                it.tracePoint = it.tracePoint.copy(name = newName)
+                it.tracePoint = it.tracePoint.copy(traceName = newName)
                 notifyListeners()
             }
         }
@@ -642,7 +723,7 @@ class TracePointService(private val project: Project) {
             }
             ids.forEach { nodeMap[it]?.let { collect(it) } }
 
-            val affectedFiles = toDelete.mapNotNull { nodeMap[it]?.tracePoint?.filePath }.distinct()
+            val affectedFiles = toDelete.mapNotNull { nodeMap[it]?.tracePoint?.tracePath }.distinct()
 
             tracePointNodes.removeIf { toDelete.contains(it.id) }
             tracePointNodes.forEach { pruneRecursively(it, toDelete) }
@@ -761,13 +842,13 @@ class TracePointService(private val project: Project) {
     }
 
     fun updateInFileNodesMap(prevFilePath: String, node: TracePointNode) {
-        if (prevFilePath == node.tracePoint.filePath) return
+        if (prevFilePath == node.tracePoint.tracePath) return
 
         // Remove the node from the previous node list
         val prevList = this.fileNodesMap[prevFilePath]
         prevList?.remove(node)
         // Add the node to the new file path
-        val newFilePath = node.tracePoint.filePath
+        val newFilePath = node.tracePoint.tracePath
         val newList = this.fileNodesMap.getOrPut(newFilePath) { mutableListOf() }
         newList.add(node)
     }
@@ -1049,13 +1130,17 @@ class TracePointService(private val project: Project) {
     private fun reattachListenersAndHighlights() {
         val visitedFiles = mutableSetOf<String>()
         fun traverse(node: TracePointNode) {
-            val path = node.tracePoint.filePath
-            if (visitedFiles.add(path)) {
-                val file = VirtualFileManager.getInstance()
-                    .findFileByUrl("file:///${project.basePath}/$path")
-                file?.let {
-                    attachDocumentListener(it)
-                    highlightTracePointsInFile(it)
+            if (node.tracePoint.traceType == TraceType.LINE) {
+                val path = node.tracePoint.tracePath
+                if (visitedFiles.add(path)) {
+                    val file = VirtualFileManager.getInstance()
+                        .findFileByUrl("file:///${project.basePath}/$path")
+                    file?.let {
+                        if (!it.isDirectory) {
+                            attachDocumentListener(it)
+                            highlightTracePointsInFile(it)
+                        }
+                    }
                 }
             }
             node.children.forEach { traverse(it) }
@@ -1069,7 +1154,11 @@ class TracePointService(private val project: Project) {
 
     fun findValidTracePointsAt(filePath: String, lineNumber: Int): List<TracePointNode> {
         return fileNodesMap[filePath]
-            ?.filter { it.tracePoint.isValid && it.tracePoint.lineNumber == lineNumber }
+            ?.filter {
+                it.tracePoint.traceType == TraceType.LINE &&
+                    it.tracePoint.isValid &&
+                    it.tracePoint.lineNumber == lineNumber
+            }
             ?: emptyList()
     }
 

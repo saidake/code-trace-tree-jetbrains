@@ -25,13 +25,19 @@
   <li>Use the <b>Profile</b> selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.</li>
   <li>In the editor, right-click a line and choose:
     <ul>
-      <li><b>Create a Root Trace Point</b> — start a new trace tree</li>
+      <li><b>Create a Root Trace Point</b> — start a new line-level trace tree</li>
       <li><b>Create a Trace Point (Under Selected)</b> — add a child under the selected node(s) in the tree</li>
       <li><b>Update the selected code trace point</b> — move the selected tree node(s) to the current line</li>
       <li><b>Go to the Trace Point in the tree panel</b> — shown only when the current single line is a highlighted trace point; selects and reveals that node in the tree</li>
     </ul>
   </li>
-  <li>Double-click a node in the tree to jump to that location in the source.</li>
+  <li>In the <b>Project</b> tool window, right-click a file or directory and choose:
+    <ul>
+      <li><b>Create a Root Trace Point</b> — add a file or directory node at the root</li>
+      <li><b>Create a Trace Point (Under Selected)</b> — add that file/directory under the selected tree node(s)</li>
+    </ul>
+  </li>
+  <li>Double-click a node in the tree to jump to that location (line, file, or Project View for directories).</li>
   <li>Use the tool window toolbar to expand/collapse, reorder, highlight, import/export, or edit descriptions.</li>
 </ol>
 

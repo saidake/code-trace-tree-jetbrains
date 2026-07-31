@@ -16,6 +16,7 @@
  */
 package com.pidifa.codetracetree.toolWindow
 
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.services.TracePointService
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.UIUtil
@@ -44,9 +45,14 @@ class TracePointTreeRenderer(
         val userObject = (value as? DefaultMutableTreeNode)?.userObject
         text = when (userObject) {
             is TracePointService.TracePointNode -> {
-                val fileName = userObject.tracePoint.fileName.substringAfterLast('/')
-                val title = "${userObject.tracePoint.name}($fileName: ${userObject.tracePoint.lineNumber})"
-                if (!userObject.tracePoint.isValid) "<html><strike>$title</strike></html>" else title
+                val tp = userObject.tracePoint
+                val fileName = tp.baseName.substringAfterLast('/')
+                val title = when (tp.traceType) {
+                    TraceType.LINE -> "${tp.traceName}($fileName: ${tp.lineNumber})"
+                    TraceType.FILE -> "${tp.traceName}($fileName)"
+                    TraceType.DIRECTORY -> "${tp.traceName}($fileName/)"
+                }
+                if (!tp.isValid) "<html><strike>$title</strike></html>" else title
             }
             else -> userObject?.toString() ?: ""
         }
