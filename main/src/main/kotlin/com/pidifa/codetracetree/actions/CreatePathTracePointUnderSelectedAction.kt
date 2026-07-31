@@ -64,16 +64,9 @@ class CreatePathTracePointUnderSelectedAction : AnAction() {
             null
         ) ?: return
 
-        val description = Messages.showInputDialog(
-            project,
-            "Enter an optional description (Cancel to skip):",
-            "Trace Point Description",
-            null
-        ).orEmpty()
-
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
         selectedIds.forEach { parentId ->
-            service.addPathTracePoint(tracePointName, file, parentId = parentId, description = description)
+            service.addPathTracePoint(tracePointName, file, parentId = parentId)
         }
         service.notifyListeners()
     }

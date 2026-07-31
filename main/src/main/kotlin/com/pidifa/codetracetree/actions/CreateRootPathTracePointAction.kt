@@ -53,15 +53,8 @@ class CreateRootPathTracePointAction : AnAction() {
             null
         ) ?: return
 
-        val description = Messages.showInputDialog(
-            project,
-            "Enter an optional description (Cancel to skip):",
-            "Trace Point Description",
-            null
-        ).orEmpty()
-
         val service = project.service<TracePointService>()
-        service.addPathTracePoint(tracePointName, file, parentId = null, description = description)
+        service.addPathTracePoint(tracePointName, file, parentId = null)
         service.notifyListeners()
     }
 
