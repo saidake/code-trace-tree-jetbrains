@@ -42,10 +42,13 @@
 </ol>
 
 <h3>Storage</h3>
+<p>Trace data is stored in a shared global folder:</p>
+<ul>
+  <li>Windows: <code>%LOCALAPPDATA%\code-trace-tree</code></li>
+  <li>macOS: <code>~/Library/Application Support/code-trace-tree</code></li>
+  <li>Linux: <code>$XDG_CONFIG_HOME/code-trace-tree</code> or <code>~/.config/code-trace-tree</code></li>
+</ul>
 <p>
-  Trace data is stored in a shared global folder (Windows: <code>%LOCALAPPDATA%\code-trace-tree</code>;
-  macOS: <code>~/Library/Application Support/code-trace-tree</code>;
-  Linux: <code>$XDG_CONFIG_HOME/code-trace-tree</code> or <code>~/.config/code-trace-tree</code>).
   Each project keeps only a small id file under <code>.idea/code-trace-tree.project.id</code>
   (falls back to <code>.vscode/code-trace-tree.project.id</code> when present).
   Old unused XML files are not deleted automatically — remove them from that folder if you no longer need them.
@@ -69,11 +72,11 @@ Download `code-trace-tree-skill-<version>.zip` from the [GitHub Releases](https:
 
 ```bash
 # Personal (all projects)
-unzip code-trace-tree-skill-1.0.8.zip -d ~/.claude/skills/
+unzip code-trace-tree-skill-1.0.9.zip -d ~/.claude/skills/
 
 # Or project-local
 mkdir -p .claude/skills
-unzip code-trace-tree-skill-1.0.8.zip -d .claude/skills/
+unzip code-trace-tree-skill-1.0.9.zip -d .claude/skills/
 ```
 
 Then in a project that uses Code Trace Tree:

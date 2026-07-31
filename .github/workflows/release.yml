@@ -65,8 +65,8 @@ jobs:
           cat > release-notes.md <<EOF
           # What's New
 
-          - Update Marketplace plugin logo
-          - Attach Claude skill ZIP to GitHub Releases for easier agent install
+          - Set Marketplace plugin icons to 40x40
+          - Format storage folder paths as a list in the plugin description
 
           # Install the Plugin with \`zip\` file
 
@@ -76,19 +76,46 @@ jobs:
           4. Choose the downloaded \`.zip\` file.
           5. Restart the IDE if required.
 
-          # Install Claude Skill
+          # Install Claude Skill (Linux & macOS)
 
-          Install the Code Trace Tree Claude Skill by extracting the skill package into your Claude skills directory.
+          Download the Code Trace Tree Claude Skill \`zip\` file, and extract it into your Claude skills directory.
+
+          For a global installation:
 
           \`\`\`bash
+          curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v${VERSION}/code-trace-tree-skill-${VERSION}.zip -o code-trace-tree-skill-${VERSION}.zip
           unzip code-trace-tree-skill-${VERSION}.zip -d ~/.claude/skills/
+          rm code-trace-tree-skill-${VERSION}.zip
           \`\`\`
 
-          Install the skill for the current project:
+          For a project-level installation:
 
           \`\`\`bash
+          curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v${VERSION}/code-trace-tree-skill-${VERSION}.zip -o code-trace-tree-skill-${VERSION}.zip
           mkdir -p .claude/skills
           unzip code-trace-tree-skill-${VERSION}.zip -d .claude/skills/
+          rm code-trace-tree-skill-${VERSION}.zip
+          \`\`\`
+
+          # Install Claude Skill (Windows)
+
+          Download the Code Trace Tree Claude Skill \`zip\` file, and extract it into your Claude skills directory.
+
+          For a global installation using PowerShell:
+
+          \`\`\`powershell
+          Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v${VERSION}/code-trace-tree-skill-${VERSION}.zip" -OutFile "code-trace-tree-skill-${VERSION}.zip"
+          Expand-Archive -Path "code-trace-tree-skill-${VERSION}.zip" -DestinationPath "\$HOME\\.claude\\skills"
+          Remove-Item "code-trace-tree-skill-${VERSION}.zip"
+          \`\`\`
+
+          For a project-level installation using PowerShell:
+
+          \`\`\`powershell
+          Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v${VERSION}/code-trace-tree-skill-${VERSION}.zip" -OutFile "code-trace-tree-skill-${VERSION}.zip"
+          New-Item -ItemType Directory -Force -Path ".claude\\skills"
+          Expand-Archive -Path "code-trace-tree-skill-${VERSION}.zip" -DestinationPath ".claude\\skills"
+          Remove-Item "code-trace-tree-skill-${VERSION}.zip"
           \`\`\`
           EOF
 
