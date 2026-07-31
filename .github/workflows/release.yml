@@ -65,8 +65,7 @@ jobs:
           cat > release-notes.md <<EOF
           # What's New
 
-          - Set Marketplace plugin icons to 40x40
-          - Format storage folder paths as a list in the plugin description
+          - Update Marketplace plugin icons
 
           # Install the Plugin with \`zip\` file
 

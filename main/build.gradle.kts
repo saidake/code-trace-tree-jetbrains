@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.9"
+val pluginVersion = "1.1.0"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.0</h3>
+            <ul>
+              <li>Update Marketplace plugin icons</li>
+            </ul>
             <h3>1.0.9</h3>
             <ul>
               <li>Set Marketplace plugin icons to 40x40</li>

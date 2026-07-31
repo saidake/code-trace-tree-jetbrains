@@ -72,11 +72,11 @@ Download `code-trace-tree-skill-<version>.zip` from the [GitHub Releases](https:
 
 ```bash
 # Personal (all projects)
-unzip code-trace-tree-skill-1.0.9.zip -d ~/.claude/skills/
+unzip code-trace-tree-skill-1.1.0.zip -d ~/.claude/skills/
 
 # Or project-local
 mkdir -p .claude/skills
-unzip code-trace-tree-skill-1.0.9.zip -d .claude/skills/
+unzip code-trace-tree-skill-1.1.0.zip -d .claude/skills/
 ```
 
 Then in a project that uses Code Trace Tree:
