@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.7"
+val pluginVersion = "1.0.8"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,11 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.0.8</h3>
+            <ul>
+              <li>Update Marketplace plugin logo</li>
+              <li>Attach Claude skill ZIP to GitHub Releases for easier agent install</li>
+            </ul>
             <h3>1.0.7</h3>
             <ul>
               <li>Add file and directory trace points from the Project View</li>

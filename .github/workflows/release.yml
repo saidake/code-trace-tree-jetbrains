@@ -1,7 +1,10 @@
 # Build and Release
 #
-# Builds the plugin ZIP, attaches it to the GitHub Release, and publishes to JetBrains Marketplace.
-# Triggered on push of a git tag matching v* (e.g. v1.0.0), same pattern as rhctl.
+# Builds the plugin ZIP and Claude skill ZIP, attaches both to the GitHub Release,
+# and publishes to JetBrains Marketplace.
+# Triggered on push of a git tag matching v* (e.g. v1.0.8).
+# Release title format: "Code Trace Tree vX.Y.Z"
+# Attachments: plugin zip + code-trace-tree-skill-X.Y.Z.zip
 
 name: Build and Release
 
@@ -29,25 +32,86 @@ jobs:
       - name: Build plugin
         run: ./gradlew buildPlugin
 
+      - name: Package Claude skill ZIP
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          SKILL_ZIP="code-trace-tree-skill-${VERSION}.zip"
+          STAGE="$(mktemp -d)"
+          cp -a .claude/skills/code-trace-tree "$STAGE/"
+          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/$SKILL_ZIP" code-trace-tree)
+          echo "SKILL_ZIP=$SKILL_ZIP" >> "$GITHUB_ENV"
+          ls -la "$SKILL_ZIP"
+          unzip -l "$SKILL_ZIP"
+
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
           name: code-trace-tree
           path: main/build/distributions/*.zip
 
-      - name: Attach plugin ZIP to GitHub Release
+      - name: Upload Claude skill artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-trace-tree-skill
+          path: code-trace-tree-skill-*.zip
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          cat > release-notes.md <<EOF
+          # What's New
+
+          - Update Marketplace plugin logo
+          - Attach Claude skill ZIP to GitHub Releases for easier agent install
+
+          # Install the Plugin with \`zip\` file
+
+          1. Download the release \`.zip\` file.
+          2. Open the IDE plugin settings.
+          3. Select **Install Plugin from Disk**.
+          4. Choose the downloaded \`.zip\` file.
+          5. Restart the IDE if required.
+
+          # Install Claude Skill
+
+          Install the Code Trace Tree Claude Skill by extracting the skill package into your Claude skills directory.
+
+          \`\`\`bash
+          unzip code-trace-tree-skill-${VERSION}.zip -d ~/.claude/skills/
+          \`\`\`
+
+          Install the skill for the current project:
+
+          \`\`\`bash
+          mkdir -p .claude/skills
+          unzip code-trace-tree-skill-${VERSION}.zip -d .claude/skills/
+          \`\`\`
+          EOF
+
+      - name: Attach artifacts to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           TAG="${{ github.ref_name }}"
-          ZIP="$(ls main/build/distributions/*.zip | head -n1)"
+          VERSION="${TAG#v}"
+          PLUGIN_ZIP="$(ls main/build/distributions/*.zip | head -n1)"
+          SKILL_ZIP="${SKILL_ZIP:-code-trace-tree-skill-${VERSION}.zip}"
+          TITLE="Code Trace Tree ${TAG}"
+
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP" --clobber
+            gh release upload "$TAG" "$PLUGIN_ZIP" "$SKILL_ZIP" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md
           else
             gh release create "$TAG" \
-              --title "Code Trace Tree ${TAG#v}" \
-              --generate-notes \
-              "$ZIP"
+              --title "$TITLE" \
+              --notes-file release-notes.md \
+              "$PLUGIN_ZIP" \
+              "$SKILL_ZIP"
           fi
 
       - name: Publish plugin

@@ -65,13 +65,15 @@
 
 # Claude skill (agent access)
 
-Install the skill so Claude Code can resolve storage, edit trace XML, and notify IDEA to refresh:
+Download `code-trace-tree-skill-<version>.zip` from the [GitHub Releases](https://github.com/saidake/code-trace-tree-jetbrains/releases) page, then install:
 
 ```bash
 # Personal (all projects)
-cp -r .claude/skills/code-trace-tree ~/.claude/skills/
+unzip code-trace-tree-skill-1.0.8.zip -d ~/.claude/skills/
 
-# Or project-local: copy into the target repo's .claude/skills/
+# Or project-local
+mkdir -p .claude/skills
+unzip code-trace-tree-skill-1.0.8.zip -d .claude/skills/
 ```
 
 Then in a project that uses Code Trace Tree:
