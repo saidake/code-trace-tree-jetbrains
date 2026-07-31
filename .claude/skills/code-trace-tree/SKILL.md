@@ -44,16 +44,38 @@ python scripts/request_refresh.py
 
 Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh request after agent edits so reload is explicit.
 
+## Preferred workflow format
+
+* When generating a code workflow, trace points with parent-child relationships should have a close nesting level.
+  For example, if the parent node represents a method, its direct child nodes should represent methods called within that method.
+* Keep trace point names simple and concise, and add descriptions when additional context is needed.
+
 ## Edit rules
 
 - Keep `<project version="4">`, `<projectId>`, and `<path>` unless you intentionally rebind storage.
 - Bump `<updatedAt>` to the current epoch milliseconds when you change content.
 - `filePath` is **relative to the project root** (forward slashes preferred).
+- `lineContent` is **trimmed** (leading/trailing whitespace removed) when saved; store the trimmed line text.
 - Every `<tracePointNode>` needs `<id>` (UUID) and `<parentId>` (empty for roots).
 - Nest children under `<children>`; child `parentId` must equal the parent node id.
-- Do **not** persist `isValid` (runtime-only).
+- Do **not** persist `isValid` (runtime-only; see [references/data-format.md](references/data-format.md#isvalid-runtime)).
 - Do not delete unrelated profiles. Default profile name is `main`.
 - If the IDE has the project open, finish XML edits **before** writing the refresh request.
+
+## Content matching and `isValid`
+
+`isValid` is **never stored** in XML. The IDE recomputes it on load/reload and while editing.
+
+On load / external reload, for each node:
+
+1. Missing `id`, `filePath`, or `lineContent`, or unreadable file → `isValid = false`.
+2. Else open `projectRoot/filePath` and compare **trimmed** text:
+   - If `lines[lineNumber - 1].trim() == lineContent.trim()` → stay valid (keep stored line).
+   - Else search all lines where `line.trim() == lineContent.trim()`:
+     - If `totalOccurrences` still matches and `occurrenceIndex` is in `1..total` → move `lineNumber` to that occurrence and set `isValid = true`.
+     - Otherwise → `isValid = false` (and `occurrenceIndex = 0`).
+
+When writing agent-created nodes, set accurate trimmed `lineContent`, `lineNumber`, `totalOccurrences`, and `occurrenceIndex` so the plugin can re-bind after code moves.
 
 ## Safe operations
 
