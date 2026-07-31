@@ -27,12 +27,17 @@ import java.nio.file.Path
 object ProjectIdFiles {
     const val IDEA_FILE = "code-trace-tree.project.id"
     const val VSCODE_FILE = "code-trace-tree.project.id"
+    /** Written by external agents (e.g. Claude) to ask the IDE to reload global XML. */
+    const val REFRESH_REQUEST_FILE = "code-trace-tree.refresh-request"
 
     fun ideaIdPath(projectBase: Path): Path =
         projectBase.resolve(".idea").resolve(IDEA_FILE)
 
     fun vscodeIdPath(projectBase: Path): Path =
         projectBase.resolve(".vscode").resolve(VSCODE_FILE)
+
+    fun refreshRequestPath(projectBase: Path): Path =
+        projectBase.resolve(".idea").resolve(REFRESH_REQUEST_FILE)
 
     /**
      * Prefer `.idea/code-trace-tree.project.id`; if missing, use

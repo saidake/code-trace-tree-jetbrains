@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.0.5"
+val pluginVersion = "1.0.6"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,11 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.0.6</h3>
+            <ul>
+              <li>Reload plugin data when the global storage XML changes or <code>.idea/code-trace-tree.refresh-request</code> is written</li>
+              <li>Add Claude Code skill and scripts so agents can resolve storage, edit traces, and notify IDEA to refresh</li>
+            </ul>
             <h3>1.0.5</h3>
             <ul>
               <li>Store trace data in OS global config (<code>%LOCALAPPDATA%</code> / Application Support / XDG) with a project id file under <code>.idea</code></li>

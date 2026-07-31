@@ -35,7 +35,12 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.Disposable
 import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
+import com.pidifa.codetracetree.storage.ExternalStorageWatcher
+import com.pidifa.codetracetree.storage.ProjectDocument
+import com.pidifa.codetracetree.storage.ProjectIdFiles
 import com.pidifa.codetracetree.storage.ProjectStorage
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.*
 
 @Service(Service.Level.PROJECT)
@@ -43,6 +48,7 @@ class TracePointService(private val project: Project) {
 
     companion object {
         const val DEFAULT_PROFILE_NAME = "main"
+        private const val SELF_WRITE_IGNORE_MS = 1500L
         private val LOG = Logger.getInstance(TracePointService::class.java)
     }
 
@@ -122,11 +128,20 @@ class TracePointService(private val project: Project) {
     private val fileNodesMap = mutableMapOf<String, MutableList<TracePointNode>>()
     private var projectStorage: ProjectStorage? = null
     private var persistScheduled = false
+    private var suppressPersist = false
+    @Volatile
+    private var ignoreExternalChangesUntilMs = 0L
+    private var externalStorageWatcher: ExternalStorageWatcher? = null
 
     init {
         loadFromHybridStorage()
+        startExternalStorageWatcher()
 
-        Disposer.register(project, Disposable { persistNow() })
+        Disposer.register(project, Disposable {
+            externalStorageWatcher?.close()
+            externalStorageWatcher = null
+            persistNow()
+        })
 
         // Listen for file openings to attach DocumentListener and apply highlights
         ApplicationManager.getApplication().messageBus.connect(project).subscribe(
@@ -172,40 +187,106 @@ class TracePointService(private val project: Project) {
         try {
             val storage = ProjectStorage(basePath)
             projectStorage = storage
-            val doc = storage.resolveAndLoad()
-            isHighlightingEnabled = doc.highlightingEnabled
-            isDescriptionAreaOpened = doc.descriptionAreaOpened
-            profiles = doc.profiles.map {
-                TraceProfile(
-                    name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
-                    tracePointNodes = it.tracePointNodes,
-                    expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
-                )
-            }.toMutableList()
-            if (profiles.isEmpty()) {
-                profiles.add(TraceProfile(name = DEFAULT_PROFILE_NAME))
-            }
-            activeProfileName = doc.activeProfileName
-                .takeIf { name -> profiles.any { it.name == name } }
-                ?: profiles.first().name
-            // Load active profile into working memory without re-validating yet (init does that)
-            val profile = profiles.find { it.name == activeProfileName } ?: profiles.first()
-            tracePointNodes = profile.tracePointNodes
-            expandedTracePointIds = profile.expandedTracePointIds.toMutableSet()
-            rebuildNodeMapAndFileNodesMap()
+            applyDocument(storage.resolveAndLoad(), validate = false, notifyUi = false)
         } catch (e: Exception) {
             LOG.warn("Code Trace Tree: failed to load hybrid storage; using defaults", e)
         }
     }
 
+    private fun startExternalStorageWatcher() {
+        val basePath = project.basePath ?: return
+        if (projectStorage == null) return
+        externalStorageWatcher?.close()
+        val watcher = ExternalStorageWatcher(
+            projectBase = Paths.get(basePath),
+            storageFileProvider = { projectStorage?.boundStorageFile() },
+            shouldIgnore = { System.currentTimeMillis() < ignoreExternalChangesUntilMs },
+            onExternalChange = { reason ->
+                ApplicationManager.getApplication().invokeLater {
+                    if (!project.isDisposed) {
+                        reloadFromExternalStorage(reason)
+                    }
+                }
+            }
+        )
+        externalStorageWatcher = watcher
+        watcher.start()
+    }
+
+    /**
+     * Reloads the bound global XML into memory and refreshes the tool window / highlights.
+     * Called when the storage file changes or `.idea/code-trace-tree.refresh-request` is written.
+     */
+    fun reloadFromExternalStorage(reason: String = "manual"): Boolean {
+        val storage = projectStorage ?: return false
+        if (System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
+        val doc = storage.reloadBoundDocument() ?: return false
+        LOG.info("Code Trace Tree: reloading from external storage ($reason)")
+        suppressPersist = true
+        try {
+            applyDocument(doc, validate = true, notifyUi = true)
+            clearRefreshRequestFile()
+        } finally {
+            suppressPersist = false
+        }
+        return true
+    }
+
+    private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean) {
+        isHighlightingEnabled = doc.highlightingEnabled
+        isDescriptionAreaOpened = doc.descriptionAreaOpened
+        profiles = doc.profiles.map {
+            TraceProfile(
+                name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
+                tracePointNodes = it.tracePointNodes,
+                expandedTracePointIds = it.expandedTracePointIds.toMutableSet()
+            )
+        }.toMutableList()
+        if (profiles.isEmpty()) {
+            profiles.add(TraceProfile(name = DEFAULT_PROFILE_NAME))
+        }
+        activeProfileName = doc.activeProfileName
+            .takeIf { name -> profiles.any { it.name == name } }
+            ?: profiles.first().name
+        val profile = profiles.find { it.name == activeProfileName } ?: profiles.first()
+        if (notifyUi || validate) {
+            clearAllHighlights()
+            selectedTracePointIds.clear()
+        }
+        tracePointNodes = profile.tracePointNodes
+        expandedTracePointIds = profile.expandedTracePointIds.toMutableSet()
+        rebuildNodeMapAndFileNodesMap()
+        if (validate) {
+            validateTracePointsOnLoad()
+            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+            reattachListenersAndHighlights()
+        }
+        if (notifyUi) {
+            notifyProfileListeners()
+            val copy = getTracePoints()
+            listenersMap[NodeListenerEventType.FULL_UPDATE]?.forEach { it(copy, true) }
+        }
+    }
+
+    private fun clearRefreshRequestFile() {
+        val basePath = project.basePath ?: return
+        val request = ProjectIdFiles.refreshRequestPath(Paths.get(basePath))
+        try {
+            Files.deleteIfExists(request)
+        } catch (e: Exception) {
+            LOG.debug("Could not delete refresh request file $request", e)
+        }
+    }
+
     /** Persist profiles to global storage (debounced on the EDT). */
     fun schedulePersist() {
+        if (suppressPersist) return
         if (projectStorage == null) return
         if (persistScheduled) return
         persistScheduled = true
         ApplicationManager.getApplication().invokeLater {
             persistScheduled = false
-            if (!project.isDisposed) {
+            if (!project.isDisposed && !suppressPersist) {
                 persistNow()
             }
         }
@@ -213,6 +294,7 @@ class TracePointService(private val project: Project) {
 
     private fun persistNow() {
         val storage = projectStorage ?: return
+        ignoreExternalChangesUntilMs = System.currentTimeMillis() + SELF_WRITE_IGNORE_MS
         syncActiveProfileToStore()
         storage.save(
             profiles = profiles,
@@ -220,6 +302,7 @@ class TracePointService(private val project: Project) {
             descriptionAreaOpened = isDescriptionAreaOpened,
             highlightingEnabled = isHighlightingEnabled
         )
+        externalStorageWatcher?.refreshRegistrations()
     }
 
     // === Highlighting ===

@@ -121,6 +121,28 @@ class ProjectStorage(private val projectBasePath: String) {
         return fresh
     }
 
+    fun boundStorageFile(): Path? = boundFile
+
+    fun boundProjectId(): String? = boundProjectId
+
+    /**
+     * Re-reads the currently bound global XML without re-running project resolution.
+     * Returns null when unbound or the file is missing/unreadable.
+     */
+    fun reloadBoundDocument(): ProjectDocument? {
+        val file = boundFile ?: return null
+        if (!Files.isRegularFile(file)) return null
+        return try {
+            val doc = ProjectDataXml.parseFile(file)
+            val rebound = doc.copy(storageFile = file)
+            bind(rebound)
+            rebound
+        } catch (e: Exception) {
+            log.warn("Failed to reload Code Trace Tree project data from $file", e)
+            null
+        }
+    }
+
     fun save(
         profiles: List<TracePointService.TraceProfile>,
         activeProfileName: String,

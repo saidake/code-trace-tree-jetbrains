@@ -44,6 +44,11 @@
   (falls back to <code>.vscode/code-trace-tree.project.id</code> when present).
   Old unused XML files are not deleted automatically — remove them from that folder if you no longer need them.
 </p>
+<p>
+  External agents can edit the global XML and ask the IDE to reload by writing
+  <code>.idea/code-trace-tree.refresh-request</code> (or by saving the XML while the project is open).
+  See <code>.claude/skills/code-trace-tree/</code> for the Claude Code skill and helper scripts.
+</p>
 <!-- Plugin description end -->
 
 # Development
@@ -51,6 +56,24 @@
 - JDK 21
 - Open the project root in IntelliJ IDEA and import as a Gradle project
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
+
+# Claude skill (agent access)
+
+Install the skill so Claude Code can resolve storage, edit trace XML, and notify IDEA to refresh:
+
+```bash
+# Personal (all projects)
+cp -r .claude/skills/code-trace-tree ~/.claude/skills/
+
+# Or project-local: copy into the target repo's .claude/skills/
+```
+
+Then in a project that uses Code Trace Tree:
+
+```bash
+python ~/.claude/skills/code-trace-tree/scripts/resolve_storage.py
+python ~/.claude/skills/code-trace-tree/scripts/request_refresh.py
+```
 
 # Contributing
 
