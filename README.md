@@ -13,7 +13,12 @@
   Code Trace Tree is a JetBrains plugin that lets you trace code in a tree structure.
   Double click any trace point to navigate to its source, with support for multiple trace levels.
 </p>
+<!-- Plugin description end -->
 
+# Preview
+![](docs/assets/preview.png)
+
+<!-- Plugin description -->
 <h3>How to use</h3>
 <ol>
   <li>Open the <b>Code Trace Tree</b> tool window (right side of the IDE).</li>
@@ -40,9 +45,6 @@
   Old unused XML files are not deleted automatically — remove them from that folder if you no longer need them.
 </p>
 <!-- Plugin description end -->
-
-# Preview
-![](docs/assets/preview.png)
 
 # Development
 

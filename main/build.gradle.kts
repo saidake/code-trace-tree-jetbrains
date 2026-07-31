@@ -36,17 +36,24 @@ intellijPlatform {
     pluginConfiguration {
         name = "Code Trace Tree"
         version = pluginVersion
-        // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
+        // Extract all <!-- Plugin description --> sections from README.md and provide for the plugin's manifest
         description = providers.fileContents(rootProject.layout.projectDirectory.file("README.md")).asText.map {
             val start = "<!-- Plugin description -->"
             val end = "<!-- Plugin description end -->"
-
-            with(it.lines()) {
-                if (!containsAll(listOf(start, end))) {
-                    throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
-                }
-                subList(indexOf(start) + 1, indexOf(end)).joinToString("\n")
+            val lines = it.lines()
+            val sections = mutableListOf<String>()
+            var i = 0
+            while (i < lines.size) {
+                val startIdx = lines.subList(i, lines.size).indexOf(start).takeIf { it >= 0 }?.plus(i) ?: break
+                val endIdx = lines.subList(startIdx + 1, lines.size).indexOf(end).takeIf { it >= 0 }?.plus(startIdx + 1)
+                    ?: throw GradleException("Unclosed plugin description section in README.md:\n$start ... $end")
+                sections += lines.subList(startIdx + 1, endIdx).joinToString("\n")
+                i = endIdx + 1
             }
+            if (sections.isEmpty()) {
+                throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
+            }
+            sections.joinToString("\n")
         }
 
         changeNotes = """
