@@ -83,18 +83,15 @@
   Resolve / refresh / select helper scripts are plain shell or batch and do not need Python.
 </p>
 <p>
-  Shared skill source in this repo: <code>skills/code-trace-tree/</code>.
-  Release zips are built with <code>python skills/package_skills.py --zip</code>.
+  Shared skill source in this repo: <code>skills/code-trace-tree/</code>
+  (same package for every agent; only the extract path differs).
+  Releases attach <code>code-trace-tree-skill-&lt;version&gt;.zip</code>.
 </p>
 
 <h2>Install skill — extract locations</h2>
 <p>
-  Download <code>code-trace-tree-skill-&lt;agent&gt;-1.1.4.zip</code> from the GitHub Release
-  (for example <code>code-trace-tree-skill-claude-1.1.4.zip</code>,
-  <code>code-trace-tree-skill-cursor-1.1.4.zip</code>,
-  <code>code-trace-tree-skill-copilot-1.1.4.zip</code>,
-  <code>code-trace-tree-skill-codex-1.1.4.zip</code>,
-  <code>code-trace-tree-skill-gemini-1.1.4.zip</code>).
+  Download <code>code-trace-tree-skill-1.1.4.zip</code> from the GitHub Release
+  (one zip for all agents).
   Remove any existing <code>code-trace-tree</code> skill folder first, then extract into the
   skills directory for your agent:
 </p>
@@ -112,22 +109,22 @@
 </table>
 
 <h2>Install example (Claude Code, Linux &amp; macOS)</h2>
-<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.4/code-trace-tree-skill-claude-1.1.4.zip -o code-trace-tree-skill-claude-1.1.4.zip</code>
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.4/code-trace-tree-skill-1.1.4.zip -o code-trace-tree-skill-1.1.4.zip</code>
 <code>rm -rf ~/.claude/skills/code-trace-tree</code>
 <code>mkdir -p ~/.claude/skills</code>
-<code>unzip code-trace-tree-skill-claude-1.1.4.zip -d ~/.claude/skills/</code>
-<code>rm code-trace-tree-skill-claude-1.1.4.zip</code>
+<code>unzip code-trace-tree-skill-1.1.4.zip -d ~/.claude/skills/</code>
+<code>rm code-trace-tree-skill-1.1.4.zip</code>
 </pre>
-<p>Project-local: extract into <code>.claude/skills/</code> instead of <code>~/.claude/skills/</code>. For other agents, download the matching <code>code-trace-tree-skill-&lt;agent&gt;-1.1.4.zip</code> and extract into that agent’s folder from the table above.</p>
+<p>Project-local: extract into <code>.claude/skills/</code> instead of <code>~/.claude/skills/</code>. For other agents, use the same zip and extract into that agent’s folder from the table above.</p>
 
 <h2>Install example (Claude Code, Windows PowerShell)</h2>
-<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.4/code-trace-tree-skill-claude-1.1.4.zip" -OutFile "code-trace-tree-skill-claude-1.1.4.zip"</code>
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.4/code-trace-tree-skill-1.1.4.zip" -OutFile "code-trace-tree-skill-1.1.4.zip"</code>
 <code>Remove-Item -Recurse -Force "$HOME\.claude\skills\code-trace-tree" -ErrorAction SilentlyContinue</code>
 <code>New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null</code>
-<code>Expand-Archive -Path "code-trace-tree-skill-claude-1.1.4.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
-<code>Remove-Item "code-trace-tree-skill-claude-1.1.4.zip"</code>
+<code>Expand-Archive -Path "code-trace-tree-skill-1.1.4.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
+<code>Remove-Item "code-trace-tree-skill-1.1.4.zip"</code>
 </pre>
-<p>Project-local: extract into <code>.claude\skills\</code>. For Cursor / Copilot / Codex / Gemini, change the destination path using the table above.</p>
+<p>Project-local: extract into <code>.claude\skills\</code>. For Cursor / Copilot / Codex / Gemini, use the same zip and change the destination path using the table above.</p>
 
 <h1>Storage</h1>
 <p>Trace data is stored in a shared global folder:</p>
@@ -157,9 +154,7 @@
 - JDK 21
 - Open the project root in IntelliJ IDEA and import as a Gradle project
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
-- Shared agent skill source: `skills/code-trace-tree/` (see [skills/README.md](skills/README.md))
-  - Package zips: `python skills/package_skills.py --zip`
-  - Sync into local agent dirs: `python skills/package_skills.py --sync`
+- Shared agent skill source: `skills/code-trace-tree/`
 
 # Contributing
 
