@@ -11,7 +11,11 @@
 <!-- Plugin description -->
 <p>
   Code Trace Tree is a JetBrains plugin that lets you trace code in a tree structure.
-  Double click any trace point to navigate to its source, with support for multiple trace levels.
+  Double-click any trace point to navigate to its source, with support for multiple trace levels.
+</p>
+<p>
+  Pair it with the Claude Skill so AI agents can search, add, move, and rebind traces, refresh the IDE,
+  and—when <b>Claude Assist</b> is enabled—auto-sync topic-related workflow points as you discuss code.
 </p>
 <!-- Plugin description end -->
 
