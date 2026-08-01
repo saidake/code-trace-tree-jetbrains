@@ -99,8 +99,15 @@ unzip code-trace-tree-skill-1.1.1.zip -d .claude/skills/
 Then in a project that uses Code Trace Tree:
 
 ```bash
-python ~/.claude/skills/code-trace-tree/scripts/resolve_storage.py
-python ~/.claude/skills/code-trace-tree/scripts/request_refresh.py
+# macOS / Linux
+bash ~/.claude/skills/code-trace-tree/scripts/resolve_storage.sh
+bash ~/.claude/skills/code-trace-tree/scripts/request_refresh.sh
+```
+
+```bat
+REM Windows
+%USERPROFILE%\.claude\skills\code-trace-tree\scripts\resolve_storage.bat
+%USERPROFILE%\.claude\skills\code-trace-tree\scripts\request_refresh.bat
 ```
 
 # Contributing
