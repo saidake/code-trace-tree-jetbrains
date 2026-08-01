@@ -53,6 +53,7 @@ REM optional: scripts\resolve_storage.bat C:\path\to\project
            - method B definition
 
 * Keep trace point names simple and concise. Add descriptions only when additional context is needed.
+* Prefer **LINE** anchors whose trimmed text is **unique (or rare) in that file**. Avoid generic lines such as `}`, `return;`, or blank-looking braces. Occurrence index is how the plugin and `rebind` restore a line after it moves; duplicate content in the same file makes rebinding fragile.
 
 ## Content matching and `isValid`
 
@@ -66,9 +67,11 @@ REM optional: scripts\resolve_storage.bat C:\path\to\project
 
 For `LINE` nodes, prefer the `trace_tree` scripts (they set `totalOccurrences` / `occurrenceIndex` automatically). Do **not** ask Claude to compute occurrence fields. Details: [references/data-format.md](references/data-format.md).
 
+When adding LINE nodes, choose `lineContent` that stands out in the file so occurrence-based restore/rebind stays accurate after edits.
+
 ## Trace tree ops
 
-Use `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, and delete nodes. Identify **LINE** nodes with a locator `[file, line, content]` — never pass occurrence fields.
+Use `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, and delete nodes. Identify **LINE** nodes with a locator `[file, line, content]` — never pass occurrence fields. Prefer unique `content` within the file (see Preferred code workflow format).
 
 **Parent path**: JSON array of LINE locators from rootward ancestor → immediate parent. `[]` = root.
 

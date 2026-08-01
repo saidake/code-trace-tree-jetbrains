@@ -41,6 +41,11 @@
   <li>Right-click a node and choose <b>Copy</b> (or use Ctrl/Cmd+C) to copy its display text, e.g. <code>test233 (TestControllerWebFlux.java:54)</code>.</li>
   <li>Use the tool window toolbar to expand/collapse, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
 </ol>
+<p>
+  <b>TIPS:</b> Prefer creating line trace points on text that is <b>unique in that file</b> (or uncommon),
+  not generic lines like <code>}</code> or <code>return;</code>.
+  The plugin stores occurrence counts to re-find the line after it moves; unique content rebinds more reliably.
+</p>
 
 <h1>Storage</h1>
 <p>Trace data is stored in a shared global folder:</p>
