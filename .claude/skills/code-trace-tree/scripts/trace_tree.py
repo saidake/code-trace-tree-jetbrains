@@ -930,13 +930,23 @@ def add_locator_flags(p: argparse.ArgumentParser, required_line: bool = False) -
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # Shared flags on a parent so both of these work:
+    #   trace_tree.py --project /path search
+    #   trace_tree.py search --project /path
+    shared = argparse.ArgumentParser(add_help=False)
+    add_shared_flags(shared)
+
     parser = argparse.ArgumentParser(
-        description="Search / add / move / delete / rebind Code Trace Tree nodes (no occurrence args)."
+        description="Search / add / move / delete / rebind Code Trace Tree nodes (no occurrence args).",
+        parents=[shared],
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_search = sub.add_parser("search", help="Find nodes in the target profile")
-    add_shared_flags(p_search)
+    p_search = sub.add_parser(
+        "search",
+        parents=[shared],
+        help="Find nodes in the target profile",
+    )
     p_search.add_argument("--id")
     p_search.add_argument("--file")
     p_search.add_argument("--line", type=int)
@@ -945,8 +955,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--type", choices=["LINE", "FILE", "DIRECTORY"])
     p_search.set_defaults(func=cmd_search)
 
-    p_add = sub.add_parser("add", help="Add a node under an optional parent path")
-    add_shared_flags(p_add)
+    p_add = sub.add_parser(
+        "add",
+        parents=[shared],
+        help="Add a node under an optional parent path",
+    )
     p_add.add_argument("pos_file", nargs="?", help="Positional file (LINE/FILE/DIRECTORY)")
     p_add.add_argument("pos_line", nargs="?", type=int, help="Positional line (LINE)")
     p_add.add_argument("pos_content", nargs="?", help="Positional trimmed content (LINE)")
@@ -963,8 +976,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--type", choices=["LINE", "FILE", "DIRECTORY"], default=None)
     p_add.set_defaults(func=cmd_add)
 
-    p_move = sub.add_parser("move", help="Reparent a node (subtree moves with it)")
-    add_shared_flags(p_move)
+    p_move = sub.add_parser(
+        "move",
+        parents=[shared],
+        help="Reparent a node (subtree moves with it)",
+    )
     add_locator_flags(p_move)
     p_move.add_argument(
         "--parent",
@@ -973,16 +989,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_move.set_defaults(func=cmd_move)
 
-    p_delete = sub.add_parser("delete", help="Delete a node and its subtree")
-    add_shared_flags(p_delete)
+    p_delete = sub.add_parser(
+        "delete",
+        parents=[shared],
+        help="Delete a node and its subtree",
+    )
     add_locator_flags(p_delete)
     p_delete.set_defaults(func=cmd_delete)
 
     p_rebind = sub.add_parser(
         "rebind",
+        parents=[shared],
         help="Repair LINE lineNumbers after disk edits (content-based; no occurrence args)",
     )
-    add_shared_flags(p_rebind)
     p_rebind.add_argument(
         "--file",
         action="append",

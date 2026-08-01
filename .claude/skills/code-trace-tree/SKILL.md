@@ -14,6 +14,17 @@ description: >
 
 Operate the hybrid storage used by the Code Trace Tree IDE plugins, then ask the IDE to reload.
 
+## Skill scripts location
+
+All helper scripts live in **this skill’s** `scripts/` directory (not the user’s project root):
+
+| Install | Scripts directory |
+|---------|-------------------|
+| Global | `~/.claude/skills/code-trace-tree/scripts/` (Windows: `%USERPROFILE%\.claude\skills\code-trace-tree\scripts\`) |
+| Project-local | `<repo>/.claude/skills/code-trace-tree/scripts/` |
+
+In examples below, `scripts/...` means that skill path. From a project checkout that vendors the skill, `bash .claude/skills/code-trace-tree/scripts/resolve_storage.sh` also works. Prefer an absolute path or `cd` into the skill folder when unsure.
+
 ## Storage layout
 
 | Piece | Location |
@@ -29,18 +40,18 @@ Global base directory:
 - macOS: `~/Library/Application Support/code-trace-tree`
 - Linux: `$XDG_CONFIG_HOME/code-trace-tree` or `~/.config/code-trace-tree`
 
-Resolve the bound XML with:
+Resolve the bound XML with (optional project path discovers the IDE project root; default is CWD):
 
 ```bash
-# macOS / Linux
-bash scripts/resolve_storage.sh
-# optional: bash scripts/resolve_storage.sh /path/to/project
+# macOS / Linux — run from skill scripts dir, or use the full skill path
+bash ~/.claude/skills/code-trace-tree/scripts/resolve_storage.sh
+# optional: bash ~/.claude/skills/code-trace-tree/scripts/resolve_storage.sh /path/to/project
 ```
 
 ```bat
 REM Windows
-scripts\resolve_storage.bat
-REM optional: scripts\resolve_storage.bat C:\path\to\project
+%USERPROFILE%\.claude\skills\code-trace-tree\scripts\resolve_storage.bat
+REM optional: ...\resolve_storage.bat C:\path\to\project
 ```
 
 ## Preferred code workflow format
@@ -71,7 +82,18 @@ When adding LINE nodes, choose `lineContent` that stands out in the file so occu
 
 ## Trace tree ops
 
-Use `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, and delete nodes. Identify **LINE** nodes with a locator `[file, line, content]` — never pass occurrence fields. Prefer unique `content` within the file (see Preferred code workflow format).
+Use the skill’s `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, delete, and rebind nodes. Identify **LINE** nodes with a locator `[file, line, content]` — never pass occurrence fields. Prefer unique `content` within the file (see Preferred code workflow format).
+
+**CLI shape:** `trace_tree.py <subcommand> [flags…]`  
+Shared flags (`--project`, `--profile`, `--dry-run`, `--no-refresh`) may appear **before or after** the subcommand:
+
+```bash
+# Both OK:
+python3 …/scripts/trace_tree.py search --project /path/to/project
+python3 …/scripts/trace_tree.py --project /path/to/project search
+```
+
+Omit `--project` when the process CWD is already inside the IDE project (scripts walk upward to find `.idea` / `.git`).
 
 **Parent path**: JSON array of LINE locators from rootward ancestor → immediate parent. `[]` = root.
 
@@ -82,31 +104,34 @@ method A def
 ```
 
 ```bash
-# macOS / Linux
-bash scripts/trace_tree.sh search
-bash scripts/trace_tree.sh add --file src/A.java --line 10 --content 'void methodA() {' --name 'methodA'
-bash scripts/trace_tree.sh add src/B.java 40 'void methodB() {' \
+# macOS / Linux — set SKILL_SCRIPTS to whichever install you use:
+#   global:        ~/.claude/skills/code-trace-tree/scripts
+#   project-local: .claude/skills/code-trace-tree/scripts   (from repo root)
+SKILL_SCRIPTS="${SKILL_SCRIPTS:-.claude/skills/code-trace-tree/scripts}"
+bash "$SKILL_SCRIPTS/trace_tree.sh" search
+bash "$SKILL_SCRIPTS/trace_tree.sh" add --file src/A.java --line 10 --content 'void methodA() {' --name 'methodA'
+bash "$SKILL_SCRIPTS/trace_tree.sh" add src/B.java 40 'void methodB() {' \
   --parent '[["src/A.java",10,"void methodA() {"],["src/A.java",12,"methodB();"]]' \
   --name 'methodB'
-bash scripts/trace_tree.sh move --file src/B.java --line 40 --content 'void methodB() {' --parent '[]'
-bash scripts/trace_tree.sh delete --id <uuid>
+bash "$SKILL_SCRIPTS/trace_tree.sh" move --file src/B.java --line 40 --content 'void methodB() {' --parent '[]'
+bash "$SKILL_SCRIPTS/trace_tree.sh" delete --id <uuid>
 # After editing source on disk (IDE DocumentListener will NOT run):
-bash scripts/trace_tree.sh rebind
-bash scripts/trace_tree.sh rebind --file src/A.java --file src/B.java
+bash "$SKILL_SCRIPTS/trace_tree.sh" rebind
+bash "$SKILL_SCRIPTS/trace_tree.sh" rebind --file src/A.java --file src/B.java
 ```
 
 ```bat
-REM Windows
-scripts\trace_tree.bat search
-scripts\trace_tree.bat add --file src\A.java --line 10 --content "void methodA() {" --name methodA
-scripts\trace_tree.bat move --id <uuid> --parent "[]"
-scripts\trace_tree.bat delete --file src\A.java --line 10 --content "void methodA() {"
+REM Windows — project-local (from repo root) or set to %%USERPROFILE%%\.claude\skills\code-trace-tree\scripts
+if not defined SKILL_SCRIPTS set "SKILL_SCRIPTS=.claude\skills\code-trace-tree\scripts"
+%SKILL_SCRIPTS%\trace_tree.bat search
+%SKILL_SCRIPTS%\trace_tree.bat add --file src\A.java --line 10 --content "void methodA() {" --name methodA
+%SKILL_SCRIPTS%\trace_tree.bat move --id <uuid> --parent "[]"
+%SKILL_SCRIPTS%\trace_tree.bat delete --file src\A.java --line 10 --content "void methodA() {"
 REM After editing source on disk:
-scripts\trace_tree.bat rebind
-scripts\trace_tree.bat rebind --file src\A.java
+%SKILL_SCRIPTS%\trace_tree.bat rebind
+%SKILL_SCRIPTS%\trace_tree.bat rebind --file src\A.java
 ```
 
-Shared flags: `--project`, `--profile`, `--dry-run`, `--no-refresh`.  
 Default profile: Claude Assist target when enabled (`CLAUDE` / active); otherwise `<activeProfileName>`.
 
 **Rebind after disk edits:** Claude does not edit through the IDE editor, so live line shifting does not apply. After any turn that modified project source, run `trace_tree rebind` (optionally `--file` for touched paths) before relying on locators or select/navigate. Rebind repairs `lineNumber` from trimmed `lineContent` and recomputes occurrences.
@@ -128,27 +153,29 @@ IntelliJ (with the plugin loaded) reloads the bound XML, refreshes the Code Trac
 
 ## Additional resources
 
+All under the skill’s `scripts/` directory (see Skill scripts location):
+
 - XML schema details: [references/data-format.md](references/data-format.md)
-- Resolve storage: `scripts/resolve_storage.sh` (macOS/Linux) or `scripts/resolve_storage.bat` (Windows)
-- Trace tree ops: `scripts/trace_tree.sh` / `scripts/trace_tree.bat` → `trace_tree.py`
-- Request IDE refresh: `scripts/request_refresh.sh` (macOS/Linux) or `scripts/request_refresh.bat` (Windows)
-- Select / navigate: `scripts/select_trace_points.sh` (macOS/Linux) or `scripts/select_trace_points.bat` (Windows)
+- Resolve storage: `resolve_storage.sh` / `resolve_storage.bat`
+- Trace tree ops: `trace_tree.sh` / `trace_tree.bat` → `trace_tree.py`
+- Request IDE refresh: `request_refresh.sh` / `request_refresh.bat`
+- Select / navigate: `select_trace_points.sh` / `select_trace_points.bat`
 
 ## Edit plugin data action
 
-1. **Resolve** the project id + global XML (`resolve_storage.sh` / `resolve_storage.bat`).
+1. **Resolve** the project id + global XML (skill `scripts/resolve_storage.sh` / `.bat`; see Skill scripts location).
 2. **Read** the XML. Schema: [references/data-format.md](references/data-format.md).
 3. **Edit** carefully (see rules below). Prefer atomic write: write `*.xml.tmp` then replace.
 4. **Refresh IDE** so IntelliJ reloads in-memory state:
 
 ```bash
 # macOS / Linux
-bash scripts/request_refresh.sh
+bash ~/.claude/skills/code-trace-tree/scripts/request_refresh.sh
 ```
 
 ```bat
 REM Windows
-scripts\request_refresh.bat
+%USERPROFILE%\.claude\skills\code-trace-tree\scripts\request_refresh.bat
 ```
 
 Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh request after agent edits so reload is explicit.
