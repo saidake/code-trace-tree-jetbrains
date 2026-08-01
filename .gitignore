@@ -4,3 +4,11 @@
 .qodana
 build
 .kotlin
+dist/
+
+# Generated from skills/code-trace-tree via: python skills/package_skills.py --sync
+.claude/skills/code-trace-tree/
+.cursor/skills/code-trace-tree/
+.github/skills/code-trace-tree/
+.agents/skills/code-trace-tree/
+.gemini/skills/code-trace-tree/
