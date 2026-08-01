@@ -33,6 +33,9 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.wm.ToolWindowId
 import com.intellij.openapi.wm.ToolWindowManager
@@ -48,6 +51,11 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 @Service(Service.Level.PROJECT)
 class TracePointService(private val project: Project) {
@@ -56,6 +64,7 @@ class TracePointService(private val project: Project) {
         const val DEFAULT_PROFILE_NAME = "main"
         const val CLAUDE_PROFILE_NAME = "CLAUDE"
         private const val SELF_WRITE_IGNORE_MS = 1500L
+        private const val EXTERNAL_REBIND_DEBOUNCE_MS = 350L
         private val LOG = Logger.getInstance(TracePointService::class.java)
     }
 
@@ -157,12 +166,20 @@ class TracePointService(private val project: Project) {
     @Volatile
     private var ignoreExternalChangesUntilMs = 0L
     private var externalStorageWatcher: ExternalStorageWatcher? = null
+    private val pendingExternalRebindPaths = ConcurrentHashMap.newKeySet<String>()
+    private val externalRebindExecutor = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "code-trace-tree-rebind-debounce").apply { isDaemon = true }
+    }
+    @Volatile
+    private var externalRebindFuture: ScheduledFuture<*>? = null
 
     init {
         loadFromHybridStorage()
         startExternalStorageWatcher()
 
         Disposer.register(project, Disposable {
+            externalRebindFuture?.cancel(false)
+            externalRebindExecutor.shutdownNow()
             externalStorageWatcher?.close()
             externalStorageWatcher = null
             persistNow()
@@ -175,6 +192,28 @@ class TracePointService(private val project: Project) {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
+                }
+            }
+        )
+
+        // External disk edits (e.g. Claude) — content rebind when no DocumentListener is active
+        project.messageBus.connect(project).subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    if (isFileSystemRefreshing) return
+                    var scheduled = false
+                    for (event in events) {
+                        if (event !is VFileContentChangeEvent) continue
+                        val file = event.file
+                        if (monitoredDocuments.containsKey(file)) continue
+                        val relativePath = relativeProjectPath(file) ?: continue
+                        val nodes = fileNodesMap[relativePath] ?: continue
+                        if (nodes.none { it.tracePoint.traceType == TraceType.LINE }) continue
+                        pendingExternalRebindPaths.add(relativePath)
+                        scheduled = true
+                    }
+                    if (scheduled) scheduleExternalContentRebind()
                 }
             }
         )
@@ -201,6 +240,96 @@ class TracePointService(private val project: Project) {
                 }
             }
         }, project)
+    }
+
+    private fun relativeProjectPath(file: VirtualFile): String? {
+        val basePath = project.basePath ?: return null
+        val prefix = "$basePath/"
+        return file.path.removePrefix(prefix).takeIf { it != file.path }
+            ?: file.path.removePrefix(basePath.replace('\\', '/') + "/").takeIf { it != file.path }
+    }
+
+    private fun scheduleExternalContentRebind() {
+        externalRebindFuture?.cancel(false)
+        externalRebindFuture = externalRebindExecutor.schedule({
+            ApplicationManager.getApplication().invokeLater {
+                if (project.isDisposed) return@invokeLater
+                val paths = pendingExternalRebindPaths.toSet()
+                pendingExternalRebindPaths.clear()
+                if (paths.isEmpty()) return@invokeLater
+                val changed = rebindLineNodesForPaths(paths)
+                if (changed) {
+                    FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+                    notifyListeners()
+                }
+            }
+        }, EXTERNAL_REBIND_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * Content-based LINE rebind for external disk edits (Claude / other tools).
+     * Does not use DocumentListener offset math.
+     */
+    private fun rebindLineNodesForPaths(relativePaths: Set<String>): Boolean {
+        var changed = false
+        ApplicationManager.getApplication().runReadAction {
+            for (relativePath in relativePaths) {
+                val nodes = fileNodesMap[relativePath] ?: continue
+                val basePath = project.basePath ?: continue
+                val file = VirtualFileManager.getInstance()
+                    .findFileByUrl("file:///$basePath/$relativePath") ?: continue
+                val doc = FileDocumentManager.getInstance().getDocument(file) ?: continue
+                val lines = doc.text.split("\n")
+                for (node in nodes) {
+                    if (node.tracePoint.traceType != TraceType.LINE) continue
+                    val rebound = rebindLineTracePoint(node.tracePoint, lines)
+                    if (rebound != node.tracePoint) {
+                        node.tracePoint = rebound
+                        changed = true
+                    }
+                }
+            }
+        }
+        return changed
+    }
+
+    /**
+     * Shared LINE rebind rules (script `trace_tree rebind` + load validate + VFS).
+     * 1 exact, 2 unique content, 3 stable occurrence, 4 nearest match, else invalid.
+     */
+    private fun rebindLineTracePoint(tp: TracePoint, lines: List<String>): TracePoint {
+        val content = tp.lineContent?.trim()
+        if (content.isNullOrEmpty()) {
+            return tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
+        }
+        val matches = lines.mapIndexedNotNull { i, line ->
+            if (line.trim() == content) i + 1 else null
+        }
+        val total = matches.size
+        if (total == 0) {
+            return tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
+        }
+
+        val oldLine = tp.lineNumber
+        val (newLine, newIndex) = when {
+            oldLine in 1..lines.size && lines[oldLine - 1].trim() == content -> {
+                oldLine to (matches.indexOf(oldLine) + 1)
+            }
+            total == 1 -> matches[0] to 1
+            total == tp.totalOccurrences && tp.occurrenceIndex in 1..total -> {
+                matches[tp.occurrenceIndex - 1] to tp.occurrenceIndex
+            }
+            else -> {
+                val nearest = matches.minByOrNull { abs(it - oldLine) }!!
+                nearest to (matches.indexOf(nearest) + 1)
+            }
+        }
+        return tp.copy(
+            lineNumber = newLine,
+            totalOccurrences = total,
+            occurrenceIndex = newIndex,
+            isValid = true
+        )
     }
 
     private fun loadFromHybridStorage() {
@@ -702,22 +831,8 @@ class TracePointService(private val project: Project) {
                             node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                             return
                         }
-
                         val lines = doc.text.split("\n")
-                        if (tp.lineNumber <= lines.size && lines[tp.lineNumber - 1].trim() == tp.lineContent.trim()) {
-                            return
-                        }
-
-                        val (total, matches) = getLineOccurrences(doc, tp.lineContent)
-                        if (total == tp.totalOccurrences && tp.occurrenceIndex in 1..total) {
-                            node.tracePoint = tp.copy(
-                                lineNumber = matches[tp.occurrenceIndex - 1],
-                                totalOccurrences = total,
-                                isValid = true
-                            )
-                        } else {
-                            node.tracePoint = tp.copy(isValid = false, totalOccurrences = total, occurrenceIndex = 0)
-                        }
+                        node.tracePoint = rebindLineTracePoint(tp, lines)
                     }
                 }
             }

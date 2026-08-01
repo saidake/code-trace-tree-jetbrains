@@ -5,6 +5,8 @@ description: >
   Use when the user asks to add/update/remove trace points (line, file, or directory), inspect or
   modify Code Trace Tree profiles, sync agent-written traces into the IDE, notify IntelliJ IDEA
   to reload plugin data, or select/navigate to trace points in the IDE tree.
+  Prefer scripts/trace_tree.py for search/add/move/delete/rebind (locator [file,line,content]; no occurrence args).
+  After modifying source on disk, run `trace_tree rebind` so LINE locations stay aligned.
   When `<claudeAssistEnabled>` is true, auto-sync topic-related traces each turn that touched code.
 ---
 
@@ -62,18 +64,60 @@ REM optional: scripts\resolve_storage.bat C:\path\to\project
 | `FILE` | Path exists and is a file |
 | `DIRECTORY` | Path exists and is a directory |
 
-For `LINE` nodes, set accurate trimmed `lineContent`, `lineNumber`, `totalOccurrences`, and `occurrenceIndex` so the plugin can re-bind after code moves. Details: [references/data-format.md](references/data-format.md).
+For `LINE` nodes, prefer the `trace_tree` scripts (they set `totalOccurrences` / `occurrenceIndex` automatically). Do **not** ask Claude to compute occurrence fields. Details: [references/data-format.md](references/data-format.md).
+
+## Trace tree ops
+
+Use `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, and delete nodes. Identify **LINE** nodes with a locator `[file, line, content]` — never pass occurrence fields.
+
+**Parent path**: JSON array of LINE locators from rootward ancestor → immediate parent. `[]` = root.
+
+```text
+method A def
+  method B call
+    method B def   ← add with parent [[A file,line,content],[B-call file,line,content]]
+```
+
+```bash
+# macOS / Linux
+bash scripts/trace_tree.sh search
+bash scripts/trace_tree.sh add --file src/A.java --line 10 --content 'void methodA() {' --name 'methodA'
+bash scripts/trace_tree.sh add src/B.java 40 'void methodB() {' \
+  --parent '[["src/A.java",10,"void methodA() {"],["src/A.java",12,"methodB();"]]' \
+  --name 'methodB'
+bash scripts/trace_tree.sh move --file src/B.java --line 40 --content 'void methodB() {' --parent '[]'
+bash scripts/trace_tree.sh delete --id <uuid>
+# After editing source on disk (IDE DocumentListener will NOT run):
+bash scripts/trace_tree.sh rebind
+bash scripts/trace_tree.sh rebind --file src/A.java --file src/B.java
+```
+
+```bat
+REM Windows
+scripts\trace_tree.bat search
+scripts\trace_tree.bat add --file src\A.java --line 10 --content "void methodA() {" --name methodA
+scripts\trace_tree.bat move --id <uuid> --parent "[]"
+scripts\trace_tree.bat delete --file src\A.java --line 10 --content "void methodA() {"
+REM After editing source on disk:
+scripts\trace_tree.bat rebind
+scripts\trace_tree.bat rebind --file src\A.java
+```
+
+Shared flags: `--project`, `--profile`, `--dry-run`, `--no-refresh`.  
+Default profile: Claude Assist target when enabled (`CLAUDE` / active); otherwise `<activeProfileName>`.
+
+**Rebind after disk edits:** Claude does not edit through the IDE editor, so live line shifting does not apply. After any turn that modified project source, run `trace_tree rebind` (optionally `--file` for touched paths) before relying on locators or select/navigate. Rebind repairs `lineNumber` from trimmed `lineContent` and recomputes occurrences.
 
 ## Safe operations
 
 | Goal | How |
 |------|-----|
-| List traces | Parse active profile’s `<tracePointNodes>` |
-| Add root | Append a root `<tracePointNode>` with empty `<parentId>` |
-| Add child | Append under parent’s `<children>`, set `<parentId>` |
-| Update location | Change `tracePath` / `baseName` / `traceName` / (`lineNumber` / `lineContent` for `LINE`) |
-| Remove node | Delete the node and its `<children>` subtree |
-| Switch profile | Set `<activeProfileName>` to an existing profile `<name>` |
+| List / find traces | `trace_tree search` (or parse profile XML) |
+| Add root / child | `trace_tree add` with `--parent` path (prefer over hand-editing XML) |
+| Reparent node | `trace_tree move` |
+| Remove node + subtree | `trace_tree delete` |
+| Repair lines after source edits | `trace_tree rebind` (required after Claude disk edits) |
+| Switch profile | Set `<activeProfileName>` or pass `--profile` to scripts |
 
 ## After refresh
 
@@ -83,6 +127,7 @@ IntelliJ (with the plugin loaded) reloads the bound XML, refreshes the Code Trac
 
 - XML schema details: [references/data-format.md](references/data-format.md)
 - Resolve storage: `scripts/resolve_storage.sh` (macOS/Linux) or `scripts/resolve_storage.bat` (Windows)
+- Trace tree ops: `scripts/trace_tree.sh` / `scripts/trace_tree.bat` → `trace_tree.py`
 - Request IDE refresh: `scripts/request_refresh.sh` (macOS/Linux) or `scripts/request_refresh.bat` (Windows)
 - Select / navigate: `scripts/select_trace_points.sh` (macOS/Linux) or `scripts/select_trace_points.bat` (Windows)
 
@@ -105,6 +150,20 @@ scripts\request_refresh.bat
 
 Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh request after agent edits so reload is explicit.
 
+## Edit rules
+
+- Keep `<project version="4">`, `<projectId>`, and `<path>` unless you intentionally rebind storage.
+- Bump `<updatedAt>` to the current epoch milliseconds when you change content.
+- Every `<tracePoint>` needs `<traceType>`: `LINE`, `FILE`, or `DIRECTORY`.
+- `traceName` is the user label; `baseName` is the last path segment; `tracePath` is **relative to the project root** (forward slashes preferred).
+- For `LINE`: store trimmed `lineContent` and 1-based `lineNumber`. Prefer `trace_tree` scripts so `totalOccurrences` / `occurrenceIndex` are computed automatically.
+- For `FILE` / `DIRECTORY`: omit line fields; `tracePath` is the file or directory path.
+- Every `<tracePointNode>` needs `<id>` (UUID) and `<parentId>` (empty for roots).
+- Nest children under `<children>`; child `parentId` must equal the parent node id.
+- Do **not** persist `isValid` (runtime-only).
+- Do not delete unrelated profiles. Default profile name is `main`.
+- If the IDE has the project open, finish XML edits **before** writing the refresh request.
+
 ## Claude Assist action
 
 Check project XML flags after resolving storage:
@@ -116,27 +175,14 @@ Check project XML flags after resolving storage:
 
 When **enabled** and the current turn **touched code** (read, edited, or discussed concrete source for the topic):
 
-1. Resolve the target profile (`CURRENT` or `CLAUDE`; create `CLAUDE` if missing and set it active when using that target).
-2. Add, update, or delete trace points for the **discussed topic** only (follow Preferred code workflow format).
-3. Add short `<description>` notes when extra context helps; keep `traceName` concise.
-4. Do not rewrite unrelated nodes or other profiles.
-5. Finish with the usual refresh request (and select/navigate when a single new node should be shown).
+1. Resolve the target profile (`CURRENT` or `CLAUDE`; `trace_tree` honors assist flags by default).
+2. Use `trace_tree add` / `move` / `delete` for the **discussed topic** only (follow Preferred code workflow format). Prefer scripts over hand-editing occurrence fields.
+3. After modifying source files, run `trace_tree rebind` (with `--file` for touched paths when possible) so LINE locations track the new text.
+4. Add short `--description` notes when extra context helps; keep `--name` concise.
+5. Do not rewrite unrelated nodes or other profiles.
+6. Scripts refresh the IDE by default; use select/navigate when a single new node should be shown.
 
 When **disabled**, only edit traces if the user explicitly asks.
-
-## Edit rules
-
-- Keep `<project version="4">`, `<projectId>`, and `<path>` unless you intentionally rebind storage.
-- Bump `<updatedAt>` to the current epoch milliseconds when you change content.
-- Every `<tracePoint>` needs `<traceType>`: `LINE`, `FILE`, or `DIRECTORY`.
-- `traceName` is the user label; `baseName` is the last path segment; `tracePath` is **relative to the project root** (forward slashes preferred).
-- For `LINE`: store trimmed `lineContent`, 1-based `lineNumber`, `totalOccurrences`, and `occurrenceIndex`.
-- For `FILE` / `DIRECTORY`: omit line fields; `tracePath` is the file or directory path.
-- Every `<tracePointNode>` needs `<id>` (UUID) and `<parentId>` (empty for roots).
-- Nest children under `<children>`; child `parentId` must equal the parent node id.
-- Do **not** persist `isValid` (runtime-only).
-- Do not delete unrelated profiles. Default profile name is `main`.
-- If the IDE has the project open, finish XML edits **before** writing the refresh request.
 
 ## Select / navigate in the IDE action
 

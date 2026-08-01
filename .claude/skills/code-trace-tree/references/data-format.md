@@ -111,9 +111,10 @@ Line comparisons always use trimmed text: `documentLine.trim() == lineContent.tr
 
 For agent-written `LINE` nodes:
 
-1. Store **trimmed** `lineContent`.
-2. Count matching trimmed lines → `totalOccurrences`.
-3. Set `occurrenceIndex` (1-based) and `lineNumber` to the intended match.
+1. Prefer `scripts/trace_tree.py` (`add` / `move` / `delete` / `rebind`) with locator `[file, line, trimmed content]` — do **not** pass occurrence fields.
+2. The script stores **trimmed** `lineContent`, verifies the line text, then sets `totalOccurrences` / `occurrenceIndex` by scanning the file.
+3. After Claude edits source on disk, run `trace_tree rebind` so `lineNumber` tracks moved content (IDE DocumentListener does not see agent edits).
+4. If editing XML by hand: count matching trimmed lines → `totalOccurrences`; set `occurrenceIndex` (1-based) for the intended `lineNumber`.
 
 ## Claude Assist flags
 

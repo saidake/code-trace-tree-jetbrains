@@ -19,7 +19,7 @@
 ![](docs/assets/preview.png)
 
 <!-- Plugin description -->
-<h3>How to use</h3>
+<h1>How to use</h1>
 <ol>
   <li>Open the <b>Code Trace Tree</b> tool window (right side of the IDE).</li>
   <li>Use the <b>Profile</b> selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.</li>
@@ -42,7 +42,7 @@
   <li>Use the tool window toolbar to expand/collapse, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
 </ol>
 
-<h3>Storage</h3>
+<h1>Storage</h1>
 <p>Trace data is stored in a shared global folder:</p>
 <ul>
   <li>Windows: <code>%LOCALAPPDATA%\code-trace-tree</code></li>
@@ -62,7 +62,18 @@
   See <code>.claude/skills/code-trace-tree/</code> for the Claude Code skill and helper scripts.
 </p>
 
-<h3>Install Claude Skill (Linux &amp; macOS)</h3>
+<h1>Claude Skill</h1>
+<p>The Claude Skill lets Claude Code:</p>
+<ul>
+  <li>Resolve the bound global storage XML for the project</li>
+  <li>Search, add, move, and delete trace points</li>
+  <li>Rebind line locations after source edits on disk</li>
+  <li>Ask the IDE to reload / refresh plugin data</li>
+  <li>Select or navigate to nodes in the Code Trace Tree tool window</li>
+  <li>Auto-sync topic-related traces when <b>Claude Assist</b> is enabled</li>
+</ul>
+
+<h2>Install Claude Skill (Linux &amp; macOS)</h2>
 <p>
   Download the Code Trace Tree Claude Skill <code>zip</code> file, and extract it into your Claude skills directory.
 </p>
@@ -77,6 +88,22 @@ mkdir -p .claude/skills
 unzip code-trace-tree-skill-1.1.1.zip -d .claude/skills/
 rm code-trace-tree-skill-1.1.1.zip
 </code></pre>
+
+<h2>Install Claude Skill (Windows)</h2>
+<p>
+  Download the Code Trace Tree Claude Skill <code>zip</code> file, and extract it into your Claude skills directory.
+</p>
+<p>For a global installation using PowerShell:</p>
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip" -OutFile "code-trace-tree-skill-1.1.1.zip"
+Expand-Archive -Path "code-trace-tree-skill-1.1.1.zip" -DestinationPath "$HOME\.claude\skills"
+Remove-Item "code-trace-tree-skill-1.1.1.zip"
+</code></pre>
+<p>For a project-level installation using PowerShell:</p>
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip" -OutFile "code-trace-tree-skill-1.1.1.zip"
+New-Item -ItemType Directory -Force -Path ".claude\skills"
+Expand-Archive -Path "code-trace-tree-skill-1.1.1.zip" -DestinationPath ".claude\skills"
+Remove-Item "code-trace-tree-skill-1.1.1.zip"
+</code></pre>
 <!-- Plugin description end -->
 
 # Development
@@ -84,35 +111,6 @@ rm code-trace-tree-skill-1.1.1.zip
 - JDK 21
 - Open the project root in IntelliJ IDEA and import as a Gradle project
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
-
-# Claude skill (agent access)
-
-Download `code-trace-tree-skill-<version>.zip` from the [GitHub Releases](https://github.com/saidake/code-trace-tree-jetbrains/releases) page, then install:
-
-```bash
-# Personal (all projects)
-unzip code-trace-tree-skill-1.1.1.zip -d ~/.claude/skills/
-
-# Or project-local
-mkdir -p .claude/skills
-unzip code-trace-tree-skill-1.1.1.zip -d .claude/skills/
-```
-
-Then in a project that uses Code Trace Tree:
-
-```bash
-# macOS / Linux
-bash ~/.claude/skills/code-trace-tree/scripts/resolve_storage.sh
-bash ~/.claude/skills/code-trace-tree/scripts/request_refresh.sh
-bash ~/.claude/skills/code-trace-tree/scripts/select_trace_points.sh <id> [id...]
-```
-
-```bat
-REM Windows
-%USERPROFILE%\.claude\skills\code-trace-tree\scripts\resolve_storage.bat
-%USERPROFILE%\.claude\skills\code-trace-tree\scripts\request_refresh.bat
-%USERPROFILE%\.claude\skills\code-trace-tree\scripts\select_trace_points.bat <id> [id...]
-```
 
 # Contributing
 
