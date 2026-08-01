@@ -5,6 +5,7 @@ description: >
   Use when the user asks to add/update/remove trace points (line, file, or directory), inspect or
   modify Code Trace Tree profiles, sync agent-written traces into the IDE, notify IntelliJ IDEA
   to reload plugin data, or select/navigate to trace points in the IDE tree.
+  When `<claudeAssistEnabled>` is true, auto-sync topic-related traces each turn that touched code.
 ---
 
 # Code Trace Tree
@@ -42,9 +43,14 @@ REM optional: scripts\resolve_storage.bat C:\path\to\project
 
 ## Preferred code workflow format
 
-* When generating a code workflow, trace points with parent-child relationships should have a close nesting level.
-  For example, if the parent node represents a method, its direct child nodes should represent methods called within that method.
-* Keep trace point names simple and concise, and add descriptions when additional context is needed.
+* When generating a code workflow, trace points with parent-child relationships should follow a clear nesting structure.
+  For example, if the parent node represents a method, its direct child nodes should represent methods called within that method, and their direct child nodes should point to the corresponding method definitions.
+  Example:
+       method A definition
+         - method B call
+           - method B definition
+
+* Keep trace point names simple and concise. Add descriptions only when additional context is needed.
 
 ## Content matching and `isValid`
 
@@ -98,6 +104,25 @@ scripts\request_refresh.bat
 ```
 
 Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh request after agent edits so reload is explicit.
+
+## Claude Assist action
+
+Check project XML flags after resolving storage:
+
+| Flag | Meaning |
+|------|---------|
+| `claudeAssistEnabled` | `true` → Claude may mutate traces; `false`/missing → do **not** auto-sync |
+| `claudeAssistTarget` | `CURRENT` → edit `<activeProfileName>`; `CLAUDE` → edit/create profile named `CLAUDE` |
+
+When **enabled** and the current turn **touched code** (read, edited, or discussed concrete source for the topic):
+
+1. Resolve the target profile (`CURRENT` or `CLAUDE`; create `CLAUDE` if missing and set it active when using that target).
+2. Add, update, or delete trace points for the **discussed topic** only (follow Preferred code workflow format).
+3. Add short `<description>` notes when extra context helps; keep `traceName` concise.
+4. Do not rewrite unrelated nodes or other profiles.
+5. Finish with the usual refresh request (and select/navigate when a single new node should be shown).
+
+When **disabled**, only edit traces if the user explicitly asks.
 
 ## Edit rules
 

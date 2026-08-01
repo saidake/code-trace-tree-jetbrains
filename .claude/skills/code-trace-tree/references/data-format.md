@@ -13,6 +13,8 @@ Root document (`version="4"`) stored under global central storage.
   <activeProfileName>main</activeProfileName>
   <highlightingEnabled>true</highlightingEnabled>
   <namePromptEnabled>true</namePromptEnabled>
+  <claudeAssistEnabled>false</claudeAssistEnabled>
+  <claudeAssistTarget>CURRENT</claudeAssistTarget>
   <traceProfiles>
     <traceProfile>
       <name>main</name>
@@ -112,6 +114,15 @@ For agent-written `LINE` nodes:
 1. Store **trimmed** `lineContent`.
 2. Count matching trimmed lines → `totalOccurrences`.
 3. Set `occurrenceIndex` (1-based) and `lineNumber` to the intended match.
+
+## Claude Assist flags
+
+| Element | Values | Meaning |
+|---------|--------|---------|
+| `claudeAssistEnabled` | `true` / `false` (default `false`) | When true, Claude may auto-sync topic-related traces |
+| `claudeAssistTarget` | `CURRENT` (default) or `CLAUDE` | Write into the active profile, or the dedicated `CLAUDE` profile |
+
+Missing elements mean assist is off and target is `CURRENT`.
 
 ## Import/export
 

@@ -39,6 +39,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import com.pidifa.codetracetree.domain.enums.TraceType
+import com.pidifa.codetracetree.storage.ClaudeAssistTarget
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectIdFiles
@@ -53,6 +54,7 @@ class TracePointService(private val project: Project) {
 
     companion object {
         const val DEFAULT_PROFILE_NAME = "main"
+        const val CLAUDE_PROFILE_NAME = "CLAUDE"
         private const val SELF_WRITE_IGNORE_MS = 1500L
         private val LOG = Logger.getInstance(TracePointService::class.java)
     }
@@ -141,6 +143,8 @@ class TracePointService(private val project: Project) {
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
     private var isNamePromptEnabled = true
+    private var isClaudeAssistEnabled = false
+    private var claudeAssistTarget: ClaudeAssistTarget = ClaudeAssistTarget.CURRENT
 
     private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
     private var activeProfileName: String = DEFAULT_PROFILE_NAME
@@ -305,6 +309,8 @@ class TracePointService(private val project: Project) {
         isHighlightingEnabled = doc.highlightingEnabled
         isDescriptionAreaOpened = doc.descriptionAreaOpened
         isNamePromptEnabled = doc.namePromptEnabled
+        isClaudeAssistEnabled = doc.claudeAssistEnabled
+        claudeAssistTarget = doc.claudeAssistTarget
         profiles = doc.profiles.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
@@ -381,7 +387,9 @@ class TracePointService(private val project: Project) {
             activeProfileName = activeProfileName,
             descriptionAreaOpened = isDescriptionAreaOpened,
             highlightingEnabled = isHighlightingEnabled,
-            namePromptEnabled = isNamePromptEnabled
+            namePromptEnabled = isNamePromptEnabled,
+            claudeAssistEnabled = isClaudeAssistEnabled,
+            claudeAssistTarget = claudeAssistTarget
         )
         externalStorageWatcher?.refreshRegistrations()
     }
@@ -391,6 +399,9 @@ class TracePointService(private val project: Project) {
     fun isHighlightingEnabled(): Boolean = isHighlightingEnabled
     fun isDescriptionAreaOpened(): Boolean = isDescriptionAreaOpened
     fun isNamePromptEnabled(): Boolean = isNamePromptEnabled
+    fun isClaudeAssistEnabled(): Boolean = isClaudeAssistEnabled
+    fun getClaudeAssistTarget(): ClaudeAssistTarget = claudeAssistTarget
+
     fun setDescriptionAreaOpened(opened: Boolean) {
         isDescriptionAreaOpened = opened
         schedulePersist()
@@ -399,6 +410,40 @@ class TracePointService(private val project: Project) {
     fun setNamePromptEnabled(enabled: Boolean) {
         isNamePromptEnabled = enabled
         schedulePersist()
+    }
+
+    fun setClaudeAssistEnabled(enabled: Boolean) {
+        isClaudeAssistEnabled = enabled
+        schedulePersist()
+    }
+
+    /**
+     * Enables Claude Assist and persists the chosen target.
+     * For [ClaudeAssistTarget.CLAUDE], creates/switches to the `CLAUDE` profile.
+     */
+    fun enableClaudeAssist(target: ClaudeAssistTarget) {
+        claudeAssistTarget = target
+        isClaudeAssistEnabled = true
+        if (target == ClaudeAssistTarget.CLAUDE) {
+            ensureClaudeProfileActive()
+        }
+        schedulePersist()
+    }
+
+    private fun ensureClaudeProfileActive() {
+        val existing = profiles.find { it.name.equals(CLAUDE_PROFILE_NAME, ignoreCase = true) }
+        if (existing == null) {
+            addProfile(CLAUDE_PROFILE_NAME)
+            return
+        }
+        val wasActive = activeProfileName.equals(existing.name, ignoreCase = true)
+        existing.name = CLAUDE_PROFILE_NAME
+        if (wasActive) {
+            activeProfileName = CLAUDE_PROFILE_NAME
+            notifyProfileListeners()
+        } else {
+            switchProfile(CLAUDE_PROFILE_NAME)
+        }
     }
 
     fun setHighlightingEnabled(enabled: Boolean) {
