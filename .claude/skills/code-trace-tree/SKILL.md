@@ -5,7 +5,7 @@ description: >
   Use when the user asks to add/update/remove trace points (line, file, or directory), inspect or
   modify Code Trace Tree profiles, sync agent-written traces into the IDE, notify IntelliJ IDEA
   to reload plugin data, or select/navigate to trace points in the IDE tree.
-  Prefer scripts/trace_tree.py for search/add/move/delete/rebind (locator [file,line,content]; no occurrence args).
+  Prefer scripts/trace_tree.py for search/add/move/delete/rebind (flexible LINE tips; no occurrence args; idempotent add).
   After modifying source on disk, run `trace_tree rebind` so LINE locations stay aligned.
   When `<claudeAssistEnabled>` is true, auto-sync topic-related traces each turn that touched code.
 ---
@@ -76,6 +76,7 @@ REM optional: ...\resolve_storage.bat C:\path\to\project
 
 * Keep trace point names simple and concise. Add descriptions only when additional context is needed.
 * Prefer **LINE** anchors whose trimmed text is **unique (or rare) in that file**. Avoid generic lines such as `}`, `return;`, or blank-looking braces. Occurrence index is how the plugin and `rebind` restore a line after it moves; duplicate content in the same file makes rebinding fragile.
+* For multi-line calls, pass a **distinctive substring** of the best physical line (e.g. `.handleEmailTriggerRequest(`); the script stores the full trimmed line. Do not invent a logical “call name” that is not on one source line.
 
 ## Content matching and `isValid`
 
@@ -93,7 +94,40 @@ When adding LINE nodes, choose `lineContent` that stands out in the file so occu
 
 ## Trace tree ops
 
-Use the skill’s `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, delete, and rebind nodes. Identify **LINE** nodes with a locator `[file, line, content]` — never pass occurrence fields. Prefer unique `content` within the file (see Preferred code workflow format).
+Use the skill’s `scripts/trace_tree.py` (via `trace_tree.sh` / `trace_tree.bat`) to search, add, move, delete, and rebind nodes. Never pass occurrence fields.
+
+### LINE locators (forgiving)
+
+Stored identity is still `[file, line, full-trimmed-line]`. Callers may pass a **stale line** and/or a **unique substring** of the line; the script resolves against the source file and stores the full trimmed line. `--line` is optional when `content` uniquely resolves.
+
+| Tip | Result |
+|-----|--------|
+| Exact line + full trimmed text | Used as-is |
+| Wrong/stale line + unique content | Line corrected (`unique_exact` / `nearest_exact`) |
+| Distinctive substring (e.g. `.handleEmailTriggerRequest(`) | Anchors the matching line; stores full trimmed text |
+| Multi-line call | Prefer the most distinctive physical line (often the `.methodName(` continuation), not a weak receiver-only line |
+
+JSON output includes `resolve: { reason, needle, resolved }` so you can see what was stored.
+
+**Idempotent add:** If a LINE/FILE/DIRECTORY node with the same identity already exists, `add` returns `"skipped": true` with the existing id (exit 0) instead of erroring. Search first only when you need to inspect the tree; re-adding the same tip is safe.
+
+### Parent path
+
+`--parent` is a JSON array from rootward ancestor → immediate parent (`[]` = root). Each step may be:
+
+| Form | Example |
+|------|---------|
+| Node id (preferred) | `"3d41c2d1-…"` |
+| `[file, content]` | `["src/A.java", "void methodA() {"]` |
+| `[file, line, content]` | `["src/A.java", 10, "void methodA() {"]` |
+
+Tree lookup tolerates stale lines and unique substrings. Prefer **ids from a prior `search`/`add`** for deep trees.
+
+```text
+method A def
+  method B call
+    method B def   ← add with parent [idA, idB]  or  [[file,"…A…"],[file,"…B…"]]
+```
 
 **CLI shape:** `trace_tree.py <subcommand> [flags…]`  
 Shared flags (`--project`, `--profile`, `--dry-run`, `--no-refresh`) may appear **before or after** the subcommand:
@@ -106,25 +140,20 @@ python3 …/scripts/trace_tree.py --project /path/to/project search
 
 Omit `--project` when the process CWD is already inside the IDE project (scripts walk upward to find `.idea` / `.git`).
 
-**Parent path**: JSON array of LINE locators from rootward ancestor → immediate parent. `[]` = root.
-
-```text
-method A def
-  method B call
-    method B def   ← add with parent [[A file,line,content],[B-call file,line,content]]
-```
-
 ```bash
 # macOS / Linux — set SKILL_SCRIPTS to whichever install you use:
 #   global:        ~/.claude/skills/code-trace-tree/scripts
 #   project-local: .claude/skills/code-trace-tree/scripts   (from repo root)
 SKILL_SCRIPTS="${SKILL_SCRIPTS:-.claude/skills/code-trace-tree/scripts}"
 bash "$SKILL_SCRIPTS/trace_tree.sh" search
+# line optional when content uniquely resolves; substring OK for distinctive tips:
+bash "$SKILL_SCRIPTS/trace_tree.sh" add --file src/A.java --content '.handleEmailTriggerRequest(' --name 'handleEmail'
 bash "$SKILL_SCRIPTS/trace_tree.sh" add --file src/A.java --line 10 --content 'void methodA() {' --name 'methodA'
 bash "$SKILL_SCRIPTS/trace_tree.sh" add src/B.java 40 'void methodB() {' \
-  --parent '[["src/A.java",10,"void methodA() {"],["src/A.java",12,"methodB();"]]' \
+  --parent '["'"$PARENT_ID"'"]' \
   --name 'methodB'
-bash "$SKILL_SCRIPTS/trace_tree.sh" move --file src/B.java --line 40 --content 'void methodB() {' --parent '[]'
+# or without ids: --parent '[["src/A.java","void methodA() {"],["src/A.java","methodB();"]]'
+bash "$SKILL_SCRIPTS/trace_tree.sh" move --file src/B.java --content 'void methodB() {' --parent '[]'
 bash "$SKILL_SCRIPTS/trace_tree.sh" delete --id <uuid>
 # After editing source on disk (IDE DocumentListener will NOT run):
 bash "$SKILL_SCRIPTS/trace_tree.sh" rebind
@@ -135,9 +164,9 @@ bash "$SKILL_SCRIPTS/trace_tree.sh" rebind --file src/A.java --file src/B.java
 REM Windows — project-local (from repo root) or set to %%USERPROFILE%%\.claude\skills\code-trace-tree\scripts
 if not defined SKILL_SCRIPTS set "SKILL_SCRIPTS=.claude\skills\code-trace-tree\scripts"
 %SKILL_SCRIPTS%\trace_tree.bat search
-%SKILL_SCRIPTS%\trace_tree.bat add --file src\A.java --line 10 --content "void methodA() {" --name methodA
+%SKILL_SCRIPTS%\trace_tree.bat add --file src\A.java --content ".handleEmailTriggerRequest(" --name handleEmail
 %SKILL_SCRIPTS%\trace_tree.bat move --id <uuid> --parent "[]"
-%SKILL_SCRIPTS%\trace_tree.bat delete --file src\A.java --line 10 --content "void methodA() {"
+%SKILL_SCRIPTS%\trace_tree.bat delete --file src\A.java --content "void methodA() {"
 REM After editing source on disk:
 %SKILL_SCRIPTS%\trace_tree.bat rebind
 %SKILL_SCRIPTS%\trace_tree.bat rebind --file src\A.java
@@ -152,7 +181,7 @@ Default profile: Claude Assist target when enabled (`CLAUDE` / active); otherwis
 | Goal | How |
 |------|-----|
 | List / find traces | `trace_tree search` (or parse profile XML) |
-| Add root / child | `trace_tree add` with `--parent` path (prefer over hand-editing XML) |
+| Add root / child | `trace_tree add` with `--parent` (ids preferred; idempotent if already present) |
 | Reparent node | `trace_tree move` |
 | Remove node + subtree | `trace_tree delete` |
 | Repair lines after source edits | `trace_tree rebind` (required after Claude disk edits) |
