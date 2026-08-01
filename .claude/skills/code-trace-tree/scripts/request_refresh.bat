@@ -36,10 +36,29 @@ echo ERROR: could not locate project root from %START% 1>&2
 exit /b 1
 
 :after_root
-if not exist "%PROJECT_ROOT%\.idea\" mkdir "%PROJECT_ROOT%\.idea"
-set "REQUEST=%PROJECT_ROOT%\.idea\code-trace-tree.refresh-request"
+set "PROJECT_ID="
+if exist "%PROJECT_ROOT%\.idea\code-trace-tree.project.id" (
+  set /p PROJECT_ID=<"%PROJECT_ROOT%\.idea\code-trace-tree.project.id"
+) else if exist "%PROJECT_ROOT%\.vscode\code-trace-tree.project.id" (
+  set /p PROJECT_ID=<"%PROJECT_ROOT%\.vscode\code-trace-tree.project.id"
+)
+if defined PROJECT_ID (
+  for /f "tokens=* delims= " %%A in ("!PROJECT_ID!") do set "PROJECT_ID=%%A"
+)
+if not defined PROJECT_ID (
+  echo ERROR: no project id file. Open the project once in the IDE with the plugin installed. 1>&2
+  exit /b 2
+)
 
-REM Epoch milliseconds via PowerShell (available on modern Windows).
+if defined LOCALAPPDATA (
+  set "APP_DIR=%LOCALAPPDATA%\code-trace-tree"
+) else (
+  set "APP_DIR=%USERPROFILE%\AppData\Local\code-trace-tree"
+)
+set "SIGNALS=%APP_DIR%\signals"
+if not exist "%SIGNALS%\" mkdir "%SIGNALS%"
+set "REQUEST=%SIGNALS%\%PROJECT_ID%.request_refresh"
+
 for /f %%T in ('powershell -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()"') do set "MS=%%T"
 if not defined MS (
   for /f %%T in ('powershell -NoProfile -Command "[int64]((Get-Date).ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds"') do set "MS=%%T"
@@ -47,5 +66,5 @@ if not defined MS (
 
 > "%REQUEST%" echo %MS%
 echo wrote=%REQUEST%
-echo IDE should reload Code Trace Tree data if the project is open with the plugin.
+echo IDE should reload Code Trace Tree data if the project is open with the plugin (signal TTL 60s).
 exit /b 0

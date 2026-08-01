@@ -60,6 +60,7 @@ intellijPlatform {
             <h3>1.1.4</h3>
             <ul>
               <li>Lower IDE compatibility floor to IntelliJ Platform 2024.1 (<code>sinceBuild</code> 241)</li>
+              <li>Move agent refresh/select signals to global <code>signals/&lt;projectId&gt;.*</code> with a 60s TTL (multi-window safe)</li>
             </ul>
             <h3>1.1.3</h3>
             <ul>

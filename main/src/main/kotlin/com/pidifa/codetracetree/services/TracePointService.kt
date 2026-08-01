@@ -42,14 +42,13 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import com.pidifa.codetracetree.domain.enums.TraceType
+import com.pidifa.codetracetree.storage.AgentSignalFiles
 import com.pidifa.codetracetree.storage.ClaudeAssistTarget
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
-import com.pidifa.codetracetree.storage.ProjectIdFiles
 import com.pidifa.codetracetree.storage.ProjectStorage
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.Paths
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -348,11 +347,10 @@ class TracePointService(private val project: Project) {
     }
 
     private fun startExternalStorageWatcher() {
-        val basePath = project.basePath ?: return
-        if (projectStorage == null) return
+        val projectId = projectStorage?.boundProjectId() ?: return
         externalStorageWatcher?.close()
         val watcher = ExternalStorageWatcher(
-            projectBase = Paths.get(basePath),
+            projectId = projectId,
             storageFileProvider = { projectStorage?.boundStorageFile() },
             shouldIgnore = { System.currentTimeMillis() < ignoreExternalChangesUntilMs },
             onExternalChange = { reason ->
@@ -376,7 +374,7 @@ class TracePointService(private val project: Project) {
 
     /**
      * Reloads the bound global XML into memory and refreshes the tool window / highlights.
-     * Called when the storage file changes or `.idea/code-trace-tree.refresh-request` is written.
+     * Called when the storage file changes or a global refresh signal is written.
      */
     fun reloadFromExternalStorage(reason: String = "manual"): Boolean {
         val storage = projectStorage ?: return false
@@ -386,7 +384,6 @@ class TracePointService(private val project: Project) {
         suppressPersist = true
         try {
             applyDocument(doc, validate = true, notifyUi = true)
-            clearRefreshRequestFile()
         } finally {
             suppressPersist = false
         }
@@ -394,14 +391,15 @@ class TracePointService(private val project: Project) {
     }
 
     /**
-     * Selects / reveals trace points listed in `.idea/code-trace-tree.select-request`
-     * (one UUID per line). Deletes the file after reading. When exactly one id resolves
-     * in the current profile, also navigates to its source location.
+     * Selects / reveals trace points listed in the global select signal
+     * (`signals/<projectId>.select_trace_points`, one UUID per line).
+     * TTL-stale files are ignored; fresh signals are left for other windows (TTL cleans up).
+     * When exactly one id resolves in the current profile, also navigates to its source.
      */
     fun handleExternalSelectRequest() {
-        val basePath = project.basePath ?: return
-        val request = ProjectIdFiles.selectRequestPath(Paths.get(basePath))
-        if (!Files.isRegularFile(request)) return
+        val projectId = projectStorage?.boundProjectId() ?: return
+        val request = AgentSignalFiles.selectPath(projectId)
+        if (!AgentSignalFiles.isFresh(request)) return
 
         val requestedIds = try {
             Files.readAllLines(request, StandardCharsets.UTF_8)
@@ -409,11 +407,10 @@ class TracePointService(private val project: Project) {
                 .filter { it.isNotEmpty() }
                 .distinct()
         } catch (e: Exception) {
-            LOG.warn("Code Trace Tree: failed to read select-request $request", e)
-            clearSelectRequestFile()
+            LOG.warn("Code Trace Tree: failed to read select signal $request", e)
             return
         }
-        clearSelectRequestFile()
+        // Leave the signal file for other IDE windows; TTL cleans it up.
 
         val resolved = requestedIds.mapNotNull { getTracePointNodeById(it) }
         if (resolved.isEmpty()) return
@@ -470,26 +467,6 @@ class TracePointService(private val project: Project) {
             notifyProfileListeners()
             val copy = getTracePoints()
             listenersMap[NodeListenerEventType.FULL_UPDATE]?.forEach { it(copy, true) }
-        }
-    }
-
-    private fun clearRefreshRequestFile() {
-        val basePath = project.basePath ?: return
-        val request = ProjectIdFiles.refreshRequestPath(Paths.get(basePath))
-        try {
-            Files.deleteIfExists(request)
-        } catch (e: Exception) {
-            LOG.debug("Could not delete refresh request file $request", e)
-        }
-    }
-
-    private fun clearSelectRequestFile() {
-        val basePath = project.basePath ?: return
-        val request = ProjectIdFiles.selectRequestPath(Paths.get(basePath))
-        try {
-            Files.deleteIfExists(request)
-        } catch (e: Exception) {
-            LOG.debug("Could not delete select request file $request", e)
         }
     }
 

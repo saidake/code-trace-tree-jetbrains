@@ -42,8 +42,8 @@ In examples below, `scripts/...` means that skill path. From a project checkout 
 |-------|----------|
 | Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id` |
 | Global XML | OS config dir + `/code-trace-tree/<FolderName>.xml` |
-| Refresh signal | `.idea/code-trace-tree.refresh-request` |
-| Select signal | `.idea/code-trace-tree.select-request` (one node UUID per line) |
+| Refresh signal | `<global>/code-trace-tree/signals/<projectId>.request_refresh` (TTL 60s) |
+| Select signal | `<global>/code-trace-tree/signals/<projectId>.select_trace_points` (one UUID per line; TTL 60s) |
 
 Global base directory:
 
@@ -189,7 +189,7 @@ Default profile: Claude Assist target when enabled (`CLAUDE` / active); otherwis
 
 ## After refresh
 
-IntelliJ (with the plugin loaded) reloads the bound XML, refreshes the Code Trace Tree tool window, and re-applies highlights. The plugin deletes `.idea/code-trace-tree.refresh-request` after a successful reload.
+IntelliJ (with the plugin loaded) reloads the bound XML, refreshes the Code Trace Tree tool window, and re-applies highlights. All open windows for that projectId watch the shared signals folder. Signal files older than 60s are ignored and removed.
 
 ## Additional resources
 
@@ -218,7 +218,7 @@ REM Windows
 %USERPROFILE%\.claude\skills\code-trace-tree\scripts\request_refresh.bat
 ```
 
-Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh request after agent edits so reload is explicit.
+Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh signal after agent edits so reload is explicit.
 
 ## Edit rules
 
@@ -256,13 +256,13 @@ When **disabled**, only edit traces if the user explicitly asks.
 
 ## Select / navigate in the IDE action
 
-Write node UUIDs (one per line) to `.idea/code-trace-tree.select-request`, or use the helper scripts. The plugin shows the Code Trace Tree tool window, selects and reveals those nodes, then deletes the file.
+Write node UUIDs (one per line) to `signals/<projectId>.select_trace_points`, or use the helper scripts. Every open IDE window for that project watches the signal and selects / reveals those nodes. Stale signals (age > 60s) are ignored.
 
 | Request | Tree | Editor |
 |---------|------|--------|
 | 1 valid id | Select + reveal | Navigate to source |
 | 2+ valid ids | Select + reveal all | No navigation |
-| Unknown ids only | No-op (file still deleted) | No navigation |
+| Unknown ids only | No-op | No navigation |
 
 Use after creating or locating traces when the user should see them in the IDE. Prefer a single id when you want the editor to jump to the source.
 

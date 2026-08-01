@@ -801,10 +801,17 @@ def write_atomic(tree: ET.ElementTree, storage_xml: Path) -> None:
     os.replace(tmp, storage_xml)
 
 
+def signals_dir() -> Path:
+    return global_app_dir() / "signals"
+
+
 def request_refresh(project_root: Path) -> None:
-    idea = project_root / ".idea"
-    idea.mkdir(parents=True, exist_ok=True)
-    req = idea / "code-trace-tree.refresh-request"
+    project_id = read_project_id(project_root)
+    if not project_id:
+        return
+    dest = signals_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    req = dest / f"{project_id}.request_refresh"
     req.write_text(str(int(time.time() * 1000)) + "\n", encoding="utf-8")
 
 
@@ -1251,7 +1258,7 @@ def add_shared_flags(p: argparse.ArgumentParser, *, suppress_defaults: bool = Fa
         "--no-refresh",
         action="store_true",
         default=refresh_default,
-        help="Skip IDE refresh-request",
+        help="Skip IDE refresh signal",
     )
 
 

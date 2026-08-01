@@ -65,10 +65,12 @@
 </p>
 <p>
   External agents can edit the global XML and ask the IDE to reload by writing
-  <code>.idea/code-trace-tree.refresh-request</code> (or by saving the XML while the project is open).
+  <code>signals/&lt;projectId&gt;.request_refresh</code> under the global storage folder
+  (or by saving the XML while the project is open).
   To select nodes in the tool window (and navigate when exactly one id is listed), write one
-  node UUID per line to <code>.idea/code-trace-tree.select-request</code>.
-  See <code>.claude/skills/code-trace-tree/</code> for the Claude Code skill and helper scripts.
+  node UUID per line to <code>signals/&lt;projectId&gt;.select_trace_points</code>.
+  Signal files expire after 60 seconds. All open IDE windows for that project watch the same
+  signals folder. See <code>.claude/skills/code-trace-tree/</code> for the Claude Code skill and helper scripts.
 </p>
 
 <h1>Claude Skill</h1>

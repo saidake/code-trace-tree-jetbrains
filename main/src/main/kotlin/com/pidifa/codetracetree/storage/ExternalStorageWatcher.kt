@@ -29,16 +29,17 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Watches the bound global project XML, `.idea/code-trace-tree.refresh-request`,
- * and `.idea/code-trace-tree.select-request` so external agents can edit storage,
- * ask the IDE to reload, or select/navigate trace points.
+ * Watches the bound global project XML and this project's signal files under
+ * `<appDir>/signals/` so external agents can edit storage, ask the IDE to reload,
+ * or select/navigate trace points. Each watcher only reacts to
+ * `<projectId>.request_refresh` / `<projectId>.select_trace_points`.
  */
 class ExternalStorageWatcher(
-    private val projectBase: Path,
+    private val projectId: String,
     private val storageFileProvider: () -> Path?,
     private val shouldIgnore: () -> Boolean,
     private val onExternalChange: (reason: String) -> Unit,
-    private val onSelectRequest: () -> Unit
+    private val onSelectRequest: () -> Unit,
 ) : AutoCloseable {
     private val log = Logger.getInstance(ExternalStorageWatcher::class.java)
     private val closed = AtomicBoolean(false)
@@ -57,8 +58,15 @@ class ExternalStorageWatcher(
             debounceExecutor = Executors.newSingleThreadScheduledExecutor { r ->
                 Thread(r, "code-trace-tree-storage-debounce").apply { isDaemon = true }
             }
-            registerIdeaDir(ws)
+            registerSignalsDir(ws)
             registerStorageDir(ws)
+            // Replay fresh signals written while the IDE was closed; drop stale ones.
+            if (AgentSignalFiles.isFresh(AgentSignalFiles.refreshPath(projectId))) {
+                scheduleReload("refresh-request")
+            }
+            if (AgentSignalFiles.isFresh(AgentSignalFiles.selectPath(projectId))) {
+                scheduleSelect()
+            }
             val thread = Thread({ pollLoop(ws) }, "code-trace-tree-storage-watch").apply {
                 isDaemon = true
                 start()
@@ -75,6 +83,7 @@ class ExternalStorageWatcher(
         val ws = watchService ?: return
         try {
             registerStorageDir(ws)
+            registerSignalsDir(ws)
         } catch (e: Exception) {
             log.debug("Failed to refresh storage watch registrations", e)
         }
@@ -96,10 +105,12 @@ class ExternalStorageWatcher(
         pollThread = null
     }
 
-    private fun registerIdeaDir(ws: WatchService) {
-        val ideaDir = projectBase.resolve(".idea")
-        Files.createDirectories(ideaDir)
-        registerDir(ws, ideaDir)
+    private fun registerSignalsDir(ws: WatchService) {
+        val dir = AgentSignalFiles.signalsDir()
+        Files.createDirectories(dir)
+        if (keys.values.none { it == dir }) {
+            registerDir(ws, dir)
+        }
     }
 
     private fun registerStorageDir(ws: WatchService) {
@@ -145,10 +156,9 @@ class ExternalStorageWatcher(
     }
 
     private fun handleEvent(dir: Path, fileName: String) {
-        val selectName = ProjectIdFiles.SELECT_REQUEST_FILE
-        if (fileName == selectName) {
-            val request = ProjectIdFiles.selectRequestPath(projectBase)
-            if (Files.isRegularFile(request)) {
+        // Signal file names include projectId, so filename match is enough.
+        if (fileName == AgentSignalFiles.selectFileName(projectId)) {
+            if (AgentSignalFiles.isFresh(AgentSignalFiles.selectPath(projectId))) {
                 scheduleSelect()
             }
             return
@@ -156,10 +166,8 @@ class ExternalStorageWatcher(
 
         if (shouldIgnore()) return
 
-        val refreshName = ProjectIdFiles.REFRESH_REQUEST_FILE
-        if (fileName == refreshName) {
-            val request = ProjectIdFiles.refreshRequestPath(projectBase)
-            if (Files.isRegularFile(request)) {
+        if (fileName == AgentSignalFiles.refreshFileName(projectId)) {
+            if (AgentSignalFiles.isFresh(AgentSignalFiles.refreshPath(projectId))) {
                 scheduleReload("refresh-request")
             }
             return
@@ -200,7 +208,7 @@ class ExternalStorageWatcher(
             try {
                 onSelectRequest()
             } catch (e: Exception) {
-                log.warn("Code Trace Tree external select-request failed", e)
+                log.warn("Code Trace Tree external select signal failed", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
