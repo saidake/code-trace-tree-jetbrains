@@ -550,9 +550,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         "When enabled, ask for a name when creating a trace point; when disabled, create with an empty name"
                 })
                 add(ToggleClaudeAssistAction().apply {
-                    templatePresentation.text = "Claude Assist"
+                    templatePresentation.text = "Agent Notes"
                     templatePresentation.description =
-                        "When enabled, Claude may auto-sync topic-related trace points each turn that touched code"
+                        "Allow an external AI agent to auto-sync topic-related traces when it touches code. " +
+                            "This plugin does not include an AI agent—install one separately."
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"

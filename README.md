@@ -15,7 +15,7 @@
 </p>
 <p>
   Pair it with the Agent Skill so Claude Code, Cursor, GitHub Copilot, Codex, or Gemini CLI can search,
-  add, move, and rebind traces, refresh the IDE, and—when <b>Claude Assist</b> is enabled—auto-sync
+  add, move, and rebind traces, refresh the IDE, and—when <b>Agent Notes</b> is enabled—auto-sync
   topic-related workflow points as you discuss code.
   This plugin does <b>not</b> include an AI agent; install your preferred agent separately first, then
   add the Code Trace Tree skill.
@@ -74,7 +74,7 @@
   <li>Rebind line locations after source edits on disk</li>
   <li>Ask the IDE to reload / refresh plugin data</li>
   <li>Select or navigate to nodes in the Code Trace Tree tool window</li>
-  <li>Auto-sync topic-related traces when <b>Claude Assist</b> is enabled in the IDE</li>
+  <li>Auto-sync topic-related traces when <b>Agent Notes</b> is enabled in the IDE</li>
 </ul>
 <p>
   <b>Python required:</b> the main skill ops (<code>trace_tree</code> search / add / move / delete / rebind)

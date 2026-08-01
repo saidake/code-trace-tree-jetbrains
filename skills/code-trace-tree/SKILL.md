@@ -14,16 +14,16 @@ description: >
 
 Operate the hybrid storage used by the Code Trace Tree IDE plugins, then ask the IDE to reload.
 
-## Session startup: check Claude Assist
+## Session startup: check Agent Notes
 
 When this skill is loaded in the current session, resolve the project storage XML and read `<claudeAssistEnabled>` (and `<claudeAssistTarget>`). Keep those values for the rest of the session:
 
 | `claudeAssistEnabled` | Behavior |
 |-----------------------|----------|
-| `true` | Follow [Claude Assist action](#claude-assist-action): auto-sync topic-related traces on turns that touch code |
+| `true` | Follow [Agent Notes action](#agent-notes-action): auto-sync topic-related traces on turns that touch code |
 | `false` or missing | Do **not** auto-sync; only edit traces when the user explicitly asks |
 
-Re-check the flags if the user toggles **Claude Assist** in the IDE during the session (after a refresh / resolve).
+Re-check the flags if the user toggles **Agent Notes** in the IDE during the session (after a refresh / resolve).
 
 ## Skill scripts location
 
@@ -177,7 +177,7 @@ REM After editing source on disk:
 %SKILL_SCRIPTS%\trace_tree.bat rebind --file src\A.java
 ```
 
-Default profile: Claude Assist target when enabled (`CLAUDE` / active); otherwise `<activeProfileName>`.
+Default profile: Agent Notes target when enabled (`AGENT` / active); otherwise `<activeProfileName>`.
 
 **Rebind after disk edits:** Claude does not edit through the IDE editor, so live line shifting does not apply. After any turn that modified project source, run `trace_tree rebind` (optionally `--file` for touched paths) before relying on locators or select/navigate. Rebind repairs `lineNumber` from trimmed `lineContent` and recomputes occurrences.
 
@@ -239,20 +239,20 @@ Editing the global XML alone is usually enough (the plugin watches it). Always w
 - Do not delete unrelated profiles. Default profile name is `main`.
 - If the IDE has the project open, finish XML edits **before** writing the refresh request.
 
-## Claude Assist action
+## Agent Notes action
 
-The IDE toolbar toggle **Claude Assist** (storage flags below) applies to any agent using this skill—not only Claude Code.
+The IDE toolbar toggle **Agent Notes** (storage flags `claudeAssistEnabled` / `claudeAssistTarget` below) applies to any agent using this skill. This plugin does not include an AI agent.
 
 Check project XML flags after resolving storage:
 
 | Flag | Meaning |
 |------|---------|
 | `claudeAssistEnabled` | `true` → the agent may auto-sync topic-related traces; `false`/missing → do **not** auto-sync |
-| `claudeAssistTarget` | `CURRENT` → edit `<activeProfileName>`; `CLAUDE` → edit/create profile named `CLAUDE` |
+| `claudeAssistTarget` | `CURRENT` → edit `<activeProfileName>`; `AGENT` → edit/create profile named `AGENT` (legacy `CLAUDE` is migrated) |
 
 When **enabled** and the current turn **touched code** (read, edited, or discussed concrete source for the topic):
 
-1. Resolve the target profile (`CURRENT` or `CLAUDE`; `trace_tree` honors assist flags by default).
+1. Resolve the target profile (`CURRENT` or `AGENT`; `trace_tree` honors assist flags by default).
 2. Use `trace_tree add` / `move` / `delete` for the **discussed topic** only (follow Preferred code workflow format). Prefer scripts over hand-editing occurrence fields.
 3. After modifying source files, run `trace_tree rebind` (with `--file` for touched paths when possible) so LINE locations track the new text.
 4. Add short `--description` notes when extra context helps; keep `--name` concise.

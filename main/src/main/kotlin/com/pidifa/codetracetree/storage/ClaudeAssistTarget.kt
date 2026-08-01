@@ -17,19 +17,24 @@
 package com.pidifa.codetracetree.storage
 
 /**
- * Where Claude Assist writes traces when enabled.
- * [CURRENT] = the active profile; [CLAUDE] = the dedicated `CLAUDE` profile.
+ * Where Agent Notes writes traces when enabled.
+ * [CURRENT] = the active profile; [AGENT] = the dedicated `AGENT` profile.
+ *
+ * Storage value `CLAUDE` is accepted on read and migrated to [AGENT].
  */
 enum class ClaudeAssistTarget {
     CURRENT,
-    CLAUDE;
+    AGENT;
 
     fun toStorage(): String = name
 
     companion object {
+        /** Legacy storage / profile name before the AGENT rename. */
+        const val LEGACY_CLAUDE = "CLAUDE"
+
         fun fromStorage(raw: String?): ClaudeAssistTarget =
             when (raw?.trim()?.uppercase()) {
-                "CLAUDE" -> CLAUDE
+                "AGENT", LEGACY_CLAUDE -> AGENT
                 else -> CURRENT
             }
     }

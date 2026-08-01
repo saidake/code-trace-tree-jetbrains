@@ -27,13 +27,12 @@ import com.pidifa.codetracetree.storage.ClaudeAssistTarget
 
 class ToggleClaudeAssistAction : ToggleAction(
     null,
-    "Claude Assist",
+    "Agent Notes",
     AllIcons.Actions.IntentionBulb
 ) {
     init {
-        templatePresentation.text = "Claude Assist"
-        templatePresentation.description =
-            "When enabled, Claude may auto-sync topic-related trace points each turn that touched code"
+        templatePresentation.text = "Agent Notes"
+        templatePresentation.description = DESCRIPTION_OFF
     }
 
     override fun isSelected(e: AnActionEvent): Boolean {
@@ -51,16 +50,19 @@ class ToggleClaudeAssistAction : ToggleAction(
 
         val choice = Messages.showDialog(
             project,
-            "Claude will add, update, or remove topic-related trace points and short descriptions " +
-                "each turn that touched code.\n\nWhere should those traces be written?",
-            "Enable Claude Assist",
-            arrayOf("Current Profile", "CLAUDE Profile", "Cancel"),
+            "When Agent Notes is on, an external AI agent (Claude Code, Cursor, Copilot, Codex, Gemini, etc.) " +
+                "may add, update, or remove topic-related trace points and short descriptions " +
+                "each turn that touched code.\n\n" +
+                "This plugin does not include an AI agent—install one separately and add the Code Trace Tree skill.\n\n" +
+                "Where should those traces be written?",
+            "Enable Agent Notes",
+            arrayOf("Current Profile", "AGENT Profile", "Cancel"),
             0,
             Messages.getQuestionIcon()
         )
         when (choice) {
             0 -> service.enableClaudeAssist(ClaudeAssistTarget.CURRENT)
-            1 -> service.enableClaudeAssist(ClaudeAssistTarget.CLAUDE)
+            1 -> service.enableClaudeAssist(ClaudeAssistTarget.AGENT)
             else -> {
                 // Stay disabled (isSelected still false).
             }
@@ -75,15 +77,21 @@ class ToggleClaudeAssistAction : ToggleAction(
             val target = project.service<TracePointService>().getClaudeAssistTarget()
             val targetLabel = when (target) {
                 ClaudeAssistTarget.CURRENT -> "current profile"
-                ClaudeAssistTarget.CLAUDE -> "CLAUDE profile"
+                ClaudeAssistTarget.AGENT -> "AGENT profile"
             }
             e.presentation.description =
-                "Claude Assist is on ($targetLabel). Click to disable auto-sync of topic-related traces."
+                "Agent Notes is on ($targetLabel). Click to disable auto-sync. " +
+                    "This plugin does not include an AI agent—use an external agent with the Code Trace Tree skill."
         } else {
-            e.presentation.description =
-                "When enabled, Claude may auto-sync topic-related trace points each turn that touched code"
+            e.presentation.description = DESCRIPTION_OFF
         }
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+    companion object {
+        private const val DESCRIPTION_OFF =
+            "Allow an external AI agent to auto-sync topic-related traces when it touches code. " +
+                "This plugin does not include an AI agent—install Claude Code, Cursor, Copilot, Codex, or Gemini separately."
+    }
 }

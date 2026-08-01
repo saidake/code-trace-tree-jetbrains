@@ -47,7 +47,7 @@ data class ProjectDocument(
      * When true, Claude (via the skill) may auto-sync topic-related traces each turn that touched code.
      */
     val claudeAssistEnabled: Boolean = false,
-    /** Target profile for Claude Assist: [ClaudeAssistTarget.CURRENT] or [ClaudeAssistTarget.CLAUDE]. */
+    /** Target profile for Agent Notes: [ClaudeAssistTarget.CURRENT] or [ClaudeAssistTarget.AGENT]. */
     val claudeAssistTarget: ClaudeAssistTarget = ClaudeAssistTarget.CURRENT,
     /** Absolute path of the XML file this document was loaded from / should be saved to. */
     val storageFile: Path? = null
@@ -85,7 +85,7 @@ object ProjectDataXml {
             profiles.add(parseProfile(profileEl))
         }
 
-        val activeProfileName = root.getChildTextTrim("activeProfileName")
+        var activeProfileName = root.getChildTextTrim("activeProfileName")
             ?.takeIf { it.isNotBlank() }
             ?: profiles.firstOrNull()?.name
             ?: TracePointService.DEFAULT_PROFILE_NAME
@@ -101,16 +101,20 @@ object ProjectDataXml {
         val claudeAssistTarget =
             ClaudeAssistTarget.fromStorage(root.getChildTextTrim("claudeAssistTarget"))
 
+        val profileList = if (profiles.isEmpty()) {
+            mutableListOf(TracePointService.TraceProfile(name = TracePointService.DEFAULT_PROFILE_NAME))
+        } else {
+            profiles
+        }
+        val (migratedActive, _) = TracePointService.migrateClaudeProfileToAgent(profileList, activeProfileName)
+        activeProfileName = migratedActive
+
         return ProjectDocument(
             version = version,
             projectId = projectId,
             path = path,
             updatedAt = updatedAt,
-            profiles = if (profiles.isEmpty()) {
-                mutableListOf(TracePointService.TraceProfile(name = TracePointService.DEFAULT_PROFILE_NAME))
-            } else {
-                profiles
-            },
+            profiles = profileList,
             activeProfileName = activeProfileName,
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,

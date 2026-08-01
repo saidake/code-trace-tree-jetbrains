@@ -61,6 +61,8 @@ intellijPlatform {
             <ul>
               <li>Lower IDE compatibility floor to IntelliJ Platform 2024.1 (<code>sinceBuild</code> 241)</li>
               <li>Move agent refresh/select signals to global <code>signals/&lt;projectId&gt;.*</code> with a 60s TTL (multi-window safe)</li>
+              <li>Rename toolbar toggle <b>Claude Assist</b> to <b>Agent Notes</b>; clarify the plugin does not include an AI agent</li>
+              <li>Rename dedicated Agent Notes profile from <code>CLAUDE</code> to <code>AGENT</code> (legacy <code>CLAUDE</code> migrates on load)</li>
             </ul>
             <h3>1.1.3</h3>
             <ul>
