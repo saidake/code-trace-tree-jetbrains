@@ -3,8 +3,8 @@ name: code-trace-tree
 description: >
   Read, edit, and refresh Code Trace Tree plugin data (JetBrains / VS Code shared storage).
   Use when the user asks to add/update/remove trace points (line, file, or directory), inspect or
-  modify Code Trace Tree profiles, sync agent-written traces into the IDE, or notify IntelliJ IDEA
-  to reload plugin data.
+  modify Code Trace Tree profiles, sync agent-written traces into the IDE, notify IntelliJ IDEA
+  to reload plugin data, or select/navigate to trace points in the IDE tree.
 ---
 
 # Code Trace Tree
@@ -18,6 +18,7 @@ Operate the hybrid storage used by the Code Trace Tree IDE plugins, then ask the
 | Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id` |
 | Global XML | OS config dir + `/code-trace-tree/<FolderName>.xml` |
 | Refresh signal | `.idea/code-trace-tree.refresh-request` |
+| Select signal | `.idea/code-trace-tree.select-request` (one node UUID per line) |
 
 Global base directory:
 
@@ -77,6 +78,7 @@ IntelliJ (with the plugin loaded) reloads the bound XML, refreshes the Code Trac
 - XML schema details: [references/data-format.md](references/data-format.md)
 - Resolve storage: `scripts/resolve_storage.sh` (macOS/Linux) or `scripts/resolve_storage.bat` (Windows)
 - Request IDE refresh: `scripts/request_refresh.sh` (macOS/Linux) or `scripts/request_refresh.bat` (Windows)
+- Select / navigate: `scripts/select_trace_points.sh` (macOS/Linux) or `scripts/select_trace_points.bat` (Windows)
 
 ## Edit plugin data action
 
@@ -110,3 +112,26 @@ Editing the global XML alone is usually enough (the plugin watches it). Always w
 - Do **not** persist `isValid` (runtime-only).
 - Do not delete unrelated profiles. Default profile name is `main`.
 - If the IDE has the project open, finish XML edits **before** writing the refresh request.
+
+## Select / navigate in the IDE action
+
+Write node UUIDs (one per line) to `.idea/code-trace-tree.select-request`, or use the helper scripts. The plugin shows the Code Trace Tree tool window, selects and reveals those nodes, then deletes the file.
+
+| Request | Tree | Editor |
+|---------|------|--------|
+| 1 valid id | Select + reveal | Navigate to source |
+| 2+ valid ids | Select + reveal all | No navigation |
+| Unknown ids only | No-op (file still deleted) | No navigation |
+
+Use after creating or locating traces when the user should see them in the IDE. Prefer a single id when you want the editor to jump to the source.
+
+```bash
+# macOS / Linux
+bash scripts/select_trace_points.sh <id> [id...]
+```
+
+```bat
+REM Windows
+scripts\select_trace_points.bat <id> [id...]
+```
+

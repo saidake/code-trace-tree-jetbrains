@@ -43,6 +43,7 @@ import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectIdFiles
 import com.pidifa.codetracetree.storage.ProjectStorage
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.*
@@ -227,6 +228,13 @@ class TracePointService(private val project: Project) {
                         reloadFromExternalStorage(reason)
                     }
                 }
+            },
+            onSelectRequest = {
+                ApplicationManager.getApplication().invokeLater {
+                    if (!project.isDisposed) {
+                        handleExternalSelectRequest()
+                    }
+                }
             }
         )
         externalStorageWatcher = watcher
@@ -250,6 +258,47 @@ class TracePointService(private val project: Project) {
             suppressPersist = false
         }
         return true
+    }
+
+    /**
+     * Selects / reveals trace points listed in `.idea/code-trace-tree.select-request`
+     * (one UUID per line). Deletes the file after reading. When exactly one id resolves
+     * in the current profile, also navigates to its source location.
+     */
+    fun handleExternalSelectRequest() {
+        val basePath = project.basePath ?: return
+        val request = ProjectIdFiles.selectRequestPath(Paths.get(basePath))
+        if (!Files.isRegularFile(request)) return
+
+        val requestedIds = try {
+            Files.readAllLines(request, StandardCharsets.UTF_8)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+        } catch (e: Exception) {
+            LOG.warn("Code Trace Tree: failed to read select-request $request", e)
+            clearSelectRequestFile()
+            return
+        }
+        clearSelectRequestFile()
+
+        val resolved = requestedIds.mapNotNull { getTracePointNodeById(it) }
+        if (resolved.isEmpty()) return
+
+        val resolvedIds = resolved.map { it.id }.toSet()
+        val navigateTarget = resolved.singleOrNull()?.tracePoint
+
+        fun applySelection() {
+            revealTracePointsInTree(resolvedIds)
+            navigateTarget?.navigateTo(project)
+        }
+
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Code Trace Tree")
+        if (toolWindow != null) {
+            toolWindow.show { applySelection() }
+        } else {
+            applySelection()
+        }
     }
 
     private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean) {
@@ -296,6 +345,16 @@ class TracePointService(private val project: Project) {
             Files.deleteIfExists(request)
         } catch (e: Exception) {
             LOG.debug("Could not delete refresh request file $request", e)
+        }
+    }
+
+    private fun clearSelectRequestFile() {
+        val basePath = project.basePath ?: return
+        val request = ProjectIdFiles.selectRequestPath(Paths.get(basePath))
+        try {
+            Files.deleteIfExists(request)
+        } catch (e: Exception) {
+            LOG.debug("Could not delete select request file $request", e)
         }
     }
 

@@ -29,14 +29,16 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Watches the bound global project XML and `.idea/code-trace-tree.refresh-request`
- * so external agents can edit storage and ask the IDE to reload.
+ * Watches the bound global project XML, `.idea/code-trace-tree.refresh-request`,
+ * and `.idea/code-trace-tree.select-request` so external agents can edit storage,
+ * ask the IDE to reload, or select/navigate trace points.
  */
 class ExternalStorageWatcher(
     private val projectBase: Path,
     private val storageFileProvider: () -> Path?,
     private val shouldIgnore: () -> Boolean,
-    private val onExternalChange: (reason: String) -> Unit
+    private val onExternalChange: (reason: String) -> Unit,
+    private val onSelectRequest: () -> Unit
 ) : AutoCloseable {
     private val log = Logger.getInstance(ExternalStorageWatcher::class.java)
     private val closed = AtomicBoolean(false)
@@ -45,6 +47,7 @@ class ExternalStorageWatcher(
     private var pollThread: Thread? = null
     private var debounceExecutor: ScheduledExecutorService? = null
     private var pendingReason: String? = null
+    private var selectPending = false
 
     fun start() {
         if (closed.get()) return
@@ -142,6 +145,15 @@ class ExternalStorageWatcher(
     }
 
     private fun handleEvent(dir: Path, fileName: String) {
+        val selectName = ProjectIdFiles.SELECT_REQUEST_FILE
+        if (fileName == selectName) {
+            val request = ProjectIdFiles.selectRequestPath(projectBase)
+            if (Files.isRegularFile(request)) {
+                scheduleSelect()
+            }
+            return
+        }
+
         if (shouldIgnore()) return
 
         val refreshName = ProjectIdFiles.REFRESH_REQUEST_FILE
@@ -175,6 +187,20 @@ class ExternalStorageWatcher(
                 onExternalChange(r)
             } catch (e: Exception) {
                 log.warn("Code Trace Tree external reload failed ($r)", e)
+            }
+        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    private fun scheduleSelect() {
+        selectPending = true
+        val executor = debounceExecutor ?: return
+        executor.schedule({
+            if (closed.get() || !selectPending) return@schedule
+            selectPending = false
+            try {
+                onSelectRequest()
+            } catch (e: Exception) {
+                log.warn("Code Trace Tree external select-request failed", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }

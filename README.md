@@ -57,6 +57,8 @@
 <p>
   External agents can edit the global XML and ask the IDE to reload by writing
   <code>.idea/code-trace-tree.refresh-request</code> (or by saving the XML while the project is open).
+  To select nodes in the tool window (and navigate when exactly one id is listed), write one
+  node UUID per line to <code>.idea/code-trace-tree.select-request</code>.
   See <code>.claude/skills/code-trace-tree/</code> for the Claude Code skill and helper scripts.
 </p>
 
@@ -102,12 +104,14 @@ Then in a project that uses Code Trace Tree:
 # macOS / Linux
 bash ~/.claude/skills/code-trace-tree/scripts/resolve_storage.sh
 bash ~/.claude/skills/code-trace-tree/scripts/request_refresh.sh
+bash ~/.claude/skills/code-trace-tree/scripts/select_trace_points.sh <id> [id...]
 ```
 
 ```bat
 REM Windows
 %USERPROFILE%\.claude\skills\code-trace-tree\scripts\resolve_storage.bat
 %USERPROFILE%\.claude\skills\code-trace-tree\scripts\request_refresh.bat
+%USERPROFILE%\.claude\skills\code-trace-tree\scripts\select_trace_points.bat <id> [id...]
 ```
 
 # Contributing
