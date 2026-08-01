@@ -33,6 +33,7 @@
                 sideTool="false"
         />
         <projectService serviceImplementation="com.pidifa.codetracetree.services.TracePointService"/>
+        <postStartupActivity implementation="com.pidifa.codetracetree.CodeTraceTreeProjectActivity"/>
     </extensions>
 
     <actions>

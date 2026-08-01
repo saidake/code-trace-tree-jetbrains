@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.2"
+val pluginVersion = "1.1.3"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,12 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.3</h3>
+            <ul>
+              <li>Initialize project id and default <code>main</code> profile as soon as a project opens</li>
+              <li>Claude Skill: check <code>claudeAssistEnabled</code> when the skill is loaded in a session</li>
+              <li>Clarify Claude Skill install commands in the Marketplace description</li>
+            </ul>
             <h3>1.1.2</h3>
             <ul>
               <li>Add Claude Assist toolbar toggle to auto-sync topic-related traces into the current or <code>CLAUDE</code> profile</li>

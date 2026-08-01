@@ -14,6 +14,17 @@ description: >
 
 Operate the hybrid storage used by the Code Trace Tree IDE plugins, then ask the IDE to reload.
 
+## Session startup: check Claude Assist
+
+When this skill is loaded in the current session, resolve the project storage XML and read `<claudeAssistEnabled>` (and `<claudeAssistTarget>`). Keep those values for the rest of the session:
+
+| `claudeAssistEnabled` | Behavior |
+|-----------------------|----------|
+| `true` | Follow [Claude Assist action](#claude-assist-action): auto-sync topic-related traces on turns that touch code |
+| `false` or missing | Do **not** auto-sync; only edit traces when the user explicitly asks |
+
+Re-check the flags if the user toggles Claude Assist in the IDE during the session (after a refresh / resolve).
+
 ## Skill scripts location
 
 All helper scripts live in **this skill’s** `scripts/` directory (not the user’s project root):
