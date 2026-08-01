@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.3"
+val pluginVersion = "1.1.4"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.4</h3>
+            <ul>
+              <li>Lower IDE compatibility floor to IntelliJ Platform 2024.1 (<code>sinceBuild</code> 241)</li>
+            </ul>
             <h3>1.1.3</h3>
             <ul>
               <li>Initialize project id and default <code>main</code> profile as soon as a project opens</li>
@@ -135,7 +139,7 @@ intellijPlatform {
         """.trimIndent()
 
         ideaVersion {
-            sinceBuild = "251"
+            sinceBuild = "241" // IntelliJ Platform 2024.1+
             // Open-ended: compatible with all IDE builds from sinceBuild onward (incl. latest)
             untilBuild = provider { null }
         }
