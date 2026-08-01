@@ -87,15 +87,15 @@
   Download the Code Trace Tree Claude Skill <code>zip</code> file, and extract it into your Claude skills directory.
 </p>
 <p>For a global installation:</p>
-<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip -o code-trace-tree-skill-1.1.1.zip
-unzip code-trace-tree-skill-1.1.1.zip -d ~/.claude/skills/
-rm code-trace-tree-skill-1.1.1.zip
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.2/code-trace-tree-skill-1.1.2.zip -o code-trace-tree-skill-1.1.2.zip
+unzip code-trace-tree-skill-1.1.2.zip -d ~/.claude/skills/
+rm code-trace-tree-skill-1.1.2.zip
 </code></pre>
 <p>For a project-level installation:</p>
-<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip -o code-trace-tree-skill-1.1.1.zip
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.2/code-trace-tree-skill-1.1.2.zip -o code-trace-tree-skill-1.1.2.zip
 mkdir -p .claude/skills
-unzip code-trace-tree-skill-1.1.1.zip -d .claude/skills/
-rm code-trace-tree-skill-1.1.1.zip
+unzip code-trace-tree-skill-1.1.2.zip -d .claude/skills/
+rm code-trace-tree-skill-1.1.2.zip
 </code></pre>
 
 <h2>Install Claude Skill (Windows)</h2>
@@ -103,15 +103,15 @@ rm code-trace-tree-skill-1.1.1.zip
   Download the Code Trace Tree Claude Skill <code>zip</code> file, and extract it into your Claude skills directory.
 </p>
 <p>For a global installation using PowerShell:</p>
-<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip" -OutFile "code-trace-tree-skill-1.1.1.zip"
-Expand-Archive -Path "code-trace-tree-skill-1.1.1.zip" -DestinationPath "$HOME\.claude\skills"
-Remove-Item "code-trace-tree-skill-1.1.1.zip"
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.2/code-trace-tree-skill-1.1.2.zip" -OutFile "code-trace-tree-skill-1.1.2.zip"
+Expand-Archive -Path "code-trace-tree-skill-1.1.2.zip" -DestinationPath "$HOME\.claude\skills"
+Remove-Item "code-trace-tree-skill-1.1.2.zip"
 </code></pre>
 <p>For a project-level installation using PowerShell:</p>
-<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.1/code-trace-tree-skill-1.1.1.zip" -OutFile "code-trace-tree-skill-1.1.1.zip"
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.2/code-trace-tree-skill-1.1.2.zip" -OutFile "code-trace-tree-skill-1.1.2.zip"
 New-Item -ItemType Directory -Force -Path ".claude\skills"
-Expand-Archive -Path "code-trace-tree-skill-1.1.1.zip" -DestinationPath ".claude\skills"
-Remove-Item "code-trace-tree-skill-1.1.1.zip"
+Expand-Archive -Path "code-trace-tree-skill-1.1.2.zip" -DestinationPath ".claude\skills"
+Remove-Item "code-trace-tree-skill-1.1.2.zip"
 </code></pre>
 <!-- Plugin description end -->
 

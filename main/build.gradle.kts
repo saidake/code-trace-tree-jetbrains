@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.1"
+val pluginVersion = "1.1.2"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,14 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.2</h3>
+            <ul>
+              <li>Add Claude Assist toolbar toggle to auto-sync topic-related traces into the current or <code>CLAUDE</code> profile</li>
+              <li>Add agent select-request signal to select/reveal nodes and navigate when exactly one id is listed</li>
+              <li>Add <code>trace_tree</code> skill scripts for search/add/move/delete/rebind (no occurrence args from Claude)</li>
+              <li>Rebind LINE locations after disk edits (skill + IDE VFS content rebind)</li>
+              <li>Replace skill Python helpers with shell/batch scripts; expand Claude Skill docs and install instructions</li>
+            </ul>
             <h3>1.1.1</h3>
             <ul>
               <li>Color trace point names in the tree and add a space before the location suffix</li>
