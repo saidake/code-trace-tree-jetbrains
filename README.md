@@ -16,7 +16,7 @@
 <p>
   Pair it with the Agent Skill so Claude Code, Cursor, GitHub Copilot, Codex, or Gemini CLI can search,
   add, move, and rebind traces, refresh the IDE, and—when <b>Agent Notes</b> is enabled—auto-sync
-  topic-related workflow points as you discuss code.
+  topic-related workflow points as you discuss code.<br/>
   This plugin does <b>not</b> include an AI agent; install your preferred agent separately first, then
   add the Code Trace Tree skill.
 </p>
@@ -133,20 +133,6 @@
   <li>macOS: <code>~/Library/Application Support/code-trace-tree</code></li>
   <li>Linux: <code>$XDG_CONFIG_HOME/code-trace-tree</code> or <code>~/.config/code-trace-tree</code></li>
 </ul>
-<p>
-  Each project keeps only a small id file under <code>.idea/code-trace-tree.project.id</code>
-  (falls back to <code>.vscode/code-trace-tree.project.id</code> when present).
-  Old unused XML files are not deleted automatically — remove them from that folder if you no longer need them.
-</p>
-<p>
-  External agents can edit the global XML and ask the IDE to reload by writing
-  <code>signals/&lt;projectId&gt;.request_refresh</code> under the global storage folder
-  (or by saving the XML while the project is open).
-  To select nodes in the tool window (and navigate when exactly one id is listed), write one
-  node UUID per line to <code>signals/&lt;projectId&gt;.select_trace_points</code>.
-  Signal files expire after 60 seconds. All open IDE windows for that project watch the same
-  signals folder. See <code>skills/code-trace-tree/</code> for the shared agent skill and helper scripts.
-</p>
 <!-- Plugin description end -->
 
 # Development

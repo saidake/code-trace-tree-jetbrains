@@ -27,13 +27,10 @@ Re-check the flags if the user toggles **Agent Notes** in the IDE during the ses
 
 ## Skill scripts location
 
-Helper scripts live under `code-trace-tree/scripts/` inside the agent’s skills directory
-(not the project root). Each agent has its own skills directory. Set
-`CODE_TRACE_TREE_AGENT_SKILL_PATH` once per session to that agent skills directory for
-**the agent you are running** (global or project-local) — **without** the
-`code-trace-tree` segment — then invoke scripts under `code-trace-tree/scripts/`.
-Do **not** `cd` into the skill folder — keep the process CWD in the IDE project
-(or pass `--project` / a project path argument).
+Helper scripts live under `code-trace-tree/scripts/` inside the agent’s skills directory. 
+Each agent has its own skills directory. Set `CODE_TRACE_TREE_AGENT_SKILL_PATH` once per session 
+to that agent skills directory for **the agent you are running** (global or project-local) 
+— then invoke scripts under `code-trace-tree/scripts/`.
 
 | Agent | Global agent skills dir | Project-local agent skills dir |
 |-------|-------------------------|--------------------------------|
@@ -60,18 +57,18 @@ set "CODE_TRACE_TREE_AGENT_SKILL_PATH=<absolute-agent-skills-dir>"
 
 ## Storage layout
 
-| Piece | Location |
-|-------|----------|
-| Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id` |
-| Global XML | OS config dir + `/code-trace-tree/<FolderName>.xml` |
-| Refresh signal | `<global>/code-trace-tree/signals/<projectId>.request_refresh` (TTL 60s) |
-| Select signal | `<global>/code-trace-tree/signals/<projectId>.select_trace_points` (one UUID per line; TTL 60s) |
+| Piece | Location                                                                                                        |
+|-------|-----------------------------------------------------------------------------------------------------------------|
+| Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id`                             |
+| Global XML | OS config dir + `/code-trace-tree/<FolderName>.xml`                                                             |
+| Refresh signal | OS config dir + `/code-trace-tree/signals/<projectId>.request_refresh` (TTL 60s)                                |
+| Select signal | OS config dir + `/code-trace-tree/signals/<projectId>.select_trace_points` (one UUID per line; TTL 60s) |
 
-Global base directory:
+OS config dir:
 
-- Windows: `%LOCALAPPDATA%\code-trace-tree`
-- macOS: `~/Library/Application Support/code-trace-tree`
-- Linux: `$XDG_CONFIG_HOME/code-trace-tree` or `~/.config/code-trace-tree`
+- Windows: `%LOCALAPPDATA%`
+- macOS: `~/Library/Application Support`
+- Linux: `$XDG_CONFIG_HOME` or `~/.config`
 
 Resolve the bound XML with (optional project path discovers the IDE project root; default is CWD):
 
