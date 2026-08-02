@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.5"
+val pluginVersion = "1.1.6"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,13 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.6</h3>
+            <ul>
+              <li>Clarify <b>Agent Notes</b>: auto-sync requires the <code>code-trace-tree</code> skill loaded in the agent session</li>
+              <li>Agent Skill: require Agent Notes sync when enabled; do not refuse OS Config Dir writes as outside-workspace</li>
+              <li>Agent Skill: add repeatable <code>--parent-id</code>; disambiguate duplicate LINE tips by occurrence</li>
+              <li>Agent Skill: annotated multi-profile XML example; document live assist targets <code>CURRENT</code> / <code>AGENT</code></li>
+            </ul>
             <h3>1.1.5</h3>
             <ul>
               <li>Store project data as <code>&lt;projectId&gt;.xml</code>; still resolve and rename legacy <code>&lt;FolderName&gt;.xml</code></li>

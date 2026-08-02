@@ -50,10 +50,11 @@ class ToggleClaudeAssistAction : ToggleAction(
 
         val choice = Messages.showDialog(
             project,
-            "When Agent Notes is on, an external AI agent (Claude Code, Cursor, Copilot, Codex, Gemini, etc.) " +
-                "may add, update, or remove topic-related trace points and short descriptions " +
-                "each turn that touched code.\n\n" +
-                "This plugin does not include an AI agent—install one separately and add the Code Trace Tree skill.\n\n" +
+            "When Agent Notes is on, an external AI agent that has the code-trace-tree skill loaded " +
+                "(Claude Code, Cursor, Copilot, Codex, Gemini, etc.) may add, update, or remove " +
+                "topic-related trace points and short descriptions each turn that touched code.\n\n" +
+                "Prerequisite: the code-trace-tree skill must be loaded in that agent session. " +
+                "This plugin does not include an AI agent—install one separately, then install and load the skill.\n\n" +
                 "Where should those traces be written?",
             "Enable Agent Notes",
             arrayOf("Current Profile", "AGENT Profile", "Cancel"),
@@ -81,7 +82,7 @@ class ToggleClaudeAssistAction : ToggleAction(
             }
             e.presentation.description =
                 "Agent Notes is on ($targetLabel). Click to disable auto-sync. " +
-                    "This plugin does not include an AI agent—use an external agent with the Code Trace Tree skill."
+                    "Requires an external agent with the code-trace-tree skill loaded."
         } else {
             e.presentation.description = DESCRIPTION_OFF
         }
@@ -91,7 +92,8 @@ class ToggleClaudeAssistAction : ToggleAction(
 
     companion object {
         private const val DESCRIPTION_OFF =
-            "Allow an external AI agent to auto-sync topic-related traces when it touches code. " +
-                "This plugin does not include an AI agent—install Claude Code, Cursor, Copilot, Codex, or Gemini separately."
+            "Allow an external AI agent with the code-trace-tree skill loaded to auto-sync " +
+                "topic-related traces when it touches code. This plugin does not include an AI agent—" +
+                "install one separately and load the skill in the session."
     }
 }

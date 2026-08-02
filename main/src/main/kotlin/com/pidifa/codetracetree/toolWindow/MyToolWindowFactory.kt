@@ -552,8 +552,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 add(ToggleClaudeAssistAction().apply {
                     templatePresentation.text = "Agent Notes"
                     templatePresentation.description =
-                        "Allow an external AI agent to auto-sync topic-related traces when it touches code. " +
-                            "This plugin does not include an AI agent—install one separately."
+                        "Allow an external AI agent with the code-trace-tree skill loaded to auto-sync " +
+                            "topic-related traces when it touches code. This plugin does not include an AI agent—" +
+                            "install one separately and load the skill in the session."
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"
