@@ -27,12 +27,11 @@ Re-check the flags if the user toggles **Agent Notes** in the IDE during the ses
 
 ## Skill scripts location
 
-Helper scripts live under `code-trace-tree/scripts/` inside the agent’s skills directory. 
-Each agent has its own skills directory. Set `CODE_TRACE_TREE_AGENT_SKILL_PATH` once per session 
-to that agent skills directory for **the agent you are running** (global or project-local) 
-— then invoke scripts under `code-trace-tree/scripts/`.
+Helper scripts live under `<Agent Skill Path>/code-trace-tree/scripts/`.
 
-| Agent | Global agent skills dir | Project-local agent skills dir |
+**Agent Skill Path** is this agent’s skills directory (the parent of `code-trace-tree/`) for **the agent you are running** — project-local if present, otherwise global. It ends at `skills`, not at `code-trace-tree`.
+
+| Agent | Global Agent Skill Path | Project-local Agent Skill Path |
 |-------|-------------------------|--------------------------------|
 | Claude Code | `~/.claude/skills` | `<repo>/.claude/skills` |
 | Cursor | `~/.cursor/skills` | `<repo>/.cursor/skills` |
@@ -40,31 +39,28 @@ to that agent skills directory for **the agent you are running** (global or proj
 | Codex | `~/.agents/skills` | `<repo>/.agents/skills` |
 | Gemini CLI | `~/.gemini/skills` | `<repo>/.gemini/skills` |
 
-On Windows, `~` is `%USERPROFILE%`. Prefer whichever install exists for this agent
-(project-local if present, otherwise global).
+On Windows, `~` is `%USERPROFILE%`. Resolve **Agent Skill Path** once per session, then invoke scripts with absolute paths. Keep the process CWD in the IDE project (do not `cd` into the skill folder).
 
 ```bash
-# Resolve once — pick the row above for THIS agent, then:
-export CODE_TRACE_TREE_AGENT_SKILL_PATH="<absolute-agent-skills-dir>"
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/request_refresh.sh"
+# Example — substitute the absolute Agent Skill Path for THIS agent:
+bash "<Agent Skill Path>/code-trace-tree/scripts/request_refresh.sh"
 ```
 
 ```bat
-REM Resolve once — pick the row above for THIS agent, then:
-set "CODE_TRACE_TREE_AGENT_SKILL_PATH=<absolute-agent-skills-dir>"
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\request_refresh.bat"
+REM Example — substitute the absolute Agent Skill Path for THIS agent:
+"<Agent Skill Path>\code-trace-tree\scripts\request_refresh.bat"
 ```
 
 ## Storage layout
 
-| Piece | Location                                                                                                        |
-|-------|-----------------------------------------------------------------------------------------------------------------|
-| Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id`                             |
-| Global XML | OS config dir + `/code-trace-tree/<FolderName>.xml`                                                             |
-| Refresh signal | OS config dir + `/code-trace-tree/signals/<projectId>.request_refresh` (TTL 60s)                                |
-| Select signal | OS config dir + `/code-trace-tree/signals/<projectId>.select_trace_points` (one UUID per line; TTL 60s) |
+| Piece | Location |
+|-------|----------|
+| Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id` |
+| Global XML | `<OS Config Dir>/code-trace-tree/<FolderName>.xml` |
+| Refresh signal | `<OS Config Dir>/code-trace-tree/signals/<projectId>.request_refresh` (TTL 60s) |
+| Select signal | `<OS Config Dir>/code-trace-tree/signals/<projectId>.select_trace_points` (one UUID per line; TTL 60s) |
 
-OS config dir:
+**OS Config Dir:**
 
 - Windows: `%LOCALAPPDATA%`
 - macOS: `~/Library/Application Support`
@@ -73,13 +69,13 @@ OS config dir:
 Resolve the bound XML with (optional project path discovers the IDE project root; default is CWD):
 
 ```bash
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/resolve_storage.sh"
-# optional: bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/resolve_storage.sh" /path/to/project
+bash "<Agent Skill Path>/code-trace-tree/scripts/resolve_storage.sh"
+# optional: bash "<Agent Skill Path>/code-trace-tree/scripts/resolve_storage.sh" /path/to/project
 ```
 
 ```bat
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\resolve_storage.bat"
-REM optional: "%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\resolve_storage.bat" C:\path\to\project
+"<Agent Skill Path>\code-trace-tree\scripts\resolve_storage.bat"
+REM optional: "<Agent Skill Path>\code-trace-tree\scripts\resolve_storage.bat" C:\path\to\project
 ```
 
 ## Preferred code workflow format
@@ -150,39 +146,39 @@ method A def
 Shared flags (`--project`, `--profile`, `--dry-run`, `--no-refresh`) may appear **before or after** the subcommand:
 
 ```bash
-# Both OK (absolute path to this skill's scripts; keep CWD in the project):
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" search --project /path/to/project
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" --project /path/to/project search
+# Both OK (absolute `<Agent Skill Path>/...` scripts; keep CWD in the project):
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" search --project /path/to/project
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" --project /path/to/project search
 ```
 
 Omit `--project` when the process CWD is already inside the IDE project (scripts walk upward to find `.idea` / `.git`).
 
 ```bash
-# macOS / Linux — absolute skill script path; do not cd into the skill folder
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" search
+# macOS / Linux — absolute script path; do not cd into the skill folder
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" search
 # line optional when content uniquely resolves; substring OK for distinctive tips:
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" add --file src/A.java --content '.handleEmailTriggerRequest(' --name 'handleEmail'
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" add --file src/A.java --line 10 --content 'void methodA() {' --name 'methodA'
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" add src/B.java 40 'void methodB() {' \
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" add --file src/A.java --content '.handleEmailTriggerRequest(' --name 'handleEmail'
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" add --file src/A.java --line 10 --content 'void methodA() {' --name 'methodA'
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" add src/B.java 40 'void methodB() {' \
   --parent '["'"$PARENT_ID"'"]' \
   --name 'methodB'
 # or without ids: --parent '[["src/A.java","void methodA() {"],["src/A.java","methodB();"]]'
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" move --file src/B.java --content 'void methodB() {' --parent '[]'
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" delete --id <uuid>
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" move --file src/B.java --content 'void methodB() {' --parent '[]'
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" delete --id <uuid>
 # After editing source on disk (IDE DocumentListener will NOT run):
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" rebind
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/trace_tree.sh" rebind --file src/A.java --file src/B.java
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" rebind
+bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" rebind --file src/A.java --file src/B.java
 ```
 
 ```bat
-REM Windows — absolute skill script path; do not cd into the skill folder
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\trace_tree.bat" search
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\trace_tree.bat" add --file src\A.java --content ".handleEmailTriggerRequest(" --name handleEmail
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\trace_tree.bat" move --id <uuid> --parent "[]"
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\trace_tree.bat" delete --file src\A.java --content "void methodA() {"
+REM Windows — absolute script path; do not cd into the skill folder
+"<Agent Skill Path>\code-trace-tree\scripts\trace_tree.bat" search
+"<Agent Skill Path>\code-trace-tree\scripts\trace_tree.bat" add --file src\A.java --content ".handleEmailTriggerRequest(" --name handleEmail
+"<Agent Skill Path>\code-trace-tree\scripts\trace_tree.bat" move --id <uuid> --parent "[]"
+"<Agent Skill Path>\code-trace-tree\scripts\trace_tree.bat" delete --file src\A.java --content "void methodA() {"
 REM After editing source on disk:
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\trace_tree.bat" rebind
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\trace_tree.bat" rebind --file src\A.java
+"<Agent Skill Path>\code-trace-tree\scripts\trace_tree.bat" rebind
+"<Agent Skill Path>\code-trace-tree\scripts\trace_tree.bat" rebind --file src\A.java
 ```
 
 Default profile: Agent Notes target when enabled (`AGENT` / active); otherwise `<activeProfileName>`.
@@ -206,7 +202,7 @@ IntelliJ (with the plugin loaded) reloads the bound XML, refreshes the Code Trac
 
 ## Additional resources
 
-All under the skill’s `scripts/` directory (see Skill scripts location):
+All under `<Agent Skill Path>/code-trace-tree/scripts/` (see Skill scripts location):
 
 - XML schema details: [references/data-format.md](references/data-format.md)
 - Resolve storage: `resolve_storage.sh` / `resolve_storage.bat`
@@ -216,17 +212,17 @@ All under the skill’s `scripts/` directory (see Skill scripts location):
 
 ## Edit plugin data action
 
-1. **Resolve** the project id + global XML (`resolve_storage.sh` / `.bat` via absolute skill path).
+1. **Resolve** the project id + global XML (`resolve_storage.sh` / `.bat` via Agent Skill Path).
 2. **Read** the XML. Schema: [references/data-format.md](references/data-format.md).
 3. **Edit** carefully (see rules below). Prefer atomic write: write `*.xml.tmp` then replace.
 4. **Refresh IDE** so IntelliJ reloads in-memory state:
 
 ```bash
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/request_refresh.sh"
+bash "<Agent Skill Path>/code-trace-tree/scripts/request_refresh.sh"
 ```
 
 ```bat
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\request_refresh.bat"
+"<Agent Skill Path>\code-trace-tree\scripts\request_refresh.bat"
 ```
 
 Editing the global XML alone is usually enough (the plugin watches it). Always write the refresh signal after agent edits so reload is explicit.
@@ -280,10 +276,9 @@ Write node UUIDs (one per line) to `signals/<projectId>.select_trace_points`, or
 Use after creating or locating traces when the user should see them in the IDE. Prefer a single id when you want the editor to jump to the source.
 
 ```bash
-bash "$CODE_TRACE_TREE_AGENT_SKILL_PATH/code-trace-tree/scripts/select_trace_points.sh" <id> [id...]
+bash "<Agent Skill Path>/code-trace-tree/scripts/select_trace_points.sh" <id> [id...]
 ```
 
 ```bat
-"%CODE_TRACE_TREE_AGENT_SKILL_PATH%\code-trace-tree\scripts\select_trace_points.bat" <id> [id...]
+"<Agent Skill Path>\code-trace-tree\scripts\select_trace_points.bat" <id> [id...]
 ```
-
