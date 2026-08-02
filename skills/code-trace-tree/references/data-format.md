@@ -1,6 +1,7 @@
 # Code Trace Tree data format
 
-Root document (`version="4"`) stored under global central storage.
+Root document (`version="4"`) stored as `<OS Config Dir>/code-trace-tree/<projectId>.xml`.
+Legacy `<FolderName>.xml` files are still resolved by scanning `<projectId>` inside XML.
 
 ## Project document
 

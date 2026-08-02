@@ -151,7 +151,7 @@ bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" search --project
 bash "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.sh" --project /path/to/project search
 ```
 
-Omit `--project` when the process CWD is already inside the IDE project (scripts walk upward to find `.idea` / `.git`).
+Omit `--project` when the process CWD is already inside the IDE project (scripts walk upward to find `.idea` / `.vscode` / `.git`).
 
 ```bash
 # macOS / Linux — absolute script path; do not cd into the skill folder

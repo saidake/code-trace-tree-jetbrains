@@ -133,6 +133,13 @@
   <li>macOS: <code>~/Library/Application Support/code-trace-tree</code></li>
   <li>Linux: <code>$XDG_CONFIG_HOME/code-trace-tree</code> or <code>~/.config/code-trace-tree</code></li>
 </ul>
+<p>
+  Each project uses <code>&lt;projectId&gt;.xml</code> in that folder
+  (legacy <code>&lt;FolderName&gt;.xml</code> files from older releases are still resolved and
+  renamed when found). The project id is stored in
+  <code>.idea/code-trace-tree.project.id</code>
+  (falls back to <code>.vscode/code-trace-tree.project.id</code>).
+</p>
 <!-- Plugin description end -->
 
 # Development
