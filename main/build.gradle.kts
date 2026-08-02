@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.6"
+val pluginVersion = "1.1.7"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,11 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.7</h3>
+            <ul>
+              <li>Reset the description area when switching profiles</li>
+              <li>Fix empty Code Trace Tree tool window ("Nothing to show") caused by refreshing description before the tree was initialized</li>
+            </ul>
             <h3>1.1.6</h3>
             <ul>
               <li>Clarify <b>Agent Notes</b>: auto-sync requires the <code>code-trace-tree</code> skill loaded in the agent session</li>

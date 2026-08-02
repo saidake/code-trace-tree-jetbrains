@@ -151,6 +151,9 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 service.addNodeListener(NodeListenerEventType.FULL_UPDATE) { nodes, restoreSelection ->
                     if (!isUpdatingTree) {
                         fullUpdateTreeModel(this,restoreSelection)
+                        // Profile switch (and other full reloads) clear selection; refresh the
+                        // description pane so it does not keep the previous profile's text.
+                        updateDescriptionArea()
                     }
                 }
                 service.addNodeListener(NodeListenerEventType.PARTIAL_UPDATE) { nodes, restoreSelection ->
@@ -158,7 +161,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         partialUpdateTreeModel( this,nodes)
                     }
                 }
-                service.notifyListeners() // trigger fullUpdateTreeModel
                 cellRenderer = TracePointTreeRenderer(service, this@MyToolWindow)
                 isEditable = false
                 dragEnabled = true
@@ -496,6 +498,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     }
                 })
             }
+            // After `tree` is assigned — not inside Tree.apply — so description refresh can
+            // safely read selection (lateinit would throw during construction and leave
+            // the tool window empty: "Nothing to show").
+            service.notifyListeners()
 
             // Add DocumentListener to update description when edited
             descriptionTextArea.document.addDocumentListener(object : DocumentListener {
@@ -648,6 +654,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
         private fun updateDescriptionArea() {
+            if (!::tree.isInitialized) return
             val selectedPaths = tree.selectionPaths
             descriptionTextArea.isEnabled = false
             ApplicationManager.getApplication().invokeLater {
