@@ -28,6 +28,10 @@ import java.util.stream.Collectors
 /**
  * Resolves and persists hybrid project storage (local project id + global XML).
  *
+ * Global file naming: `<projectId>.xml`.
+ * Legacy `FolderName.xml` files (previous releases) are still found by scanning
+ * `<projectId>` inside XML and best-effort renamed to the canonical name.
+ *
  * Resolution on project open:
  * - Case A: match by project id → update path/updatedAt
  * - Case B: match by path (copy-on-write) → new id + new XML file
@@ -72,7 +76,7 @@ class ProjectStorage(private val projectBasePath: String) {
         val byPath = findDocumentByPath(projectBase.toString())
         if (byPath != null) {
             val newId = generateProjectId()
-            val newFile = allocateStorageFile(projectBase.fileName.toString())
+            val newFile = allocateStorageFile(newId)
             val copied = byPath.copy(
                 projectId = newId,
                 path = projectBase.toString(),
@@ -94,7 +98,7 @@ class ProjectStorage(private val projectBasePath: String) {
 
         // Case C: new project
         val newId = generateProjectId()
-        val newFile = allocateStorageFile(projectBase.fileName.toString())
+        val newFile = allocateStorageFile(newId)
         val fresh = ProjectDocument(
             projectId = newId,
             path = projectBase.toString(),
@@ -183,17 +187,11 @@ class ProjectStorage(private val projectBasePath: String) {
 
     private fun generateProjectId(): String = UUID.randomUUID().toString()
 
-    private fun allocateStorageFile(folderName: String): Path {
+    /** Canonical global storage path: `<appDir>/<projectId>.xml`. */
+    private fun allocateStorageFile(projectId: String): Path {
         val dir = GlobalStoragePaths.resolveAppDir()
         Files.createDirectories(dir)
-        val safeName = folderName.ifBlank { "project" }.replace(Regex("""[<>:"/\\|?*]"""), "_")
-        var candidate = dir.resolve("$safeName.xml")
-        var index = 1
-        while (Files.exists(candidate)) {
-            candidate = dir.resolve("$safeName-$index.xml")
-            index++
-        }
-        return candidate
+        return dir.resolve("$projectId.xml")
     }
 
     private fun listProjectXmlFiles(): List<Path> {
@@ -205,18 +203,53 @@ class ProjectStorage(private val projectBasePath: String) {
         }
     }
 
+    /**
+     * Case A lookup:
+     * 1. Fast path — open `<projectId>.xml` when present
+     * 2. Legacy fallback — scan other `*.xml` for matching `<projectId>`
+     * 3. Best-effort rename legacy file → `<projectId>.xml`
+     */
     private fun findDocumentByProjectId(projectId: String): ProjectDocument? {
+        val canonical = allocateStorageFile(projectId)
+
+        if (Files.isRegularFile(canonical)) {
+            try {
+                val doc = ProjectDataXml.parseFile(canonical)
+                if (doc.projectId == projectId) {
+                    return doc.copy(storageFile = canonical)
+                }
+            } catch (e: Exception) {
+                log.debug("Canonical storage file unreadable $canonical", e)
+            }
+        }
+
         for (file in listProjectXmlFiles()) {
+            if (file.toAbsolutePath().normalize() == canonical.toAbsolutePath().normalize()) continue
             try {
                 val doc = ProjectDataXml.parseFile(file)
-                if (doc.projectId == projectId) {
-                    return doc.copy(storageFile = file)
-                }
+                if (doc.projectId != projectId) continue
+                val migrated = migrateLegacyStorageFile(file, canonical)
+                return doc.copy(storageFile = migrated)
             } catch (e: Exception) {
                 log.debug("Skipping unreadable storage file $file", e)
             }
         }
         return null
+    }
+
+    /** Rename legacy FolderName.xml → projectId.xml when the target is free. */
+    private fun migrateLegacyStorageFile(legacyFile: Path, canonicalFile: Path): Path {
+        if (legacyFile.toAbsolutePath().normalize() == canonicalFile.toAbsolutePath().normalize()) {
+            return legacyFile
+        }
+        if (Files.exists(canonicalFile)) return legacyFile
+        return try {
+            Files.move(legacyFile, canonicalFile)
+            canonicalFile
+        } catch (e: Exception) {
+            log.debug("Could not migrate legacy storage $legacyFile → $canonicalFile", e)
+            legacyFile
+        }
     }
 
     private fun findDocumentByPath(absolutePath: String): ProjectDocument? {

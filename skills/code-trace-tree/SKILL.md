@@ -56,7 +56,7 @@ REM Example — substitute the absolute Agent Skill Path for THIS agent:
 | Piece | Location |
 |-------|----------|
 | Project id | `.idea/code-trace-tree.project.id` (prefer) or `.vscode/code-trace-tree.project.id` |
-| Global XML | `<OS Config Dir>/code-trace-tree/<FolderName>.xml` |
+| Global XML | `<OS Config Dir>/code-trace-tree/<projectId>.xml` (legacy `FolderName.xml` still resolved by scanning `<projectId>`) |
 | Refresh signal | `<OS Config Dir>/code-trace-tree/signals/<projectId>.request_refresh` (TTL 60s) |
 | Select signal | `<OS Config Dir>/code-trace-tree/signals/<projectId>.select_trace_points` (one UUID per line; TTL 60s) |
 
