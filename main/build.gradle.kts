@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.4"
+val pluginVersion = "1.1.5"
 version = pluginVersion
 
 repositories {
@@ -57,13 +57,17 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.5</h3>
+            <ul>
+              <li>Store project data as <code>&lt;projectId&gt;.xml</code>; still resolve and rename legacy <code>&lt;FolderName&gt;.xml</code></li>
+              <li>Move agent refresh/select signals to global <code>signals/&lt;projectId&gt;.*</code> with a 60s TTL (multi-window safe)</li>
+              <li>Rename toolbar toggle <b>Claude Assist</b> to <b>Agent Notes</b>; rename dedicated profile <code>CLAUDE</code> → <code>AGENT</code> (legacy migrates on load)</li>
+              <li>Ship one shared Agent Skill zip (<code>code-trace-tree-skill-X.Y.Z.zip</code>); clarify Agent Skill Path and OS Config Dir in the skill</li>
+              <li>Forgiving LINE locators, idempotent add, and absolute skill script paths</li>
+            </ul>
             <h3>1.1.4</h3>
             <ul>
               <li>Lower IDE compatibility floor to IntelliJ Platform 2024.1 (<code>sinceBuild</code> 241)</li>
-              <li>Move agent refresh/select signals to global <code>signals/&lt;projectId&gt;.*</code> with a 60s TTL (multi-window safe)</li>
-              <li>Rename toolbar toggle <b>Claude Assist</b> to <b>Agent Notes</b>; clarify the plugin does not include an AI agent</li>
-              <li>Rename dedicated Agent Notes profile from <code>CLAUDE</code> to <code>AGENT</code> (legacy <code>CLAUDE</code> migrates on load)</li>
-              <li>Ship one shared Agent Skill zip (<code>code-trace-tree-skill-X.Y.Z.zip</code>); install path differs per agent</li>
             </ul>
             <h3>1.1.3</h3>
             <ul>
