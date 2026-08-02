@@ -52,6 +52,8 @@
   <b>TIPS:</b> Prefer creating line trace points on text that is <b>unique in that file</b> (or uncommon),
   not generic lines like <code>}</code> or <code>return;</code>.
   The plugin stores occurrence counts to re-find the line after it moves; unique content rebinds more reliably.
+  When the same trimmed text appears more than once, agents must pass <code>--line</code>.
+  For parent nodes, prefer repeated <code>--parent-id</code> (bash and Windows) over JSON <code>--parent</code>.
 </p>
 
 <h1>Agent Skill</h1>
