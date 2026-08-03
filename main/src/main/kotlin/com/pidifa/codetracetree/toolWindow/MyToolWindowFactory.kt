@@ -21,7 +21,6 @@ import com.pidifa.codetracetree.actions.ExportTracePointsAction
 import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
-import com.pidifa.codetracetree.actions.ToggleClaudeAssistAction
 import com.pidifa.codetracetree.actions.ToggleNamePromptAction
 import com.pidifa.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
@@ -543,13 +542,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Prompt for Name"
                     templatePresentation.description =
                         "When enabled, ask for a name when creating a trace point; when disabled, create with an empty name"
-                })
-                add(ToggleClaudeAssistAction().apply {
-                    templatePresentation.text = "Agent Notes"
-                    templatePresentation.description =
-                        "Allow an external AI agent with the code-trace-tree skill loaded to auto-sync " +
-                            "topic-related traces when it touches code. This plugin does not include an AI agent—" +
-                            "install one separately and load the skill in the session."
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"

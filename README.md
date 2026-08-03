@@ -15,9 +15,7 @@
 </p>
 <p>
   Pair it with the Agent Skill so Claude Code, Cursor, GitHub Copilot, Codex, or Gemini CLI can search,
-  add, move, and rebind traces, refresh the IDE, and—when <b>Agent Notes</b> is enabled and the
-  <code>code-trace-tree</code> skill is <b>loaded</b>—auto-sync topic-related workflow points as you
-  discuss code.<br/>
+  add, move, and rebind traces, and refresh the IDE when you ask.<br/>
   This plugin does <b>not</b> include an AI agent; install your preferred agent separately, then
   install and load the Code Trace Tree skill.
 </p>
@@ -61,7 +59,7 @@
 <p>
   This plugin does <b>not</b> ship an AI agent. Install one of the supported agents first, then install
   the Code Trace Tree skill and ensure it is <b>loaded</b> in the agent session so the agent can talk
-  to the plugin. <b>Agent Notes</b> only auto-syncs when that skill is loaded.
+  to the plugin.
 </p>
 <p>Supported agents:</p>
 <ul>
@@ -78,7 +76,6 @@
   <li>Rebind line locations after source edits on disk</li>
   <li>Ask the IDE to reload / refresh plugin data</li>
   <li>Select or navigate to nodes in the Code Trace Tree tool window</li>
-  <li>Auto-sync topic-related traces when <b>Agent Notes</b> is enabled and this skill is loaded</li>
 </ul>
 <p>
   <b>Python required:</b> the main skill ops (<code>trace_tree</code> search / add / move / delete / rebind)
@@ -91,6 +88,22 @@
   (same package for every agent; only the extract path differs).
   Releases attach <code>code-trace-tree-skill-&lt;version&gt;.zip</code>.
 </p>
+
+<h2>How to use the skill</h2>
+<p>
+  After the skill is installed and <b>loaded</b> in your agent session, ask the agent in natural language.
+  Mention the skill name when your agent needs an explicit skill reference:
+</p>
+<pre><code>Skill: code-trace-tree
+Help me generate some trace point nodes related to the current topic.
+</code></pre>
+<p>Other examples:</p>
+<pre><code>Skill: code-trace-tree
+Add a root trace point at the login handler, then children for validation and token issue.
+</code></pre>
+<pre><code>Skill: code-trace-tree
+Rebind line traces after my last source edits, then refresh the IDE tree.
+</code></pre>
 
 <h2>Install skill — extract locations</h2>
 <p>

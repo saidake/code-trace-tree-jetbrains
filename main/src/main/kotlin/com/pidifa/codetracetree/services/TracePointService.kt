@@ -32,7 +32,6 @@ import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.storage.AgentSignalFiles
-import com.pidifa.codetracetree.storage.ClaudeAssistTarget
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectStorage
@@ -50,54 +49,9 @@ class TracePointService(private val project: Project) {
 
     companion object {
         const val DEFAULT_PROFILE_NAME = "main"
-        /** Dedicated profile for Agent Notes when target is [ClaudeAssistTarget.AGENT]. */
-        const val AGENT_PROFILE_NAME = "AGENT"
-        /** Legacy name; use [AGENT_PROFILE_NAME]. Kept for migration of older storage. */
-        const val CLAUDE_PROFILE_NAME = ClaudeAssistTarget.LEGACY_CLAUDE
         private const val SELF_WRITE_IGNORE_MS = 1500L
         private const val EXTERNAL_REBIND_DEBOUNCE_MS = 350L
         private val LOG = Logger.getInstance(TracePointService::class.java)
-
-        /**
-         * Renames a legacy `CLAUDE` profile to `AGENT` when needed.
-         * @return updated active profile name and whether any rename occurred
-         */
-        fun migrateClaudeProfileToAgent(
-            profiles: MutableList<TraceProfile>,
-            activeProfileName: String
-        ): Pair<String, Boolean> {
-            var changed = false
-            var active = activeProfileName
-            val agent = profiles.find { it.name.equals(AGENT_PROFILE_NAME, ignoreCase = true) }
-            val legacy = profiles.find {
-                it.name.equals(ClaudeAssistTarget.LEGACY_CLAUDE, ignoreCase = true)
-            }
-            when {
-                legacy != null && agent == null -> {
-                    val wasActive = active.equals(legacy.name, ignoreCase = true)
-                    legacy.name = AGENT_PROFILE_NAME
-                    if (wasActive) active = AGENT_PROFILE_NAME
-                    changed = true
-                }
-                legacy != null && agent != null -> {
-                    if (active.equals(legacy.name, ignoreCase = true)) {
-                        active = AGENT_PROFILE_NAME
-                        changed = true
-                    }
-                    if (agent.name != AGENT_PROFILE_NAME) {
-                        agent.name = AGENT_PROFILE_NAME
-                        changed = true
-                    }
-                }
-                agent != null && agent.name != AGENT_PROFILE_NAME -> {
-                    val wasActive = active.equals(agent.name, ignoreCase = true)
-                    agent.name = AGENT_PROFILE_NAME
-                    if (wasActive) active = AGENT_PROFILE_NAME
-                    changed = true
-                }
-            }
-            return active to changed
-        }
     }
 
     data class TracePoint(
@@ -184,8 +138,6 @@ class TracePointService(private val project: Project) {
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
     private var isNamePromptEnabled = true
-    private var isClaudeAssistEnabled = false
-    private var claudeAssistTarget: ClaudeAssistTarget = ClaudeAssistTarget.CURRENT
 
     private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
     private var activeProfileName: String = DEFAULT_PROFILE_NAME
@@ -415,14 +367,10 @@ class TracePointService(private val project: Project) {
         val doc = storage.reloadBoundDocument() ?: return false
         LOG.info("Code Trace Tree: reloading from external storage ($reason)")
         suppressPersist = true
-        var profileMigrated = false
         try {
-            profileMigrated = applyDocument(doc, validate = true, notifyUi = true)
+            applyDocument(doc, validate = true, notifyUi = true)
         } finally {
             suppressPersist = false
-        }
-        if (profileMigrated) {
-            schedulePersist()
         }
         return true
     }
@@ -468,13 +416,10 @@ class TracePointService(private val project: Project) {
         }
     }
 
-    /** @return true when a legacy `CLAUDE` profile was renamed to `AGENT` */
-    private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean): Boolean {
+    private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean) {
         isHighlightingEnabled = doc.highlightingEnabled
         isDescriptionAreaOpened = doc.descriptionAreaOpened
         isNamePromptEnabled = doc.namePromptEnabled
-        isClaudeAssistEnabled = doc.claudeAssistEnabled
-        claudeAssistTarget = doc.claudeAssistTarget
         profiles = doc.profiles.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
@@ -486,10 +431,6 @@ class TracePointService(private val project: Project) {
             profiles.add(TraceProfile(name = DEFAULT_PROFILE_NAME))
         }
         activeProfileName = doc.activeProfileName
-            .takeIf { name -> profiles.any { it.name == name } }
-            ?: profiles.first().name
-        val (migratedActive, profileMigrated) = migrateClaudeProfileToAgent(profiles, activeProfileName)
-        activeProfileName = migratedActive
             .takeIf { name -> profiles.any { it.name == name } }
             ?: profiles.first().name
         val profile = profiles.find { it.name == activeProfileName } ?: profiles.first()
@@ -510,10 +451,6 @@ class TracePointService(private val project: Project) {
             val copy = getTracePoints()
             listenersMap[NodeListenerEventType.FULL_UPDATE]?.forEach { it(copy, true) }
         }
-        if (profileMigrated && !suppressPersist) {
-            schedulePersist()
-        }
-        return profileMigrated
     }
 
     /** Persist profiles to global storage (debounced on the EDT). */
@@ -539,9 +476,7 @@ class TracePointService(private val project: Project) {
             activeProfileName = activeProfileName,
             descriptionAreaOpened = isDescriptionAreaOpened,
             highlightingEnabled = isHighlightingEnabled,
-            namePromptEnabled = isNamePromptEnabled,
-            claudeAssistEnabled = isClaudeAssistEnabled,
-            claudeAssistTarget = claudeAssistTarget
+            namePromptEnabled = isNamePromptEnabled
         )
         externalStorageWatcher?.refreshRegistrations()
     }
@@ -551,8 +486,6 @@ class TracePointService(private val project: Project) {
     fun isHighlightingEnabled(): Boolean = isHighlightingEnabled
     fun isDescriptionAreaOpened(): Boolean = isDescriptionAreaOpened
     fun isNamePromptEnabled(): Boolean = isNamePromptEnabled
-    fun isClaudeAssistEnabled(): Boolean = isClaudeAssistEnabled
-    fun getClaudeAssistTarget(): ClaudeAssistTarget = claudeAssistTarget
 
     fun setDescriptionAreaOpened(opened: Boolean) {
         isDescriptionAreaOpened = opened
@@ -562,45 +495,6 @@ class TracePointService(private val project: Project) {
     fun setNamePromptEnabled(enabled: Boolean) {
         isNamePromptEnabled = enabled
         schedulePersist()
-    }
-
-    fun setClaudeAssistEnabled(enabled: Boolean) {
-        isClaudeAssistEnabled = enabled
-        schedulePersist()
-    }
-
-    /**
-     * Enables Agent Notes (Claude Assist storage flags) and persists the chosen target.
-     * For [ClaudeAssistTarget.AGENT], creates/switches to the `AGENT` profile.
-     */
-    fun enableClaudeAssist(target: ClaudeAssistTarget) {
-        claudeAssistTarget = target
-        isClaudeAssistEnabled = true
-        if (target == ClaudeAssistTarget.AGENT) {
-            ensureAgentProfileActive()
-        }
-        schedulePersist()
-    }
-
-    private fun ensureAgentProfileActive() {
-        migrateClaudeProfileToAgent(profiles, activeProfileName).let { (migratedActive, _) ->
-            activeProfileName = migratedActive
-                .takeIf { name -> profiles.any { it.name == name } }
-                ?: activeProfileName
-        }
-        val existing = profiles.find { it.name.equals(AGENT_PROFILE_NAME, ignoreCase = true) }
-        if (existing == null) {
-            addProfile(AGENT_PROFILE_NAME)
-            return
-        }
-        val wasActive = activeProfileName.equals(existing.name, ignoreCase = true)
-        existing.name = AGENT_PROFILE_NAME
-        if (wasActive) {
-            activeProfileName = AGENT_PROFILE_NAME
-            notifyProfileListeners()
-        } else {
-            switchProfile(AGENT_PROFILE_NAME)
-        }
     }
 
     fun setHighlightingEnabled(enabled: Boolean) {
