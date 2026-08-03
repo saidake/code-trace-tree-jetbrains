@@ -1,8 +1,9 @@
 # Code Trace Tree
-![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saidake/code-trace-tree-jetbrains?sort=semver)
-![Build](https://github.com/saidake/code-trace-tree-jetbrains/actions/workflows/release.yml/badge.svg)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saidake/code-trace-tree-jetbrains?sort=semver)](https://github.com/saidake/code-trace-tree-jetbrains/releases/latest)
 [![Version](https://img.shields.io/jetbrains/plugin/v/33246.svg)](https://plugins.jetbrains.com/plugin/33246)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/33246.svg)](https://plugins.jetbrains.com/plugin/33246)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+![Build](https://github.com/saidake/code-trace-tree-jetbrains/actions/workflows/release.yml/badge.svg)
 
 <img src="docs/assets/logo.png" width="100" alt="Code Trace Tree logo">
 
@@ -15,16 +16,14 @@
 </p>
 <p>
   Pair it with the Agent Skill so Claude Code, Cursor, GitHub Copilot, Codex, or Gemini CLI can search,
-  add, move, and rebind traces, refresh the IDE, and—when <b>Agent Notes</b> is enabled and the
-  <code>code-trace-tree</code> skill is <b>loaded</b>—auto-sync topic-related workflow points as you
-  discuss code.<br/>
+  add, move, and rebind traces, and refresh the IDE when you ask.<br/>
   This plugin does <b>not</b> include an AI agent; install your preferred agent separately, then
   install and load the Code Trace Tree skill.
 </p>
 <!-- Plugin description end -->
 
 # Preview
-![](docs/assets/preview.png)
+![](docs/assets/preview-1-jetbrains.png)
 
 <!-- Plugin description -->
 <h1>How to use</h1>
@@ -47,21 +46,20 @@
   </li>
   <li>Double-click a node in the tree to jump to that location (line, file, or Project View for directories).</li>
   <li>Right-click a node and choose <b>Copy</b> (or use Ctrl/Cmd+C) to copy its display text, e.g. <code>test233 (TestControllerWebFlux.java:54)</code>.</li>
+  <li>Right-click a line trace point and choose <b>Show Line Content</b> to view its saved trimmed line text.</li>
   <li>Use the tool window toolbar to expand/collapse, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
 </ol>
 <p>
   <b>TIPS:</b> Prefer creating line trace points on text that is <b>unique in that file</b> (or uncommon),
-  not generic lines like <code>}</code> or <code>return;</code>.
+  not generic lines like <code>}</code> or <code>return;</code>. Empty lines are not allowed.
   The plugin stores occurrence counts to re-find the line after it moves; unique content rebinds more reliably.
-  When the same trimmed text appears more than once, agents must pass <code>--line</code>.
-  For parent nodes, prefer repeated <code>--parent-id</code> (bash and Windows) over JSON <code>--parent</code>.
 </p>
 
 <h1>Agent Skill</h1>
 <p>
   This plugin does <b>not</b> ship an AI agent. Install one of the supported agents first, then install
   the Code Trace Tree skill and ensure it is <b>loaded</b> in the agent session so the agent can talk
-  to the plugin. <b>Agent Notes</b> only auto-syncs when that skill is loaded.
+  to the plugin.
 </p>
 <p>Supported agents:</p>
 <ul>
@@ -78,7 +76,6 @@
   <li>Rebind line locations after source edits on disk</li>
   <li>Ask the IDE to reload / refresh plugin data</li>
   <li>Select or navigate to nodes in the Code Trace Tree tool window</li>
-  <li>Auto-sync topic-related traces when <b>Agent Notes</b> is enabled and this skill is loaded</li>
 </ul>
 <p>
   <b>Python required:</b> the main skill ops (<code>trace_tree</code> search / add / move / delete / rebind)
@@ -86,15 +83,10 @@
   (<code>python3</code> or <code>python</code>).
   Resolve / refresh / select helper scripts are plain shell or batch and do not need Python.
 </p>
-<p>
-  Shared skill source in this repo: <code>skills/code-trace-tree/</code>
-  (same package for every agent; only the extract path differs).
-  Releases attach <code>code-trace-tree-skill-&lt;version&gt;.zip</code>.
-</p>
 
 <h2>Install skill — extract locations</h2>
 <p>
-  Download <code>code-trace-tree-skill-1.1.7.zip</code> from the GitHub Release
+  Download <code>code-trace-tree-skill-1.1.8.zip</code> from the GitHub Release
   (one zip for all agents).
   Remove any existing <code>code-trace-tree</code> skill folder first, then extract into the
   skills directory for your agent:
@@ -113,22 +105,38 @@
 </table>
 
 <h2>Install example (Claude Code, Linux &amp; macOS)</h2>
-<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.7/code-trace-tree-skill-1.1.7.zip -o code-trace-tree-skill-1.1.7.zip</code>
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.8/code-trace-tree-skill-1.1.8.zip -o code-trace-tree-skill-1.1.8.zip</code>
 <code>rm -rf ~/.claude/skills/code-trace-tree</code>
 <code>mkdir -p ~/.claude/skills</code>
-<code>unzip code-trace-tree-skill-1.1.7.zip -d ~/.claude/skills/</code>
-<code>rm code-trace-tree-skill-1.1.7.zip</code>
+<code>unzip code-trace-tree-skill-1.1.8.zip -d ~/.claude/skills/</code>
+<code>rm code-trace-tree-skill-1.1.8.zip</code>
 </pre>
 <p>Project-local: extract into <code>.claude/skills/</code> instead of <code>~/.claude/skills/</code>. For other agents, use the same zip and extract into that agent’s folder from the table above.</p>
 
 <h2>Install example (Claude Code, Windows PowerShell)</h2>
-<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.7/code-trace-tree-skill-1.1.7.zip" -OutFile "code-trace-tree-skill-1.1.7.zip"</code>
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.1.8/code-trace-tree-skill-1.1.8.zip" -OutFile "code-trace-tree-skill-1.1.8.zip"</code>
 <code>Remove-Item -Recurse -Force "$HOME\.claude\skills\code-trace-tree" -ErrorAction SilentlyContinue</code>
 <code>New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null</code>
-<code>Expand-Archive -Path "code-trace-tree-skill-1.1.7.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
-<code>Remove-Item "code-trace-tree-skill-1.1.7.zip"</code>
+<code>Expand-Archive -Path "code-trace-tree-skill-1.1.8.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
+<code>Remove-Item "code-trace-tree-skill-1.1.8.zip"</code>
 </pre>
 <p>Project-local: extract into <code>.claude\skills\</code>. For Cursor / Copilot / Codex / Gemini, use the same zip and change the destination path using the table above.</p>
+
+<h2>How to use the skill</h2>
+<p>
+  After the skill is installed and <b>loaded</b> in your agent session, ask the agent in natural language.
+  Mention the skill name when your agent needs an explicit skill reference:
+</p>
+<pre><code>Skill: code-trace-tree
+Help me generate some trace point nodes related to the current topic.
+</code></pre>
+<p>Other examples:</p>
+<pre><code>Skill: code-trace-tree
+Add a root trace point at the login handler, then children for validation and token issue.
+</code></pre>
+<pre><code>Skill: code-trace-tree
+Rebind line traces after my last source edits, then refresh the IDE tree.
+</code></pre>
 
 <h1>Storage</h1>
 <p>Trace data is stored in a shared global folder:</p>

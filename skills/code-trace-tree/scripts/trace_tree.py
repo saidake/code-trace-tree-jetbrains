@@ -107,8 +107,71 @@ def resolve_storage(project_root: Path) -> Path:
 
     raise SystemExit(
         "ERROR: no Code Trace Tree storage XML found. "
-        "Open the project once in the IDE with the plugin installed."
+        "Run init_storage.py, or create a trace point / profile in the IDE, "
+        "or import plugin data first."
     )
+
+
+def write_project_id_files(project_root: Path, project_id: str) -> list[Path]:
+    """
+    Write the local project id for whichever IDE folders exist.
+    If neither .idea nor .vscode exists, create .vscode/.
+    """
+    targets: list[Path] = []
+    if (project_root / ".idea").is_dir():
+        targets.append(project_root / ".idea" / "code-trace-tree.project.id")
+    if (project_root / ".vscode").is_dir():
+        targets.append(project_root / ".vscode" / "code-trace-tree.project.id")
+    if not targets:
+        targets.append(project_root / ".vscode" / "code-trace-tree.project.id")
+    written: list[Path] = []
+    for path in targets:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(project_id.strip() + "\n", encoding="utf-8")
+        written.append(path)
+    return written
+
+
+def create_fresh_storage(project_root: Path) -> Path:
+    """
+    Case C: allocate a new project id, write local id file(s), and create empty
+    global XML with profile `main`. Idempotent if storage already resolves.
+    """
+    try:
+        return resolve_storage(project_root)
+    except SystemExit:
+        pass
+
+    project_id = str(uuid.uuid4())
+    app_dir = global_app_dir()
+    app_dir.mkdir(parents=True, exist_ok=True)
+    storage_xml = app_dir / f"{project_id}.xml"
+    write_project_id_files(project_root, project_id)
+
+    root = ET.Element("project", {"version": "4"})
+    ET.SubElement(root, "projectId").text = project_id
+    ET.SubElement(root, "path").text = str(project_root.resolve())
+    ET.SubElement(root, "updatedAt").text = str(int(time.time() * 1000))
+    ET.SubElement(root, "activeProfileName").text = "main"
+    ET.SubElement(root, "highlightingEnabled").text = "true"
+    ET.SubElement(root, "namePromptEnabled").text = "true"
+    ET.SubElement(root, "descriptionAreaOpened").text = "false"
+    profiles = ET.SubElement(root, "traceProfiles")
+    profile = ET.SubElement(profiles, "traceProfile")
+    ET.SubElement(profile, "name").text = "main"
+    ET.SubElement(profile, "tracePointNodes")
+
+    tree = ET.ElementTree(root)
+    write_atomic(tree, storage_xml)
+    return storage_xml
+
+
+def ensure_storage(project_root: Path) -> Path:
+    """Return existing storage XML, or create Case C storage when missing."""
+    try:
+        return resolve_storage(project_root)
+    except SystemExit:
+        return create_fresh_storage(project_root)
 
 
 def norm_rel(path: str) -> str:
@@ -875,10 +938,6 @@ def attach_under(parent: Optional[ET.Element], roots_el: ET.Element, node: ET.El
         children.append(node)
 
 
-AGENT_PROFILE_NAME = "AGENT"
-LEGACY_CLAUDE_PROFILE_NAME = "CLAUDE"
-
-
 def get_or_create_profile(root: ET.Element, name: str) -> ET.Element:
     profiles = ensure_child(root, "traceProfiles")
     for profile in profiles.findall("traceProfile"):
@@ -891,53 +950,11 @@ def get_or_create_profile(root: ET.Element, name: str) -> ET.Element:
     return profile
 
 
-def is_agent_assist_target(target: str) -> bool:
-    return target in (AGENT_PROFILE_NAME, LEGACY_CLAUDE_PROFILE_NAME)
-
-
-def migrate_claude_profile_to_agent(root: ET.Element) -> None:
-    """Rename legacy CLAUDE profile / target to AGENT in-place."""
-    target = child_text(root, "claudeAssistTarget", "CURRENT").upper()
-    if target == LEGACY_CLAUDE_PROFILE_NAME:
-        set_child_text(root, "claudeAssistTarget", AGENT_PROFILE_NAME)
-
-    profiles = root.find("traceProfiles")
-    if profiles is None:
-        return
-    agent_el = None
-    legacy_el = None
-    for profile in profiles.findall("traceProfile"):
-        name = child_text(profile, "name")
-        if name.upper() == AGENT_PROFILE_NAME:
-            agent_el = profile
-        elif name.upper() == LEGACY_CLAUDE_PROFILE_NAME:
-            legacy_el = profile
-    if legacy_el is not None and agent_el is None:
-        set_child_text(legacy_el, "name", AGENT_PROFILE_NAME)
-        if child_text(root, "activeProfileName", "").upper() == LEGACY_CLAUDE_PROFILE_NAME:
-            set_child_text(root, "activeProfileName", AGENT_PROFILE_NAME)
-    elif legacy_el is not None and agent_el is not None:
-        if child_text(root, "activeProfileName", "").upper() == LEGACY_CLAUDE_PROFILE_NAME:
-            set_child_text(root, "activeProfileName", AGENT_PROFILE_NAME)
-        if child_text(agent_el, "name") != AGENT_PROFILE_NAME:
-            set_child_text(agent_el, "name", AGENT_PROFILE_NAME)
-    elif agent_el is not None and child_text(agent_el, "name") != AGENT_PROFILE_NAME:
-        was_active = child_text(root, "activeProfileName", "").upper() == child_text(agent_el, "name").upper()
-        set_child_text(agent_el, "name", AGENT_PROFILE_NAME)
-        if was_active:
-            set_child_text(root, "activeProfileName", AGENT_PROFILE_NAME)
-
-
 def resolve_profile_name(root: ET.Element, override: Optional[str]) -> str:
     if override:
         return override
-    assist = child_text(root, "claudeAssistEnabled").lower() == "true"
-    target = child_text(root, "claudeAssistTarget", "CURRENT").upper()
-    if assist and is_agent_assist_target(target):
-        return AGENT_PROFILE_NAME
     active = child_text(root, "activeProfileName", "main")
     return active or "main"
-
 
 def profile_roots(profile: ET.Element) -> ET.Element:
     return ensure_child(profile, "tracePointNodes")
@@ -1021,31 +1038,65 @@ def signals_dir() -> Path:
     return global_app_dir() / "signals"
 
 
-def request_refresh(project_root: Path) -> None:
+def request_refresh(project_root: Path) -> Optional[Path]:
+    """Full project reload signal (all profiles + toolbar flags). TTL uses file mtime."""
     project_id = read_project_id(project_root)
     if not project_id:
-        return
+        return None
     dest = signals_dir()
     dest.mkdir(parents=True, exist_ok=True)
     req = dest / f"{project_id}.request_refresh"
-    req.write_text(str(int(time.time() * 1000)) + "\n", encoding="utf-8")
+    # Body unused; overwrite so mtime advances (TTL).
+    req.write_text("1\n", encoding="utf-8")
+    return req
 
 
-def load_context(project: Optional[str], profile: Optional[str]):
+def request_refresh_profile(
+    project_root: Path, profile_name: Optional[str] = None
+) -> Optional[Path]:
+    """
+    Reload one profile from XML into the IDE.
+    Body = profile name (one line). Empty body → IDE refreshes its active profile.
+    Does not change activeProfileName or project toolbar flags.
+    """
+    project_id = read_project_id(project_root)
+    if not project_id:
+        return None
+    dest = signals_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    req = dest / f"{project_id}.request_refresh_profile"
+    body = (profile_name or "").strip()
+    req.write_text((body + "\n") if body else "", encoding="utf-8")
+    return req
+
+
+def request_select(project_root: Path, ids: Sequence[str]) -> Path:
+    project_id = read_project_id(project_root)
+    if not project_id:
+        raise SystemExit(
+            "ERROR: no project id file. Run init_storage.py or create data in the IDE first."
+        )
+    dest = signals_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    req = dest / f"{project_id}.select_trace_points"
+    lines = [i.strip() for i in ids if i and i.strip()]
+    req.write_text(("\n".join(lines) + ("\n" if lines else "")), encoding="utf-8")
+    return req
+
+
+def load_context(
+    project: Optional[str],
+    profile: Optional[str],
+    *,
+    ensure: bool = False,
+):
     start = Path(project or ".")
     project_root = find_project_root(start)
-    storage_xml = resolve_storage(project_root)
+    storage_xml = ensure_storage(project_root) if ensure else resolve_storage(project_root)
     tree = ET.parse(storage_xml)
     root = tree.getroot()
-    migrate_claude_profile_to_agent(root)
     profile_name = resolve_profile_name(root, profile)
     profile_el = get_or_create_profile(root, profile_name)
-    if (
-        child_text(root, "claudeAssistEnabled").lower() == "true"
-        and is_agent_assist_target(child_text(root, "claudeAssistTarget", "CURRENT").upper())
-        and not profile
-    ):
-        set_child_text(root, "activeProfileName", AGENT_PROFILE_NAME)
     roots_el = profile_roots(profile_el)
     return project_root, storage_xml, tree, root, profile_name, roots_el
 
@@ -1119,7 +1170,7 @@ def _print_add_result(payload: dict) -> None:
 
 def cmd_add(args: argparse.Namespace) -> int:
     project_root, storage_xml, tree, root, profile_name, roots_el = load_context(
-        args.project, args.profile
+        args.project, args.profile, ensure=True
     )
     parent_path = parent_refs_from_args(args, required=False)
     parent = resolve_parent_path(roots_el, parent_path)
@@ -1282,7 +1333,7 @@ def resolve_target_node(
 
 def cmd_move(args: argparse.Namespace) -> int:
     project_root, storage_xml, tree, root, profile_name, roots_el = load_context(
-        args.project, args.profile
+        args.project, args.profile, ensure=True
     )
     node, container, _old_parent = resolve_target_node(roots_el, args, project_root)
     parent_path = parent_refs_from_args(args, required=True)
@@ -1331,7 +1382,7 @@ def cmd_move(args: argparse.Namespace) -> int:
 
 def cmd_delete(args: argparse.Namespace) -> int:
     project_root, storage_xml, tree, root, profile_name, roots_el = load_context(
-        args.project, args.profile
+        args.project, args.profile, ensure=True
     )
     node, container, _ = resolve_target_node(roots_el, args, project_root)
     deleted = collect_descendant_ids(node)
@@ -1373,7 +1424,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 def cmd_rebind(args: argparse.Namespace) -> int:
     project_root, storage_xml, tree, root, profile_name, roots_el = load_context(
-        args.project, args.profile
+        args.project, args.profile, ensure=True
     )
     file_filters = {norm_rel(f) for f in (args.file or [])}
 

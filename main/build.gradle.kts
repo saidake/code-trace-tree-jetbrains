@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.7"
+val pluginVersion = "1.1.11"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,11 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.8</h3>
+            <ul>
+              <li>Agents edit traces only when asked via the skill (no auto-sync toolbar toggle)</li>
+              <li>Document how to prompt the <code>code-trace-tree</code> skill in the README</li>
+            </ul>
             <h3>1.1.7</h3>
             <ul>
               <li>Reset the description area when switching profiles</li>
@@ -64,16 +69,14 @@ intellijPlatform {
             </ul>
             <h3>1.1.6</h3>
             <ul>
-              <li>Clarify <b>Agent Notes</b>: auto-sync requires the <code>code-trace-tree</code> skill loaded in the agent session</li>
-              <li>Agent Skill: require Agent Notes sync when enabled; do not refuse OS Config Dir writes as outside-workspace</li>
+              <li>Agent Skill: do not refuse OS Config Dir writes as outside-workspace</li>
               <li>Agent Skill: add repeatable <code>--parent-id</code>; disambiguate duplicate LINE tips by occurrence</li>
-              <li>Agent Skill: annotated multi-profile XML example; document live assist targets <code>CURRENT</code> / <code>AGENT</code></li>
+              <li>Agent Skill: annotated multi-profile XML example</li>
             </ul>
             <h3>1.1.5</h3>
             <ul>
               <li>Store project data as <code>&lt;projectId&gt;.xml</code>; still resolve and rename legacy <code>&lt;FolderName&gt;.xml</code></li>
               <li>Move agent refresh/select signals to global <code>signals/&lt;projectId&gt;.*</code> with a 60s TTL (multi-window safe)</li>
-              <li>Rename toolbar toggle <b>Claude Assist</b> to <b>Agent Notes</b>; rename dedicated profile <code>CLAUDE</code> → <code>AGENT</code> (legacy migrates on load)</li>
               <li>Ship one shared Agent Skill zip (<code>code-trace-tree-skill-X.Y.Z.zip</code>); clarify Agent Skill Path and OS Config Dir in the skill</li>
               <li>Forgiving LINE locators, idempotent add, and absolute skill script paths</li>
             </ul>
@@ -84,16 +87,14 @@ intellijPlatform {
             <h3>1.1.3</h3>
             <ul>
               <li>Initialize project id and default <code>main</code> profile as soon as a project opens</li>
-              <li>Claude Skill: check <code>claudeAssistEnabled</code> when the skill is loaded in a session</li>
-              <li>Clarify Claude Skill install commands in the Marketplace description</li>
+              <li>Clarify Agent Skill install commands in the Marketplace description</li>
             </ul>
             <h3>1.1.2</h3>
             <ul>
-              <li>Add Claude Assist toolbar toggle to auto-sync topic-related traces into the current or <code>CLAUDE</code> profile</li>
               <li>Add agent select-request signal to select/reveal nodes and navigate when exactly one id is listed</li>
-              <li>Add <code>trace_tree</code> skill scripts for search/add/move/delete/rebind (no occurrence args from Claude)</li>
+              <li>Add <code>trace_tree</code> skill scripts for search/add/move/delete/rebind (no occurrence args from the agent)</li>
               <li>Rebind LINE locations after disk edits (skill + IDE VFS content rebind)</li>
-              <li>Replace skill Python helpers with shell/batch scripts; expand Claude Skill docs and install instructions</li>
+              <li>Replace skill Python helpers with shell/batch scripts; expand Agent Skill docs and install instructions</li>
             </ul>
             <h3>1.1.1</h3>
             <ul>
@@ -115,7 +116,7 @@ intellijPlatform {
             <h3>1.0.8</h3>
             <ul>
               <li>Update Marketplace plugin logo</li>
-              <li>Attach Claude skill ZIP to GitHub Releases for easier agent install</li>
+              <li>Attach Agent Skill ZIP to GitHub Releases for easier agent install</li>
             </ul>
             <h3>1.0.7</h3>
             <ul>
@@ -126,7 +127,7 @@ intellijPlatform {
             <h3>1.0.6</h3>
             <ul>
               <li>Reload plugin data when the global storage XML changes or <code>.idea/code-trace-tree.refresh-request</code> is written</li>
-              <li>Add Claude Code skill and scripts so agents can resolve storage, edit traces, and notify IDEA to refresh</li>
+              <li>Add Agent Skill and scripts so agents can resolve storage, edit traces, and notify IDEA to refresh</li>
             </ul>
             <h3>1.0.5</h3>
             <ul>

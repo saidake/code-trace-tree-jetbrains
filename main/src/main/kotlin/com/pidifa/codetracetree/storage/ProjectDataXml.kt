@@ -32,12 +32,6 @@ data class ProjectDocument(
     val highlightingEnabled: Boolean = true,
     /** When true, creating a trace point prompts for a name; when false, creates with an empty name. */
     val namePromptEnabled: Boolean = true,
-    /**
-     * When true, Claude (via the skill) may auto-sync topic-related traces each turn that touched code.
-     */
-    val claudeAssistEnabled: Boolean = false,
-    /** Target profile for Agent Notes: [ClaudeAssistTarget.CURRENT] or [ClaudeAssistTarget.AGENT]. */
-    val claudeAssistTarget: ClaudeAssistTarget = ClaudeAssistTarget.CURRENT,
     /** Absolute path of the XML file this document was loaded from / should be saved to. */
     val storageFile: Path? = null
 ) {
@@ -85,18 +79,12 @@ object ProjectDataXml {
             root.getChildTextTrim("highlightingEnabled")?.toBooleanStrictOrNull() ?: true
         val namePromptEnabled =
             root.getChildTextTrim("namePromptEnabled")?.toBooleanStrictOrNull() ?: true
-        val claudeAssistEnabled =
-            root.getChildTextTrim("claudeAssistEnabled")?.toBooleanStrictOrNull() ?: false
-        val claudeAssistTarget =
-            ClaudeAssistTarget.fromStorage(root.getChildTextTrim("claudeAssistTarget"))
 
         val profileList = if (profiles.isEmpty()) {
             mutableListOf(TracePointService.TraceProfile(name = TracePointService.DEFAULT_PROFILE_NAME))
         } else {
             profiles
         }
-        val (migratedActive, _) = TracePointService.migrateClaudeProfileToAgent(profileList, activeProfileName)
-        activeProfileName = migratedActive
 
         return ProjectDocument(
             version = version,
@@ -108,8 +96,6 @@ object ProjectDataXml {
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
             namePromptEnabled = namePromptEnabled,
-            claudeAssistEnabled = claudeAssistEnabled,
-            claudeAssistTarget = claudeAssistTarget,
             storageFile = storageFile
         )
     }
@@ -123,8 +109,6 @@ object ProjectDataXml {
         root.addContent(Element("activeProfileName").setText(doc.activeProfileName))
         root.addContent(Element("highlightingEnabled").setText(doc.highlightingEnabled.toString()))
         root.addContent(Element("namePromptEnabled").setText(doc.namePromptEnabled.toString()))
-        root.addContent(Element("claudeAssistEnabled").setText(doc.claudeAssistEnabled.toString()))
-        root.addContent(Element("claudeAssistTarget").setText(doc.claudeAssistTarget.toStorage()))
 
         val profilesEl = Element("traceProfiles")
         for (profile in doc.profiles) {

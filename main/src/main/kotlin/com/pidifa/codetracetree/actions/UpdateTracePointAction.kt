@@ -46,6 +46,14 @@ class UpdateTracePointAction : AnAction() {
         val startOffset = document.getLineStartOffset(lineNumber - 1)
         val endOffset = document.getLineEndOffset(lineNumber - 1)
         val lineContent = document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trim()
+        if (lineContent.isEmpty()) {
+            Messages.showWarningDialog(
+                project,
+                "Cannot update a trace point to an empty line.",
+                "Update Trace Points"
+            )
+            return
+        }
         val projectPath = project.basePath ?: return
         val relativePath = file.path.removePrefix("$projectPath/")
         val baseName = file.name

@@ -24,7 +24,10 @@ import java.util.stream.Collectors
  * Resolution on project open:
  * - Case A: match by project id → update path/updatedAt
  * - Case B: match by path (copy-on-write) → new id + new XML file
- * - Case C: create a fresh project document
+ * - Case C: no match → return null (do not create id/XML until first real use)
+ *
+ * Call [ensureCreated] before the first persist that should bind storage
+ * (create trace point, add profile, import, or toolbar toggle).
  */
 class ProjectStorage(private val projectBasePath: String) {
     private val log = Logger.getInstance(ProjectStorage::class.java)
@@ -36,7 +39,11 @@ class ProjectStorage(private val projectBasePath: String) {
     @Volatile
     private var boundProjectId: String? = null
 
-    fun resolveAndLoad(): ProjectDocument {
+    /**
+     * Resolve existing storage (Case A / B). Returns null when nothing exists yet
+     * (lazy Case C — no disk writes).
+     */
+    fun resolveAndLoad(): ProjectDocument? {
         Files.createDirectories(GlobalStoragePaths.resolveAppDir())
 
         val existingId = ProjectIdFiles.readProjectId(projectBase)
@@ -85,23 +92,28 @@ class ProjectStorage(private val projectBasePath: String) {
             return copied
         }
 
-        // Case C: new project
+        // Case C: deferred — no project id / XML until ensureCreated()
+        return null
+    }
+
+    /**
+     * Bind storage for a new project (Case C) if not already bound.
+     * Writes the local project id file and allocates the global XML path;
+     * the first [save] writes the XML from in-memory state.
+     * @return true when this call newly bound storage
+     */
+    fun ensureCreated(): Boolean {
+        if (boundFile != null && boundProjectId != null) return false
+
+        Files.createDirectories(GlobalStoragePaths.resolveAppDir())
+        if (resolveAndLoad() != null) return true
+
         val newId = generateProjectId()
         val newFile = allocateStorageFile(newId)
-        val fresh = ProjectDocument(
-            projectId = newId,
-            path = projectBase.toString(),
-            updatedAt = System.currentTimeMillis(),
-            profiles = mutableListOf(
-                TracePointService.TraceProfile(name = TracePointService.DEFAULT_PROFILE_NAME)
-            ),
-            activeProfileName = TracePointService.DEFAULT_PROFILE_NAME,
-            storageFile = newFile
-        )
         ProjectIdFiles.writeProjectId(projectBase, newId)
-        bind(fresh)
-        save(fresh)
-        return fresh
+        boundProjectId = newId
+        boundFile = newFile
+        return true
     }
 
     fun boundStorageFile(): Path? = boundFile
@@ -131,9 +143,7 @@ class ProjectStorage(private val projectBasePath: String) {
         activeProfileName: String,
         descriptionAreaOpened: Boolean,
         highlightingEnabled: Boolean,
-        namePromptEnabled: Boolean,
-        claudeAssistEnabled: Boolean,
-        claudeAssistTarget: ClaudeAssistTarget
+        namePromptEnabled: Boolean
     ) {
         val file = boundFile ?: return
         val projectId = boundProjectId ?: return
@@ -152,8 +162,6 @@ class ProjectStorage(private val projectBasePath: String) {
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
             namePromptEnabled = namePromptEnabled,
-            claudeAssistEnabled = claudeAssistEnabled,
-            claudeAssistTarget = claudeAssistTarget,
             storageFile = file
         )
         save(doc)

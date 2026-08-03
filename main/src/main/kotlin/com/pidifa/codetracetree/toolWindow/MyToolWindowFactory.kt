@@ -13,6 +13,7 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.actions.MoveUpTracePointAction
 import com.pidifa.codetracetree.actions.MoveDownTracePointAction
 import com.pidifa.codetracetree.actions.ExpandSelectedTracePointAction
@@ -21,7 +22,6 @@ import com.pidifa.codetracetree.actions.ExportTracePointsAction
 import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
-import com.pidifa.codetracetree.actions.ToggleClaudeAssistAction
 import com.pidifa.codetracetree.actions.ToggleNamePromptAction
 import com.pidifa.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
@@ -432,6 +432,22 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                             }
                             popupMenu.add(goToItem)
                         }
+                        if (tracePoint.traceType == TraceType.LINE) {
+                            popupMenu.addSeparator()
+                            val showLineContentItem = JMenuItem("Show Line Content")
+                            showLineContentItem.addActionListener {
+                                val content = tracePoint.lineContent?.trim().orEmpty()
+                                Messages.showInputDialog(
+                                    toolWindow.project,
+                                    "Saved trimmed line content (select and copy as needed):",
+                                    "Line Content",
+                                    null,
+                                    content,
+                                    null
+                                )
+                            }
+                            popupMenu.add(showLineContentItem)
+                        }
 
                         popupMenu.show(this@apply, e.x, e.y)
                     }
@@ -543,13 +559,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Prompt for Name"
                     templatePresentation.description =
                         "When enabled, ask for a name when creating a trace point; when disabled, create with an empty name"
-                })
-                add(ToggleClaudeAssistAction().apply {
-                    templatePresentation.text = "Agent Notes"
-                    templatePresentation.description =
-                        "Allow an external AI agent with the code-trace-tree skill loaded to auto-sync " +
-                            "topic-related traces when it touches code. This plugin does not include an AI agent—" +
-                            "install one separately and load the skill in the session."
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"

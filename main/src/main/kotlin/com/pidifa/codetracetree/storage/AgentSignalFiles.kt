@@ -5,13 +5,16 @@
  */
 package com.pidifa.codetracetree.storage
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 
 /**
  * Global agent notify signals under `<appDir>/signals/`.
  *
- * - `<projectId>.request_refresh`
+ * - `<projectId>.request_refresh` — full project reload (all profiles + toolbar flags)
+ * - `<projectId>.request_refresh_profile` — one profile; body = profile name
+ *   (empty / missing name → active profile). Does not change activeProfileName or flags.
  * - `<projectId>.select_trace_points`
  *
  * Files older than [TTL_MS] are ignored and deleted so a late IDE open does not
@@ -22,6 +25,7 @@ import java.nio.file.Path
 object AgentSignalFiles {
     const val SIGNALS_DIR_NAME = "signals"
     const val REFRESH_SUFFIX = ".request_refresh"
+    const val REFRESH_PROFILE_SUFFIX = ".request_refresh_profile"
     const val SELECT_SUFFIX = ".select_trace_points"
     /** Ignore / delete signal files older than this age. */
     const val TTL_MS = 60_000L
@@ -30,11 +34,29 @@ object AgentSignalFiles {
 
     fun refreshFileName(projectId: String): String = "$projectId$REFRESH_SUFFIX"
 
+    fun refreshProfileFileName(projectId: String): String = "$projectId$REFRESH_PROFILE_SUFFIX"
+
     fun selectFileName(projectId: String): String = "$projectId$SELECT_SUFFIX"
 
     fun refreshPath(projectId: String): Path = signalsDir().resolve(refreshFileName(projectId))
 
+    fun refreshProfilePath(projectId: String): Path =
+        signalsDir().resolve(refreshProfileFileName(projectId))
+
     fun selectPath(projectId: String): Path = signalsDir().resolve(selectFileName(projectId))
+
+    /** First non-empty trimmed line of a profile-refresh signal (may be ""). */
+    fun readProfileRefreshName(path: Path): String {
+        if (!Files.isRegularFile(path)) return ""
+        return try {
+            Files.readAllLines(path, StandardCharsets.UTF_8)
+                .map { it.trim() }
+                .firstOrNull { it.isNotEmpty() }
+                .orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     /**
      * Returns true when [path] exists and is within TTL.

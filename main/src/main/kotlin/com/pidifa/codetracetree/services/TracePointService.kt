@@ -32,7 +32,6 @@ import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.storage.AgentSignalFiles
-import com.pidifa.codetracetree.storage.ClaudeAssistTarget
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectStorage
@@ -50,54 +49,9 @@ class TracePointService(private val project: Project) {
 
     companion object {
         const val DEFAULT_PROFILE_NAME = "main"
-        /** Dedicated profile for Agent Notes when target is [ClaudeAssistTarget.AGENT]. */
-        const val AGENT_PROFILE_NAME = "AGENT"
-        /** Legacy name; use [AGENT_PROFILE_NAME]. Kept for migration of older storage. */
-        const val CLAUDE_PROFILE_NAME = ClaudeAssistTarget.LEGACY_CLAUDE
         private const val SELF_WRITE_IGNORE_MS = 1500L
         private const val EXTERNAL_REBIND_DEBOUNCE_MS = 350L
         private val LOG = Logger.getInstance(TracePointService::class.java)
-
-        /**
-         * Renames a legacy `CLAUDE` profile to `AGENT` when needed.
-         * @return updated active profile name and whether any rename occurred
-         */
-        fun migrateClaudeProfileToAgent(
-            profiles: MutableList<TraceProfile>,
-            activeProfileName: String
-        ): Pair<String, Boolean> {
-            var changed = false
-            var active = activeProfileName
-            val agent = profiles.find { it.name.equals(AGENT_PROFILE_NAME, ignoreCase = true) }
-            val legacy = profiles.find {
-                it.name.equals(ClaudeAssistTarget.LEGACY_CLAUDE, ignoreCase = true)
-            }
-            when {
-                legacy != null && agent == null -> {
-                    val wasActive = active.equals(legacy.name, ignoreCase = true)
-                    legacy.name = AGENT_PROFILE_NAME
-                    if (wasActive) active = AGENT_PROFILE_NAME
-                    changed = true
-                }
-                legacy != null && agent != null -> {
-                    if (active.equals(legacy.name, ignoreCase = true)) {
-                        active = AGENT_PROFILE_NAME
-                        changed = true
-                    }
-                    if (agent.name != AGENT_PROFILE_NAME) {
-                        agent.name = AGENT_PROFILE_NAME
-                        changed = true
-                    }
-                }
-                agent != null && agent.name != AGENT_PROFILE_NAME -> {
-                    val wasActive = active.equals(agent.name, ignoreCase = true)
-                    agent.name = AGENT_PROFILE_NAME
-                    if (wasActive) active = AGENT_PROFILE_NAME
-                    changed = true
-                }
-            }
-            return active to changed
-        }
     }
 
     data class TracePoint(
@@ -184,8 +138,6 @@ class TracePointService(private val project: Project) {
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
     private var isNamePromptEnabled = true
-    private var isClaudeAssistEnabled = false
-    private var claudeAssistTarget: ClaudeAssistTarget = ClaudeAssistTarget.CURRENT
 
     private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
     private var activeProfileName: String = DEFAULT_PROFILE_NAME
@@ -373,10 +325,30 @@ class TracePointService(private val project: Project) {
         try {
             val storage = ProjectStorage(basePath)
             projectStorage = storage
-            applyDocument(storage.resolveAndLoad(), validate = false, notifyUi = false)
+            val doc = storage.resolveAndLoad()
+            if (doc != null) {
+                applyDocument(doc, validate = false, notifyUi = false)
+            }
+            // Lazy Case C: keep in-memory defaults until first real use
         } catch (e: Exception) {
             LOG.warn("Code Trace Tree: failed to load hybrid storage; using defaults", e)
         }
+    }
+
+    /**
+     * Create local project id + bind global XML path if this project has no storage yet.
+     * Call before the first persist for create / profile / import / toolbar toggles.
+     */
+    fun ensureStorage(): Boolean {
+        val basePath = project.basePath
+        if (basePath.isNullOrBlank()) return false
+        val storage = projectStorage ?: ProjectStorage(basePath).also { projectStorage = it }
+        if (storage.boundProjectId() != null) return false
+        val created = storage.ensureCreated()
+        if (created) {
+            startExternalStorageWatcher()
+        }
+        return created
     }
 
     private fun startExternalStorageWatcher() {
@@ -384,12 +356,18 @@ class TracePointService(private val project: Project) {
         externalStorageWatcher?.close()
         val watcher = ExternalStorageWatcher(
             projectId = projectId,
-            storageFileProvider = { projectStorage?.boundStorageFile() },
             shouldIgnore = { System.currentTimeMillis() < ignoreExternalChangesUntilMs },
-            onExternalChange = { reason ->
+            onFullRefresh = { reason ->
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) {
                         reloadFromExternalStorage(reason)
+                    }
+                }
+            },
+            onProfileRefresh = {
+                ApplicationManager.getApplication().invokeLater {
+                    if (!project.isDisposed) {
+                        handleExternalProfileRefreshRequest()
                     }
                 }
             },
@@ -407,7 +385,7 @@ class TracePointService(private val project: Project) {
 
     /**
      * Reloads the bound global XML into memory and refreshes the tool window / highlights.
-     * Called when the storage file changes or a global refresh signal is written.
+     * Called when a global `request_refresh` signal is written.
      */
     fun reloadFromExternalStorage(reason: String = "manual"): Boolean {
         val storage = projectStorage ?: return false
@@ -415,16 +393,56 @@ class TracePointService(private val project: Project) {
         val doc = storage.reloadBoundDocument() ?: return false
         LOG.info("Code Trace Tree: reloading from external storage ($reason)")
         suppressPersist = true
-        var profileMigrated = false
         try {
-            profileMigrated = applyDocument(doc, validate = true, notifyUi = true)
+            applyDocument(doc, validate = true, notifyUi = true)
         } finally {
             suppressPersist = false
         }
-        if (profileMigrated) {
-            schedulePersist()
+        return true
+    }
+
+    /**
+     * Reloads one profile from the bound XML into memory.
+     * Does not change [activeProfileName] or project toolbar flags.
+     * @param profileName blank/null → active profile
+     */
+    fun reloadProfileFromExternalStorage(profileName: String? = null): Boolean {
+        val storage = projectStorage ?: return false
+        if (System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
+        val doc = storage.reloadBoundDocument() ?: return false
+        val name = profileName?.trim().orEmpty().ifEmpty { activeProfileName }
+        val incoming = doc.profiles.find { it.name == name } ?: return false
+        LOG.info("Code Trace Tree: reloading profile '$name' from external storage")
+        suppressPersist = true
+        try {
+            val cloned = TraceProfile(
+                name = incoming.name.ifBlank { DEFAULT_PROFILE_NAME },
+                tracePointNodes = incoming.tracePointNodes,
+                expandedTracePointIds = incoming.expandedTracePointIds.toMutableSet()
+            )
+            val idx = profiles.indexOfFirst { it.name == cloned.name }
+            if (idx >= 0) {
+                profiles[idx] = cloned
+            } else {
+                profiles.add(cloned)
+            }
+            if (cloned.name == activeProfileName) {
+                loadActiveProfileFromStore()
+            }
+            notifyProfileListeners()
+        } finally {
+            suppressPersist = false
         }
         return true
+    }
+
+    /** Handles `<projectId>.request_refresh_profile` (body = profile name; empty → active). */
+    fun handleExternalProfileRefreshRequest() {
+        val projectId = projectStorage?.boundProjectId() ?: return
+        val request = AgentSignalFiles.refreshProfilePath(projectId)
+        if (!AgentSignalFiles.isFresh(request)) return
+        val name = AgentSignalFiles.readProfileRefreshName(request)
+        reloadProfileFromExternalStorage(name.ifBlank { null })
     }
 
     /**
@@ -468,13 +486,10 @@ class TracePointService(private val project: Project) {
         }
     }
 
-    /** @return true when a legacy `CLAUDE` profile was renamed to `AGENT` */
-    private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean): Boolean {
+    private fun applyDocument(doc: ProjectDocument, validate: Boolean, notifyUi: Boolean) {
         isHighlightingEnabled = doc.highlightingEnabled
         isDescriptionAreaOpened = doc.descriptionAreaOpened
         isNamePromptEnabled = doc.namePromptEnabled
-        isClaudeAssistEnabled = doc.claudeAssistEnabled
-        claudeAssistTarget = doc.claudeAssistTarget
         profiles = doc.profiles.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
@@ -486,10 +501,6 @@ class TracePointService(private val project: Project) {
             profiles.add(TraceProfile(name = DEFAULT_PROFILE_NAME))
         }
         activeProfileName = doc.activeProfileName
-            .takeIf { name -> profiles.any { it.name == name } }
-            ?: profiles.first().name
-        val (migratedActive, profileMigrated) = migrateClaudeProfileToAgent(profiles, activeProfileName)
-        activeProfileName = migratedActive
             .takeIf { name -> profiles.any { it.name == name } }
             ?: profiles.first().name
         val profile = profiles.find { it.name == activeProfileName } ?: profiles.first()
@@ -510,10 +521,6 @@ class TracePointService(private val project: Project) {
             val copy = getTracePoints()
             listenersMap[NodeListenerEventType.FULL_UPDATE]?.forEach { it(copy, true) }
         }
-        if (profileMigrated && !suppressPersist) {
-            schedulePersist()
-        }
-        return profileMigrated
     }
 
     /** Persist profiles to global storage (debounced on the EDT). */
@@ -539,9 +546,7 @@ class TracePointService(private val project: Project) {
             activeProfileName = activeProfileName,
             descriptionAreaOpened = isDescriptionAreaOpened,
             highlightingEnabled = isHighlightingEnabled,
-            namePromptEnabled = isNamePromptEnabled,
-            claudeAssistEnabled = isClaudeAssistEnabled,
-            claudeAssistTarget = claudeAssistTarget
+            namePromptEnabled = isNamePromptEnabled
         )
         externalStorageWatcher?.refreshRegistrations()
     }
@@ -551,59 +556,21 @@ class TracePointService(private val project: Project) {
     fun isHighlightingEnabled(): Boolean = isHighlightingEnabled
     fun isDescriptionAreaOpened(): Boolean = isDescriptionAreaOpened
     fun isNamePromptEnabled(): Boolean = isNamePromptEnabled
-    fun isClaudeAssistEnabled(): Boolean = isClaudeAssistEnabled
-    fun getClaudeAssistTarget(): ClaudeAssistTarget = claudeAssistTarget
 
     fun setDescriptionAreaOpened(opened: Boolean) {
+        ensureStorage()
         isDescriptionAreaOpened = opened
         schedulePersist()
     }
 
     fun setNamePromptEnabled(enabled: Boolean) {
+        ensureStorage()
         isNamePromptEnabled = enabled
         schedulePersist()
     }
 
-    fun setClaudeAssistEnabled(enabled: Boolean) {
-        isClaudeAssistEnabled = enabled
-        schedulePersist()
-    }
-
-    /**
-     * Enables Agent Notes (Claude Assist storage flags) and persists the chosen target.
-     * For [ClaudeAssistTarget.AGENT], creates/switches to the `AGENT` profile.
-     */
-    fun enableClaudeAssist(target: ClaudeAssistTarget) {
-        claudeAssistTarget = target
-        isClaudeAssistEnabled = true
-        if (target == ClaudeAssistTarget.AGENT) {
-            ensureAgentProfileActive()
-        }
-        schedulePersist()
-    }
-
-    private fun ensureAgentProfileActive() {
-        migrateClaudeProfileToAgent(profiles, activeProfileName).let { (migratedActive, _) ->
-            activeProfileName = migratedActive
-                .takeIf { name -> profiles.any { it.name == name } }
-                ?: activeProfileName
-        }
-        val existing = profiles.find { it.name.equals(AGENT_PROFILE_NAME, ignoreCase = true) }
-        if (existing == null) {
-            addProfile(AGENT_PROFILE_NAME)
-            return
-        }
-        val wasActive = activeProfileName.equals(existing.name, ignoreCase = true)
-        existing.name = AGENT_PROFILE_NAME
-        if (wasActive) {
-            activeProfileName = AGENT_PROFILE_NAME
-            notifyProfileListeners()
-        } else {
-            switchProfile(AGENT_PROFILE_NAME)
-        }
-    }
-
     fun setHighlightingEnabled(enabled: Boolean) {
+        ensureStorage()
         isHighlightingEnabled = enabled
         ApplicationManager.getApplication().runReadAction {
             FileEditorManager.getInstance(project).openFiles.forEach { file ->
@@ -881,12 +848,16 @@ class TracePointService(private val project: Project) {
         parentId: String? = null,
         description: String = ""
     ) {
+        ensureStorage()
         ApplicationManager.getApplication().runReadAction {
             val document = FileDocumentManager.getInstance().getDocument(file)
             val lineContent = document?.let {
                 val start = it.getLineStartOffset(lineNumber - 1)
                 val end = it.getLineEndOffset(lineNumber - 1)
                 it.getText(TextRange(start, end)).trim()
+            }
+            if (lineContent.isNullOrEmpty()) {
+                return@runReadAction
             }
             val (totalOccurrences, matchingLines) = if (document != null) {
                 getLineOccurrences(document, lineContent)
@@ -922,6 +893,7 @@ class TracePointService(private val project: Project) {
         parentId: String? = null,
         description: String = ""
     ) {
+        ensureStorage()
         ApplicationManager.getApplication().runReadAction {
             val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
             val kind = if (file.isDirectory) TraceType.DIRECTORY else TraceType.FILE
@@ -1190,6 +1162,7 @@ class TracePointService(private val project: Project) {
         if (trimmed.isEmpty() || profiles.any { it.name.equals(trimmed, ignoreCase = true) }) {
             return false
         }
+        ensureStorage()
         syncActiveProfileToStore()
         profiles.add(TraceProfile(name = trimmed))
         activeProfileName = trimmed
@@ -1215,6 +1188,7 @@ class TracePointService(private val project: Project) {
         nodes: MutableList<TracePointNode>,
         expandedIds: MutableSet<String>
     ) {
+        ensureStorage()
         clearAllHighlights()
         selectedTracePointIds.clear()
         tracePointNodes = nodes
@@ -1258,6 +1232,7 @@ class TracePointService(private val project: Project) {
         nodes: MutableList<TracePointNode>,
         expandedIds: MutableSet<String>
     ): String {
+        ensureStorage()
         syncActiveProfileToStore()
         val name = allocateUniqueProfileName(desiredName)
         profiles.add(
@@ -1280,6 +1255,7 @@ class TracePointService(private val project: Project) {
      */
     fun importAsNewProfiles(imported: List<TraceProfile>): List<String> {
         if (imported.isEmpty()) return emptyList()
+        ensureStorage()
         syncActiveProfileToStore()
         val created = mutableListOf<String>()
         for (profile in imported) {
@@ -1306,6 +1282,7 @@ class TracePointService(private val project: Project) {
      */
     fun mergeProfiles(imported: List<TraceProfile>, preferredActiveName: String? = null) {
         if (imported.isEmpty()) return
+        ensureStorage()
         syncActiveProfileToStore()
         for (incoming in imported) {
             val existing = profiles.find { it.name.equals(incoming.name, ignoreCase = true) }
@@ -1337,6 +1314,7 @@ class TracePointService(private val project: Project) {
      */
     fun replaceAllProfiles(imported: List<TraceProfile>, preferredActiveName: String? = null) {
         if (imported.isEmpty()) return
+        ensureStorage()
         profiles = imported.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
