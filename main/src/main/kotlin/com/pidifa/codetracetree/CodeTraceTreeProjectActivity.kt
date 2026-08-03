@@ -10,9 +10,9 @@ import com.intellij.openapi.startup.ProjectActivity
 import com.pidifa.codetracetree.services.TracePointService
 
 /**
- * Eagerly initializes [TracePointService] when a project opens so hybrid storage
- * (project id file + global XML with the default `main` profile) exists immediately,
- * even before the tool window or any action is used.
+ * Initializes [TracePointService] when a project opens so existing hybrid storage
+ * (Case A / B) is loaded. New projects stay unbound until the first real use
+ * (create trace point, add profile, import, or toolbar toggle).
  */
 class CodeTraceTreeProjectActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
