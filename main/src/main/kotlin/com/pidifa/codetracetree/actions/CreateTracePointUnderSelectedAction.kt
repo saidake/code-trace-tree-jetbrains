@@ -33,6 +33,17 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         }
 
         val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
+        val document = editor.document
+        val startOffset = document.getLineStartOffset(lineNumber - 1)
+        val endOffset = document.getLineEndOffset(lineNumber - 1)
+        if (document.getText(com.intellij.openapi.util.TextRange(startOffset, endOffset)).trim().isEmpty()) {
+            Messages.showWarningDialog(
+                project,
+                "Cannot create a line trace point on an empty line.",
+                "Create Trace Point (Under Selected)"
+            )
+            return
+        }
 
         // ---- selected trace points --------------------------------------------
         val selectedIds = service.getSelectedTracePointIds()

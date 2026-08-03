@@ -13,6 +13,7 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.actions.MoveUpTracePointAction
 import com.pidifa.codetracetree.actions.MoveDownTracePointAction
 import com.pidifa.codetracetree.actions.ExpandSelectedTracePointAction
@@ -430,6 +431,22 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 tracePoint.navigateTo(project)
                             }
                             popupMenu.add(goToItem)
+                        }
+                        if (tracePoint.traceType == TraceType.LINE) {
+                            popupMenu.addSeparator()
+                            val showLineContentItem = JMenuItem("Show Line Content")
+                            showLineContentItem.addActionListener {
+                                val content = tracePoint.lineContent?.trim().orEmpty()
+                                Messages.showInputDialog(
+                                    toolWindow.project,
+                                    "Saved trimmed line content (select and copy as needed):",
+                                    "Line Content",
+                                    null,
+                                    content,
+                                    null
+                                )
+                            }
+                            popupMenu.add(showLineContentItem)
                         }
 
                         popupMenu.show(this@apply, e.x, e.y)

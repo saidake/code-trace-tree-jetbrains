@@ -856,6 +856,9 @@ class TracePointService(private val project: Project) {
                 val end = it.getLineEndOffset(lineNumber - 1)
                 it.getText(TextRange(start, end)).trim()
             }
+            if (lineContent.isNullOrEmpty()) {
+                return@runReadAction
+            }
             val (totalOccurrences, matchingLines) = if (document != null) {
                 getLineOccurrences(document, lineContent)
             } else Pair(0, emptyList())
