@@ -57,6 +57,15 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.11</h3>
+            <ul>
+              <li>Align version with the VS Code companion (jump from 1.1.8; no separate JetBrains 1.1.9 / 1.1.10 builds)</li>
+              <li>Lazy project storage (Case C): create storage on first real use</li>
+              <li>Agent signals: <code>request_refresh</code> and <code>request_refresh_profile</code> (no XML file watch)</li>
+              <li>Tree context menu <b>Show Line Content</b> for LINE nodes (copyable)</li>
+              <li>Block creating or updating LINE traces on empty lines</li>
+              <li>Update README preview and badges</li>
+            </ul>
             <h3>1.1.8</h3>
             <ul>
               <li>Agents edit traces only when asked via the skill (no auto-sync toolbar toggle)</li>
