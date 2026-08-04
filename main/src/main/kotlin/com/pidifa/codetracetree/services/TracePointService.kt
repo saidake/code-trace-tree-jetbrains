@@ -357,7 +357,7 @@ class TracePointService(private val project: Project) {
         return created
     }
 
-    private fun startExternalStorageWatcher() {
+    private fun startExternalStorageWatcher(replayExistingRefresh: Boolean = true) {
         val basePath = project.basePath
         if (basePath.isNullOrBlank()) return
 
@@ -369,8 +369,9 @@ class TracePointService(private val project: Project) {
             if (storageReadyWatcher == null) {
                 val watcher = StorageReadyWatcher { signalProjectId ->
                     ApplicationManager.getApplication().invokeLater {
-                        if (!project.isDisposed) {
-                            handleStorageReadySignal(signalProjectId)
+                        if (project.isDisposed) return@invokeLater
+                        if (!handleStorageReadySignal(signalProjectId)) {
+                            storageReadyWatcher?.clearSeen(signalProjectId)
                         }
                     }
                 }
@@ -385,11 +386,11 @@ class TracePointService(private val project: Project) {
         externalStorageWatcher?.close()
         val watcher = ExternalStorageWatcher(
             projectId = projectId,
-            shouldIgnore = { System.currentTimeMillis() < ignoreExternalChangesUntilMs },
             onFullRefresh = { reason ->
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) {
-                        reloadFromExternalStorage(reason)
+                        // Agent signals must not be dropped by the self-write ignore window.
+                        reloadFromExternalStorage(reason, bypassIgnoreWindow = true)
                     }
                 }
             },
@@ -409,41 +410,47 @@ class TracePointService(private val project: Project) {
             }
         )
         externalStorageWatcher = watcher
-        watcher.start()
+        watcher.start(replayExistingRefresh = replayExistingRefresh)
     }
 
     /**
      * Agent wrote `signals/<projectId>.storage-ready` after creating project id + XML (Case C).
      * Bind only when that id matches `.idea`/`.vscode` `code-trace-tree.project.id`.
+     * @return true when handled (bound or permanently skipped); false to retry later.
      */
-    private fun handleStorageReadySignal(signalProjectId: String) {
+    private fun handleStorageReadySignal(signalProjectId: String): Boolean {
         if (projectStorage?.boundProjectId() != null) {
             startExternalStorageWatcher()
-            return
+            return true
         }
-        val basePath = project.basePath ?: return
-        val localId = ProjectIdFiles.readProjectId(Paths.get(basePath)) ?: return
-        if (localId != signalProjectId) return
+        val basePath = project.basePath ?: return true
+        val localId = ProjectIdFiles.readProjectId(Paths.get(basePath)) ?: return false
+        if (localId != signalProjectId) return true
 
         val storage = projectStorage ?: ProjectStorage(basePath).also { projectStorage = it }
-        val doc = storage.resolveAndLoad() ?: return
-        if (storage.boundProjectId() != signalProjectId) return
+        val doc = storage.resolveAndLoad() ?: return false
+        if (storage.boundProjectId() != signalProjectId) return true
         suppressPersist = true
         try {
             applyDocument(doc, validate = true, notifyUi = true)
         } finally {
             suppressPersist = false
         }
-        startExternalStorageWatcher()
+        // Data already loaded; skip replaying request_refresh written alongside storage-ready.
+        startExternalStorageWatcher(replayExistingRefresh = false)
+        return true
     }
 
     /**
      * Reloads the bound global XML into memory and refreshes the tool window / highlights.
      * Called when a global `request_refresh` signal is written.
      */
-    fun reloadFromExternalStorage(reason: String = "manual"): Boolean {
+    fun reloadFromExternalStorage(
+        reason: String = "manual",
+        bypassIgnoreWindow: Boolean = false
+    ): Boolean {
         val storage = projectStorage ?: return false
-        if (System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
+        if (!bypassIgnoreWindow && System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
         val doc = storage.reloadBoundDocument() ?: return false
         LOG.info("Code Trace Tree: reloading from external storage ($reason)")
         suppressPersist = true
@@ -460,9 +467,12 @@ class TracePointService(private val project: Project) {
      * Does not change [activeProfileName] or project toolbar flags.
      * @param profileName blank/null → active profile
      */
-    fun reloadProfileFromExternalStorage(profileName: String? = null): Boolean {
+    fun reloadProfileFromExternalStorage(
+        profileName: String? = null,
+        bypassIgnoreWindow: Boolean = false
+    ): Boolean {
         val storage = projectStorage ?: return false
-        if (System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
+        if (!bypassIgnoreWindow && System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
         val doc = storage.reloadBoundDocument() ?: return false
         val name = profileName?.trim().orEmpty().ifEmpty { activeProfileName }
         val incoming = doc.profiles.find { it.name == name } ?: return false
@@ -496,7 +506,7 @@ class TracePointService(private val project: Project) {
         val request = AgentSignalFiles.refreshProfilePath(projectId)
         if (!AgentSignalFiles.isFresh(request)) return
         val name = AgentSignalFiles.readProfileRefreshName(request)
-        reloadProfileFromExternalStorage(name.ifBlank { null })
+        reloadProfileFromExternalStorage(name.ifBlank { null }, bypassIgnoreWindow = true)
     }
 
     /**
