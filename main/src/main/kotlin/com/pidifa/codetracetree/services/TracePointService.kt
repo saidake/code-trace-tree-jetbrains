@@ -34,9 +34,12 @@ import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.storage.AgentSignalFiles
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
+import com.pidifa.codetracetree.storage.ProjectIdFiles
 import com.pidifa.codetracetree.storage.ProjectStorage
+import com.pidifa.codetracetree.storage.StorageReadyWatcher
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -150,6 +153,7 @@ class TracePointService(private val project: Project) {
     @Volatile
     private var ignoreExternalChangesUntilMs = 0L
     private var externalStorageWatcher: ExternalStorageWatcher? = null
+    private var storageReadyWatcher: StorageReadyWatcher? = null
     private val pendingExternalRebindPaths = ConcurrentHashMap.newKeySet<String>()
     private val externalRebindExecutor = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "code-trace-tree-rebind-debounce").apply { isDaemon = true }
@@ -166,6 +170,8 @@ class TracePointService(private val project: Project) {
             externalRebindExecutor.shutdownNow()
             externalStorageWatcher?.close()
             externalStorageWatcher = null
+            storageReadyWatcher?.close()
+            storageReadyWatcher = null
             persistNow()
         })
 
@@ -352,7 +358,30 @@ class TracePointService(private val project: Project) {
     }
 
     private fun startExternalStorageWatcher() {
-        val projectId = projectStorage?.boundProjectId() ?: return
+        val basePath = project.basePath
+        if (basePath.isNullOrBlank()) return
+
+        val projectId = projectStorage?.boundProjectId()
+        if (projectId.isNullOrBlank()) {
+            // Case C: do not create storage; watch global <projectId>.storage-ready.
+            externalStorageWatcher?.close()
+            externalStorageWatcher = null
+            if (storageReadyWatcher == null) {
+                val watcher = StorageReadyWatcher { signalProjectId ->
+                    ApplicationManager.getApplication().invokeLater {
+                        if (!project.isDisposed) {
+                            handleStorageReadySignal(signalProjectId)
+                        }
+                    }
+                }
+                storageReadyWatcher = watcher
+                watcher.start()
+            }
+            return
+        }
+
+        storageReadyWatcher?.close()
+        storageReadyWatcher = null
         externalStorageWatcher?.close()
         val watcher = ExternalStorageWatcher(
             projectId = projectId,
@@ -381,6 +410,31 @@ class TracePointService(private val project: Project) {
         )
         externalStorageWatcher = watcher
         watcher.start()
+    }
+
+    /**
+     * Agent wrote `signals/<projectId>.storage-ready` after creating project id + XML (Case C).
+     * Bind only when that id matches `.idea`/`.vscode` `code-trace-tree.project.id`.
+     */
+    private fun handleStorageReadySignal(signalProjectId: String) {
+        if (projectStorage?.boundProjectId() != null) {
+            startExternalStorageWatcher()
+            return
+        }
+        val basePath = project.basePath ?: return
+        val localId = ProjectIdFiles.readProjectId(Paths.get(basePath)) ?: return
+        if (localId != signalProjectId) return
+
+        val storage = projectStorage ?: ProjectStorage(basePath).also { projectStorage = it }
+        val doc = storage.resolveAndLoad() ?: return
+        if (storage.boundProjectId() != signalProjectId) return
+        suppressPersist = true
+        try {
+            applyDocument(doc, validate = true, notifyUi = true)
+        } finally {
+            suppressPersist = false
+        }
+        startExternalStorageWatcher()
     }
 
     /**

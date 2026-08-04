@@ -7,7 +7,6 @@ package com.pidifa.codetracetree.storage
 
 import com.intellij.openapi.diagnostic.Logger
 import java.nio.file.FileSystems
-import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds
 import java.nio.file.WatchKey
@@ -25,6 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - `<projectId>.request_refresh`
  * - `<projectId>.request_refresh_profile`
  * - `<projectId>.select_trace_points`
+ *
+ * Call only when a project id is already bound. For Case C (unbound), use
+ * [StorageReadyWatcher] until `<projectId>.storage-ready` binds storage.
  */
 class ExternalStorageWatcher(
     private val projectId: String,
@@ -100,8 +102,7 @@ class ExternalStorageWatcher(
     }
 
     private fun registerSignalsDir(ws: WatchService) {
-        val dir = AgentSignalFiles.signalsDir()
-        Files.createDirectories(dir)
+        val dir = AgentSignalFiles.ensureSignalsDir()
         if (keys.values.none { it == dir }) {
             registerDir(ws, dir)
         }
@@ -126,7 +127,7 @@ class ExternalStorageWatcher(
             } catch (_: Exception) {
                 break
             }
-            val dir = keys[key] ?: continue
+            keys[key] ?: continue
             for (event in key.pollEvents()) {
                 val kind = event.kind()
                 if (kind == StandardWatchEventKinds.OVERFLOW) continue
