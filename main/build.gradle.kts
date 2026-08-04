@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.12"
+val pluginVersion = "1.2.0"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,12 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.0</h3>
+            <ul>
+              <li>Bind Case C (unbound) windows via global <code>&lt;projectId&gt;.storage-ready</code> when agents create storage</li>
+              <li>Poll agent signal files so rapid refreshes are not missed on Windows</li>
+              <li>Agent-driven reloads bypass the self-write ignore window</li>
+            </ul>
             <h3>1.1.12</h3>
             <ul>
               <li>Align README Agent Skill install links and zip names with v1.1.12</li>
