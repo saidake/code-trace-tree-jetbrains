@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.1.11"
+val pluginVersion = "1.1.12"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.12</h3>
+            <ul>
+              <li>Align README Agent Skill install links and zip names with v1.1.12</li>
+            </ul>
             <h3>1.1.11</h3>
             <ul>
               <li>Align version with the VS Code companion (jump from 1.1.8; no separate JetBrains 1.1.9 / 1.1.10 builds)</li>
