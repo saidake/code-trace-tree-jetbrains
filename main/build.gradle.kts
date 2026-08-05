@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.0"
+val pluginVersion = "1.2.1"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,12 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.1</h3>
+            <ul>
+              <li>Idea-only project id (<code>.idea/code-trace-tree.project.id</code>); Case B path bind reuses the latest matching XML or copy-on-writes a new UUID when several match</li>
+              <li>Case C lazy create overwrites a stale idea id with a new UUID XML</li>
+              <li>Simplify Marketplace intro copy</li>
+            </ul>
             <h3>1.2.0</h3>
             <ul>
               <li>Bind Case C (unbound) windows via global <code>&lt;projectId&gt;.storage-ready</code> when agents create storage</li>
