@@ -12,8 +12,10 @@ import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds
 import java.nio.file.WatchKey
 import java.nio.file.WatchService
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -25,10 +27,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - `<projectId>.request_refresh`
  * - `<projectId>.request_refresh_profile`
  * - `<projectId>.select_trace_points`
+ *
+ * Uses [WatchService] plus a periodic mtime poll — native watches often miss repeated
+ * overwrites of the same signal file on Windows (e.g. rapid `trace_tree add`).
+ *
+ * Call only when a project id is already bound. For Case C (unbound), use
+ * [StorageReadyWatcher] until `<projectId>.storage-ready` binds storage.
  */
 class ExternalStorageWatcher(
     private val projectId: String,
-    private val shouldIgnore: () -> Boolean,
     private val onFullRefresh: (reason: String) -> Unit,
     private val onProfileRefresh: () -> Unit,
     private val onSelectRequest: () -> Unit,
@@ -39,11 +46,20 @@ class ExternalStorageWatcher(
     private val keys = mutableMapOf<WatchKey, Path>()
     private var pollThread: Thread? = null
     private var debounceExecutor: ScheduledExecutorService? = null
+    private var pollFuture: ScheduledFuture<*>? = null
     private var pendingReason: String? = null
     private var profilePending = false
     private var selectPending = false
+    /** Last observed mtime per signal file name; poll re-fires when the agent overwrites. */
+    private val lastSeenMtimeMs = ConcurrentHashMap<String, Long>()
 
-    fun start() {
+    /**
+     * @param replayExistingRefresh when true, schedule fresh request_refresh / _profile
+     *   already on disk (IDE was closed or late start). Pass false after a Case C
+     *   storage-ready bind — document was just loaded; refresh would be redundant.
+     *   Fresh select signals are still replayed either way.
+     */
+    fun start(replayExistingRefresh: Boolean = true) {
         if (closed.get()) return
         try {
             val ws = FileSystems.getDefault().newWatchService()
@@ -52,16 +68,33 @@ class ExternalStorageWatcher(
                 Thread(r, "code-trace-tree-storage-debounce").apply { isDaemon = true }
             }
             registerSignalsDir(ws)
-            // Replay fresh signals written while the IDE was closed; drop stale ones.
-            if (AgentSignalFiles.isFresh(AgentSignalFiles.refreshPath(projectId))) {
-                scheduleFullReload("refresh-request")
+            if (replayExistingRefresh) {
+                considerSignal(
+                    AgentSignalFiles.refreshPath(projectId),
+                    AgentSignalFiles.refreshFileName(projectId)
+                ) { scheduleFullReload("refresh-request") }
+                considerSignal(
+                    AgentSignalFiles.refreshProfilePath(projectId),
+                    AgentSignalFiles.refreshProfileFileName(projectId)
+                ) { scheduleProfileReload() }
+            } else {
+                // Do not reload again, but remember mtimes so poll does not immediately replay.
+                rememberMtime(AgentSignalFiles.refreshPath(projectId))
+                rememberMtime(AgentSignalFiles.refreshProfilePath(projectId))
             }
-            if (AgentSignalFiles.isFresh(AgentSignalFiles.refreshProfilePath(projectId))) {
-                scheduleProfileReload()
-            }
-            if (AgentSignalFiles.isFresh(AgentSignalFiles.selectPath(projectId))) {
-                scheduleSelect()
-            }
+            considerSignal(
+                AgentSignalFiles.selectPath(projectId),
+                AgentSignalFiles.selectFileName(projectId)
+            ) { scheduleSelect() }
+
+            pollFuture = debounceExecutor?.scheduleWithFixedDelay(
+                {
+                    if (!closed.get()) pollSignals()
+                },
+                POLL_MS,
+                POLL_MS,
+                TimeUnit.MILLISECONDS
+            )
             val thread = Thread({ pollLoop(ws) }, "code-trace-tree-storage-watch").apply {
                 isDaemon = true
                 start()
@@ -86,6 +119,11 @@ class ExternalStorageWatcher(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         try {
+            pollFuture?.cancel(false)
+        } catch (_: Exception) {
+        }
+        pollFuture = null
+        try {
             debounceExecutor?.shutdownNow()
         } catch (_: Exception) {
         }
@@ -97,11 +135,54 @@ class ExternalStorageWatcher(
         watchService = null
         keys.clear()
         pollThread = null
+        lastSeenMtimeMs.clear()
+    }
+
+    private fun pollSignals() {
+        considerSignal(
+            AgentSignalFiles.refreshPath(projectId),
+            AgentSignalFiles.refreshFileName(projectId)
+        ) { scheduleFullReload("refresh-request") }
+        considerSignal(
+            AgentSignalFiles.refreshProfilePath(projectId),
+            AgentSignalFiles.refreshProfileFileName(projectId)
+        ) { scheduleProfileReload() }
+        considerSignal(
+            AgentSignalFiles.selectPath(projectId),
+            AgentSignalFiles.selectFileName(projectId)
+        ) { scheduleSelect() }
+    }
+
+    /**
+     * If [path] exists, is fresh (TTL), and mtime changed since last see, run [onUpdated].
+     */
+    private fun considerSignal(path: Path, fileName: String, onUpdated: () -> Unit) {
+        if (!AgentSignalFiles.isFresh(path)) return
+        val mtime = try {
+            Files.getLastModifiedTime(path).toMillis()
+        } catch (_: Exception) {
+            return
+        }
+        val prev = lastSeenMtimeMs.put(fileName, mtime)
+        if (prev == mtime) return
+        onUpdated()
+    }
+
+    private fun rememberMtime(path: Path) {
+        if (!Files.isRegularFile(path)) return
+        val name = path.fileName.toString()
+        try {
+            lastSeenMtimeMs[name] = Files.getLastModifiedTime(path).toMillis()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun clearSeen(fileName: String) {
+        lastSeenMtimeMs.remove(fileName)
     }
 
     private fun registerSignalsDir(ws: WatchService) {
-        val dir = AgentSignalFiles.signalsDir()
-        Files.createDirectories(dir)
+        val dir = AgentSignalFiles.ensureSignalsDir()
         if (keys.values.none { it == dir }) {
             registerDir(ws, dir)
         }
@@ -126,7 +207,7 @@ class ExternalStorageWatcher(
             } catch (_: Exception) {
                 break
             }
-            val dir = keys[key] ?: continue
+            keys[key] ?: continue
             for (event in key.pollEvents()) {
                 val kind = event.kind()
                 if (kind == StandardWatchEventKinds.OVERFLOW) continue
@@ -141,26 +222,22 @@ class ExternalStorageWatcher(
     }
 
     private fun handleEvent(fileName: String) {
-        if (fileName == AgentSignalFiles.selectFileName(projectId)) {
-            if (AgentSignalFiles.isFresh(AgentSignalFiles.selectPath(projectId))) {
-                scheduleSelect()
-            }
-            return
-        }
-
-        if (shouldIgnore()) return
-
-        if (fileName == AgentSignalFiles.refreshFileName(projectId)) {
-            if (AgentSignalFiles.isFresh(AgentSignalFiles.refreshPath(projectId))) {
-                scheduleFullReload("refresh-request")
-            }
-            return
-        }
-
-        if (fileName == AgentSignalFiles.refreshProfileFileName(projectId)) {
-            if (AgentSignalFiles.isFresh(AgentSignalFiles.refreshProfilePath(projectId))) {
-                scheduleProfileReload()
-            }
+        when (fileName) {
+            AgentSignalFiles.selectFileName(projectId) ->
+                considerSignal(
+                    AgentSignalFiles.selectPath(projectId),
+                    fileName
+                ) { scheduleSelect() }
+            AgentSignalFiles.refreshFileName(projectId) ->
+                considerSignal(
+                    AgentSignalFiles.refreshPath(projectId),
+                    fileName
+                ) { scheduleFullReload("refresh-request") }
+            AgentSignalFiles.refreshProfileFileName(projectId) ->
+                considerSignal(
+                    AgentSignalFiles.refreshProfilePath(projectId),
+                    fileName
+                ) { scheduleProfileReload() }
         }
     }
 
@@ -168,12 +245,13 @@ class ExternalStorageWatcher(
         pendingReason = reason
         val executor = debounceExecutor ?: return
         executor.schedule({
-            if (closed.get() || shouldIgnore()) return@schedule
+            if (closed.get()) return@schedule
             val r = pendingReason ?: return@schedule
             pendingReason = null
             try {
                 onFullRefresh(r)
             } catch (e: Exception) {
+                clearSeen(AgentSignalFiles.refreshFileName(projectId))
                 log.warn("Code Trace Tree external reload failed ($r)", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
@@ -183,11 +261,12 @@ class ExternalStorageWatcher(
         profilePending = true
         val executor = debounceExecutor ?: return
         executor.schedule({
-            if (closed.get() || shouldIgnore() || !profilePending) return@schedule
+            if (closed.get() || !profilePending) return@schedule
             profilePending = false
             try {
                 onProfileRefresh()
             } catch (e: Exception) {
+                clearSeen(AgentSignalFiles.refreshProfileFileName(projectId))
                 log.warn("Code Trace Tree external profile refresh failed", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
@@ -202,6 +281,7 @@ class ExternalStorageWatcher(
             try {
                 onSelectRequest()
             } catch (e: Exception) {
+                clearSeen(AgentSignalFiles.selectFileName(projectId))
                 log.warn("Code Trace Tree external select signal failed", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
@@ -209,5 +289,6 @@ class ExternalStorageWatcher(
 
     companion object {
         private const val DEBOUNCE_MS = 400L
+        private const val POLL_MS = 1000L
     }
 }
