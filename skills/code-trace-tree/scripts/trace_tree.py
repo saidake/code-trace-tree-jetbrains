@@ -50,10 +50,9 @@ def global_app_dir() -> Path:
 
 
 def read_project_id(project_root: Path) -> str:
-    for rel in (".idea/code-trace-tree.project.id", ".vscode/code-trace-tree.project.id"):
-        p = project_root / rel
-        if p.is_file():
-            return p.read_text(encoding="utf-8").strip()
+    p = project_root / ".idea" / "code-trace-tree.project.id"
+    if p.is_file():
+        return p.read_text(encoding="utf-8").strip()
     return ""
 
 
@@ -82,7 +81,7 @@ def resolve_storage(project_root: Path) -> Path:
         canonical = app_dir / f"{project_id}.xml"
         if canonical.is_file() and xml_tag_text(canonical, "projectId") == project_id:
             return canonical
-        # Legacy fallback: previous releases used <FolderName>.xml
+        # Legacy: previous releases used <FolderName>.xml
         for xml in xmls:
             try:
                 if xml.resolve() == canonical.resolve():
@@ -99,11 +98,21 @@ def resolve_storage(project_root: Path) -> Path:
                     pass
             return xml
 
-    target = normalize_path_key(str(project_root))
+    target = normalize_path_key(str(project_root.resolve()))
+    path_matches: list[Path] = []
     for xml in xmls:
         stored = xml_tag_text(xml, "path")
         if stored and normalize_path_key(stored) == target:
-            return xml
+            path_matches.append(xml)
+    if len(path_matches) == 1:
+        return path_matches[0]
+    if len(path_matches) > 1:
+        def updated_at(p: Path) -> int:
+            try:
+                return int(xml_tag_text(p, "updatedAt") or "0")
+            except ValueError:
+                return 0
+        return max(path_matches, key=updated_at)
 
     raise SystemExit(
         "ERROR: no Code Trace Tree storage XML found. "
@@ -113,29 +122,17 @@ def resolve_storage(project_root: Path) -> Path:
 
 
 def write_project_id_files(project_root: Path, project_id: str) -> list[Path]:
-    """
-    Write the local project id for whichever IDE folders exist.
-    If neither .idea nor .vscode exists, create .vscode/.
-    """
-    targets: list[Path] = []
-    if (project_root / ".idea").is_dir():
-        targets.append(project_root / ".idea" / "code-trace-tree.project.id")
-    if (project_root / ".vscode").is_dir():
-        targets.append(project_root / ".vscode" / "code-trace-tree.project.id")
-    if not targets:
-        targets.append(project_root / ".vscode" / "code-trace-tree.project.id")
-    written: list[Path] = []
-    for path in targets:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(project_id.strip() + "\n", encoding="utf-8")
-        written.append(path)
-    return written
+    """Write the local project id for JetBrains: `.idea/code-trace-tree.project.id` only."""
+    path = project_root / ".idea" / "code-trace-tree.project.id"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(project_id.strip() + "\n", encoding="utf-8")
+    return [path]
 
 
 def create_fresh_storage(project_root: Path) -> Path:
     """
-    Case C: allocate a new project id, write local id file(s), and create empty
-    global XML with profile `main`. Idempotent if storage already resolves.
+    Case C: allocate a new project id, write `.idea/code-trace-tree.project.id`,
+    and create empty global XML with profile `main`. Idempotent if storage already resolves.
     """
     try:
         return resolve_storage(project_root)
@@ -1041,7 +1038,7 @@ def signals_dir() -> Path:
 def write_storage_ready(project_root: Path) -> Optional[Path]:
     """
     Case C bind handshake: `signals/<projectId>.storage-ready` (no TTL).
-    Open IDEs compare the filename id to `.idea`/`.vscode` project id and bind when equal.
+    JetBrains compares the filename id to `.idea/code-trace-tree.project.id` and binds when equal.
     """
     project_id = read_project_id(project_root)
     if not project_id:
@@ -1092,7 +1089,7 @@ def request_select(project_root: Path, ids: Sequence[str]) -> Path:
     project_id = read_project_id(project_root)
     if not project_id:
         raise SystemExit(
-            "ERROR: no project id file. Run init_storage.py or create data in the IDE first."
+            "ERROR: no bound project id. Run init_storage.py or create data in the IDE first."
         )
     dest = signals_dir()
     dest.mkdir(parents=True, exist_ok=True)

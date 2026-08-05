@@ -415,7 +415,7 @@ class TracePointService(private val project: Project) {
 
     /**
      * Agent wrote `signals/<projectId>.storage-ready` after creating project id + XML (Case C).
-     * Bind only when that id matches `.idea`/`.vscode` `code-trace-tree.project.id`.
+     * Bind only when that id matches `.idea/code-trace-tree.project.id`.
      * @return true when handled (bound or permanently skipped); false to retry later.
      */
     private fun handleStorageReadySignal(signalProjectId: String): Boolean {

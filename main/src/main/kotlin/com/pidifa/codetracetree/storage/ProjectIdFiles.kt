@@ -10,30 +10,18 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Reads/writes the local project id under `.idea/` (preferred for IntelliJ)
- * with fallback to `.vscode/` when the IDE-native file is missing.
+ * Reads/writes the local project id under `.idea/code-trace-tree.project.id`.
  */
 object ProjectIdFiles {
     const val IDEA_FILE = "code-trace-tree.project.id"
-    const val VSCODE_FILE = "code-trace-tree.project.id"
 
     fun ideaIdPath(projectBase: Path): Path =
         projectBase.resolve(".idea").resolve(IDEA_FILE)
 
-    fun vscodeIdPath(projectBase: Path): Path =
-        projectBase.resolve(".vscode").resolve(VSCODE_FILE)
+    fun readProjectId(projectBase: Path): String? =
+        readIdFile(ideaIdPath(projectBase))
 
-    /**
-     * Prefer `.idea/code-trace-tree.project.id`; if missing, use
-     * `.vscode/code-trace-tree.project.id` when present.
-     */
-    fun readProjectId(projectBase: Path): String? {
-        val ideaId = readIdFile(ideaIdPath(projectBase))
-        if (!ideaId.isNullOrBlank()) return ideaId
-        return readIdFile(vscodeIdPath(projectBase))
-    }
-
-    /** Writes the project id only to `.idea/` (current IDE). */
+    /** Writes the project id to `.idea/`. */
     fun writeProjectId(projectBase: Path, projectId: String) {
         val path = ideaIdPath(projectBase)
         Files.createDirectories(path.parent)

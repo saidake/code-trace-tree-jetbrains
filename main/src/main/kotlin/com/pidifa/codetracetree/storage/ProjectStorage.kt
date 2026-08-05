@@ -23,7 +23,8 @@ import java.util.stream.Collectors
  *
  * Resolution on project open:
  * - Case A: match by project id → update path/updatedAt
- * - Case B: match by path (copy-on-write) → new id + new XML file
+ * - Case B: match by path — one match binds in place; multiple matches pick latest
+ *   `updatedAt` then copy-on-write to a new `<projectId>.xml`
  * - Case C: no match → return null (do not create id/XML until first real use)
  *
  * Call [ensureCreated] before the first persist that should bind storage
@@ -52,11 +53,6 @@ class ProjectStorage(private val projectBasePath: String) {
         if (!existingId.isNullOrBlank()) {
             val byId = findDocumentByProjectId(existingId)
             if (byId != null) {
-                // Ensure IntelliJ has its own id file when we only found the VS Code one
-                val ideaIdPath = ProjectIdFiles.ideaIdPath(projectBase)
-                if (!Files.isRegularFile(ideaIdPath)) {
-                    ProjectIdFiles.writeProjectId(projectBase, existingId)
-                }
                 val updated = byId.copy(
                     path = projectBase.toString(),
                     updatedAt = System.currentTimeMillis(),
@@ -68,17 +64,36 @@ class ProjectStorage(private val projectBasePath: String) {
             }
         }
 
-        // Case B: match by path (copy-on-write)
-        val byPath = findDocumentByPath(projectBase.toString())
-        if (byPath != null) {
+        // Case B: match by path
+        val pathMatches = findDocumentsByPath(projectBase.toString())
+        if (pathMatches.isNotEmpty()) {
+            val selected = if (pathMatches.size == 1) {
+                pathMatches[0]
+            } else {
+                pathMatches.maxByOrNull { it.updatedAt } ?: pathMatches[0]
+            }
+
+            if (pathMatches.size == 1) {
+                ProjectIdFiles.writeProjectId(projectBase, selected.projectId)
+                val updated = selected.copy(
+                    path = projectBase.toString(),
+                    updatedAt = System.currentTimeMillis(),
+                    storageFile = selected.storageFile
+                )
+                bind(updated)
+                save(updated)
+                return updated
+            }
+
+            // Multiple path matches: copy-on-write from the latest
             val newId = generateProjectId()
             val newFile = allocateStorageFile(newId)
-            val copied = byPath.copy(
+            val copied = selected.copy(
                 projectId = newId,
                 path = projectBase.toString(),
                 updatedAt = System.currentTimeMillis(),
                 storageFile = newFile,
-                profiles = byPath.profiles.map { profile ->
+                profiles = selected.profiles.map { profile ->
                     TracePointService.TraceProfile(
                         name = profile.name.ifBlank { TracePointService.DEFAULT_PROFILE_NAME },
                         tracePointNodes = profile.tracePointNodes,
@@ -249,19 +264,20 @@ class ProjectStorage(private val projectBasePath: String) {
         }
     }
 
-    private fun findDocumentByPath(absolutePath: String): ProjectDocument? {
+    private fun findDocumentsByPath(absolutePath: String): List<ProjectDocument> {
         val normalized = normalizePath(absolutePath)
+        val matches = mutableListOf<ProjectDocument>()
         for (file in listProjectXmlFiles()) {
             try {
                 val doc = ProjectDataXml.parseFile(file)
                 if (normalizePath(doc.path) == normalized) {
-                    return doc.copy(storageFile = file)
+                    matches.add(doc.copy(storageFile = file))
                 }
             } catch (e: Exception) {
                 log.debug("Skipping unreadable storage file $file", e)
             }
         }
-        return null
+        return matches
     }
 
     private fun normalizePath(path: String): String {
