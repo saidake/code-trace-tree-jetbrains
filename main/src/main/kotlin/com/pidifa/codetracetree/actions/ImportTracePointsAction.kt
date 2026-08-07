@@ -25,7 +25,8 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
 
     init {
         templatePresentation.text = "Import Trace Points"
-        templatePresentation.description = "Import trace points from an XML file"
+        templatePresentation.description =
+            "Import trace points from a single-profile or multi-profile XML export"
     }
 
     override fun actionPerformed(e: AnActionEvent) {

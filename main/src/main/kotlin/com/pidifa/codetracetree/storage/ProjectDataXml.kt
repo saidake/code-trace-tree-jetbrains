@@ -32,6 +32,7 @@ data class ProjectDocument(
     val highlightingEnabled: Boolean = true,
     /** When true, creating a trace point prompts for a name; when false, creates with an empty name. */
     val namePromptEnabled: Boolean = true,
+    val advancedSettings: AdvancedSettings = AdvancedSettings.defaults(),
     /** Absolute path of the XML file this document was loaded from / should be saved to. */
     val storageFile: Path? = null
 ) {
@@ -80,6 +81,12 @@ object ProjectDataXml {
         val namePromptEnabled =
             root.getChildTextTrim("namePromptEnabled")?.toBooleanStrictOrNull() ?: true
 
+        val hlBg = root.getChild("advancedSettings")?.getChild("highlightLineBackground")
+        val advancedSettings = AdvancedSettings.fromXmlOrDefaults(
+            hlBg?.getChildTextTrim("light"),
+            hlBg?.getChildTextTrim("dark")
+        )
+
         val profileList = if (profiles.isEmpty()) {
             mutableListOf(TracePointService.TraceProfile(name = TracePointService.DEFAULT_PROFILE_NAME))
         } else {
@@ -96,6 +103,7 @@ object ProjectDataXml {
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
             namePromptEnabled = namePromptEnabled,
+            advancedSettings = advancedSettings,
             storageFile = storageFile
         )
     }
@@ -109,6 +117,22 @@ object ProjectDataXml {
         root.addContent(Element("activeProfileName").setText(doc.activeProfileName))
         root.addContent(Element("highlightingEnabled").setText(doc.highlightingEnabled.toString()))
         root.addContent(Element("namePromptEnabled").setText(doc.namePromptEnabled.toString()))
+        if (!doc.advancedSettings.isDefault()) {
+            root.addContent(
+                Element("advancedSettings").apply {
+                    addContent(
+                        Element("highlightLineBackground").apply {
+                            addContent(
+                                Element("light").setText(doc.advancedSettings.highlightLineBackgroundLight)
+                            )
+                            addContent(
+                                Element("dark").setText(doc.advancedSettings.highlightLineBackgroundDark)
+                            )
+                        }
+                    )
+                }
+            )
+        }
 
         val profilesEl = Element("traceProfiles")
         for (profile in doc.profiles) {

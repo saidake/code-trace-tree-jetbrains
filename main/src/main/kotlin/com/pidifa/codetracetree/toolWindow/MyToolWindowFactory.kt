@@ -21,7 +21,9 @@ import com.pidifa.codetracetree.actions.CollapseAllTracePointAction
 import com.pidifa.codetracetree.actions.ExportTracePointsAction
 import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
+import com.pidifa.codetracetree.actions.AdvancedSettingsAction
 import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
+import com.pidifa.codetracetree.actions.ToggleMaximizeDescriptionAction
 import com.pidifa.codetracetree.actions.ToggleNamePromptAction
 import com.pidifa.codetracetree.GlobalIcons
 import com.intellij.openapi.actionSystem.ActionManager
@@ -50,6 +52,7 @@ import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.ui.JBColor
+import com.intellij.ui.JBSplitter
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import java.awt.Component
 import java.awt.Dimension
@@ -114,7 +117,18 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             isEnabled = false
             rows = 4
         }
-        private val descriptionScrollPane = JBScrollPane(descriptionTextArea)
+        private val descriptionScrollPane = JBScrollPane(descriptionTextArea).apply {
+            minimumSize = Dimension(50, 48)
+        }
+        /** Vertical split between description (top) and trace tree (bottom); drag the divider to resize. */
+        private val contentSplitter = JBSplitter(/* vertical = */ true, /* proportion = */ 0.22f).apply {
+            dividerWidth = 3
+            setHonorComponentsMinimumSize(true)
+            setAndLoadSplitterProportionKey("CodeTraceTree.DescriptionTreeSplitter")
+        }
+        private lateinit var treeScrollPane: JBScrollPane
+        /** When true, the tree is hidden and the description fills the content area. */
+        private var descriptionMaximized = false
 
         // Custom DataFlavor for trace point IDs
         private val tracePointDataFlavor = DataFlavor(
@@ -555,10 +569,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Toggle Description"
                     templatePresentation.description = "Show or hide the description area for the selected trace point"
                 })
+                add(ToggleMaximizeDescriptionAction(this@MyToolWindow))
                 add(ToggleNamePromptAction().apply {
-                    templatePresentation.text = "Prompt for Name"
+                    templatePresentation.text = "Prompt for Name on Create"
                     templatePresentation.description =
-                        "When enabled, ask for a name when creating a trace point; when disabled, create with an empty name"
+                        "Ask for a name when creating a new trace point; when off, create with an empty name (rename later via the tree)"
                 })
                 add(ExportTracePointsAction().apply {
                     templatePresentation.text = "Export Trace Points"
@@ -576,16 +591,31 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Collapse All"
                     templatePresentation.description = "Collapse all trace point nodes"
                 })
+                add(AdvancedSettingsAction().apply {
+                    templatePresentation.text = "Advanced Settings"
+                    templatePresentation.description =
+                        "Advanced settings (highlight line background color)"
+                })
             }
             val actionToolbar = ActionManager.getInstance().createActionToolbar(
                 ActionPlaces.TOOLWINDOW_TITLE,
                 actionGroup,
                 true
             )
-            actionToolbar.setTargetComponent(tree)
             actionToolbar.component.isOpaque = false
 
             val profilePanel = TraceProfilePanel(project, service)
+
+            treeScrollPane = JBScrollPane(tree).apply {
+                minimumSize = Dimension(50, 80)
+                alignmentX = Component.LEFT_ALIGNMENT
+                maximumSize = Dimension(Int.MAX_VALUE, Int.MAX_VALUE)
+            }
+            contentSplitter.apply {
+                alignmentX = Component.LEFT_ALIGNMENT
+                maximumSize = Dimension(Int.MAX_VALUE, Int.MAX_VALUE)
+            }
+            applyContentLayout()
 
             val panel = JBPanel<JBPanel<*>>().apply {
                 layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -597,15 +627,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                 add(profilePanel)
 
-                descriptionScrollPane.alignmentX = Component.LEFT_ALIGNMENT
-                add(descriptionScrollPane)
-
-                val treeScrollPane = JBScrollPane(tree)
-                treeScrollPane.alignmentX = Component.LEFT_ALIGNMENT
-                treeScrollPane.maximumSize = Dimension(Int.MAX_VALUE, Int.MAX_VALUE)
-                add(treeScrollPane)
+                add(contentSplitter)
             }
-            descriptionScrollPane.isVisible = service.isDescriptionAreaOpened()
+            // Must stay on a component that remains showing. Targeting the tree disables
+            // toolbar actions when the tree is hidden (description maximized).
+            actionToolbar.setTargetComponent(panel)
 
             return panel
         }
@@ -642,12 +668,47 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             updateDescriptionArea()
         }
 
+        fun isDescriptionMaximized(): Boolean = descriptionMaximized
+
+        fun setDescriptionMaximized(maximized: Boolean) {
+            if (descriptionMaximized == maximized) return
+            descriptionMaximized = maximized
+            if (maximized && !service.isDescriptionAreaOpened()) {
+                service.setDescriptionAreaOpened(true)
+            }
+            applyContentLayout()
+        }
+
         fun setDescriptionAreaVisible(visible: Boolean) {
+            if (!visible && descriptionMaximized) {
+                // Hiding description while maximized would leave an empty content area.
+                descriptionMaximized = false
+            }
             service.setDescriptionAreaOpened(visible)
-            descriptionScrollPane.isVisible = visible
-            val panel = toolWindow.contentManager.contents[0].component as? JBPanel<*> ?: return
-            panel.revalidate()
-            panel.repaint()
+            if (visible && !descriptionMaximized && contentSplitter.proportion < 0.05f) {
+                contentSplitter.proportion = 0.22f
+            }
+            applyContentLayout()
+        }
+
+        private fun applyContentLayout() {
+            if (!::treeScrollPane.isInitialized) return
+            when {
+                descriptionMaximized -> {
+                    contentSplitter.firstComponent = descriptionScrollPane
+                    contentSplitter.secondComponent = null
+                }
+                service.isDescriptionAreaOpened() -> {
+                    contentSplitter.firstComponent = descriptionScrollPane
+                    contentSplitter.secondComponent = treeScrollPane
+                }
+                else -> {
+                    contentSplitter.firstComponent = null
+                    contentSplitter.secondComponent = treeScrollPane
+                }
+            }
+            contentSplitter.revalidate()
+            contentSplitter.repaint()
         }
 
 

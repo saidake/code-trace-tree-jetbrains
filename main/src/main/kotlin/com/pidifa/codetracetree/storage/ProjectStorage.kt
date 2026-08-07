@@ -158,7 +158,8 @@ class ProjectStorage(private val projectBasePath: String) {
         activeProfileName: String,
         descriptionAreaOpened: Boolean,
         highlightingEnabled: Boolean,
-        namePromptEnabled: Boolean
+        namePromptEnabled: Boolean,
+        advancedSettings: AdvancedSettings = AdvancedSettings.defaults()
     ) {
         val file = boundFile ?: return
         val projectId = boundProjectId ?: return
@@ -177,6 +178,7 @@ class ProjectStorage(private val projectBasePath: String) {
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
             namePromptEnabled = namePromptEnabled,
+            advancedSettings = advancedSettings,
             storageFile = file
         )
         save(doc)

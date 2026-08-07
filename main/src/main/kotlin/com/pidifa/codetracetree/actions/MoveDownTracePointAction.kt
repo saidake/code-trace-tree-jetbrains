@@ -17,9 +17,14 @@ import javax.swing.tree.DefaultMutableTreeNode
 
 class MoveDownTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
     null,
-    "Move Down",
+    "Move the selected trace point(s) one position down among siblings in the tree",
     AllIcons.Actions.MoveDown
 ) {
+    init {
+        templatePresentation.text = "Move Down"
+        templatePresentation.description =
+            "Move the selected trace point(s) one position down among siblings in the tree"
+    }
     override fun actionPerformed(e: AnActionEvent) {
         val tree = myToolWindow.getTree()
         val selectedPaths = tree.selectionPaths ?: return

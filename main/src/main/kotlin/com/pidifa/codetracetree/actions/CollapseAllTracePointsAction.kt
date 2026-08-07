@@ -15,7 +15,16 @@ import com.intellij.icons.AllIcons
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 
-class CollapseAllTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(null, "Collapse All", AllIcons.Actions.Collapseall) {
+class CollapseAllTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
+    null,
+    "Collapse every expanded node in the current profile tree",
+    AllIcons.Actions.Collapseall
+) {
+    init {
+        templatePresentation.text = "Collapse All"
+        templatePresentation.description =
+            "Collapse every expanded node in the current profile tree"
+    }
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = project.service<TracePointService>()

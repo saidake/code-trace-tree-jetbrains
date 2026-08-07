@@ -15,7 +15,16 @@ import com.intellij.icons.AllIcons
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 
-class ExpandSelectedTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(null, "Expand Selected", AllIcons.Actions.Expandall) {
+class ExpandSelectedTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToolWindow) : AnAction(
+    null,
+    "Expand the selected node(s) and their descendants in the tree",
+    AllIcons.Actions.Expandall
+) {
+    init {
+        templatePresentation.text = "Expand Selected"
+        templatePresentation.description =
+            "Expand the selected node(s) and their descendants in the tree"
+    }
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = project.service<TracePointService>()

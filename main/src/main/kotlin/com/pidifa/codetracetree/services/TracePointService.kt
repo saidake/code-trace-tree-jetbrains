@@ -31,6 +31,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.JBColor
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import com.pidifa.codetracetree.domain.enums.TraceType
+import com.pidifa.codetracetree.storage.AdvancedSettings
 import com.pidifa.codetracetree.storage.AgentSignalFiles
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
@@ -141,6 +142,7 @@ class TracePointService(private val project: Project) {
     private var isHighlightingEnabled = true
     private var isDescriptionAreaOpened = false
     private var isNamePromptEnabled = true
+    private var advancedSettings: AdvancedSettings = AdvancedSettings.defaults()
 
     private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
     private var activeProfileName: String = DEFAULT_PROFILE_NAME
@@ -554,6 +556,7 @@ class TracePointService(private val project: Project) {
         isHighlightingEnabled = doc.highlightingEnabled
         isDescriptionAreaOpened = doc.descriptionAreaOpened
         isNamePromptEnabled = doc.namePromptEnabled
+        advancedSettings = doc.advancedSettings
         profiles = doc.profiles.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
@@ -610,7 +613,8 @@ class TracePointService(private val project: Project) {
             activeProfileName = activeProfileName,
             descriptionAreaOpened = isDescriptionAreaOpened,
             highlightingEnabled = isHighlightingEnabled,
-            namePromptEnabled = isNamePromptEnabled
+            namePromptEnabled = isNamePromptEnabled,
+            advancedSettings = advancedSettings
         )
         externalStorageWatcher?.refreshRegistrations()
     }
@@ -620,6 +624,23 @@ class TracePointService(private val project: Project) {
     fun isHighlightingEnabled(): Boolean = isHighlightingEnabled
     fun isDescriptionAreaOpened(): Boolean = isDescriptionAreaOpened
     fun isNamePromptEnabled(): Boolean = isNamePromptEnabled
+    fun getAdvancedSettings(): AdvancedSettings = advancedSettings
+
+    fun setAdvancedSettings(settings: AdvancedSettings) {
+        ensureStorage()
+        advancedSettings = AdvancedSettings(
+            highlightLineBackgroundLight = AdvancedSettings.normalizeHex(settings.highlightLineBackgroundLight)
+                ?: AdvancedSettings.DEFAULT_HIGHLIGHT_LIGHT,
+            highlightLineBackgroundDark = AdvancedSettings.normalizeHex(settings.highlightLineBackgroundDark)
+                ?: AdvancedSettings.DEFAULT_HIGHLIGHT_DARK
+        )
+        ApplicationManager.getApplication().runReadAction {
+            FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                if (isHighlightingEnabled) highlightTracePointsInFile(file)
+            }
+        }
+        schedulePersist()
+    }
 
     fun setDescriptionAreaOpened(opened: Boolean) {
         ensureStorage()
@@ -658,11 +679,11 @@ class TracePointService(private val project: Project) {
             val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
             if (editors.isEmpty()) return@runReadAction
 
-            // Use different highlight colors based on theme
+            // Use configured highlight colors (light / dark theme)
             val textAttributes = TextAttributes().apply {
                 backgroundColor = JBColor(
-                    java.awt.Color(255, 255, 200), // Light yellow for light theme
-                    java.awt.Color(100, 100, 0)    // Darker yellow for dark theme
+                    advancedSettings.lightColor(),
+                    advancedSettings.darkColor()
                 )
             }
 

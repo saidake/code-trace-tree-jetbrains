@@ -25,7 +25,8 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
 
     init {
         templatePresentation.text = "Export Trace Points"
-        templatePresentation.description = "Export the current profile or all profiles to an XML file"
+        templatePresentation.description =
+            "Export the active profile or all profiles to an XML file"
     }
 
     override fun actionPerformed(e: AnActionEvent) {

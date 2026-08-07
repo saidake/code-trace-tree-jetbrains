@@ -18,9 +18,9 @@ class ToggleNamePromptAction : ToggleAction(
     AllIcons.Actions.Edit
 ) {
     init {
-        templatePresentation.text = "Prompt for Name"
+        templatePresentation.text = "Prompt for Name on Create"
         templatePresentation.description =
-            "When enabled, ask for a name when creating a trace point; when disabled, create with an empty name"
+            "Ask for a name when creating a new trace point; when off, create with an empty name (rename later via the tree)"
     }
 
     override fun isSelected(e: AnActionEvent): Boolean {
