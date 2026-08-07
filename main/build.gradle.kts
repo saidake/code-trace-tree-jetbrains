@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.1"
+val pluginVersion = "1.2.3"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,13 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.3</h3>
+            <ul>
+              <li>Advanced Settings: persist highlight line background colors (light/dark) in shared project XML</li>
+              <li>Toolbar Advanced Settings action; editor highlights use the configured theme colors</li>
+              <li>Maximize Description toolbar toggle; resizable description/tree splitter</li>
+              <li>Expand Marketplace intro for building and displaying code workflows</li>
+            </ul>
             <h3>1.2.1</h3>
             <ul>
               <li>Idea-only project id (<code>.idea/code-trace-tree.project.id</code>); Case B path bind reuses the latest matching XML or copy-on-writes a new UUID when several match</li>
