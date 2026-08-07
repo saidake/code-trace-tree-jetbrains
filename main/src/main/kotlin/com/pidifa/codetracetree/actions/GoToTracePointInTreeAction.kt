@@ -41,10 +41,7 @@ class GoToTracePointInTreeAction : AnAction() {
         val project = e.project
         val editor = e.getData(CommonDataKeys.EDITOR)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        val visible = project != null && editor != null && file != null &&
-            isSingleLineSelection(editor) &&
-            hasTracePointAtCaret(project, editor, file.path, project.basePath)
-        e.presentation.isEnabledAndVisible = visible
+        e.presentation.isEnabledAndVisible = project != null && editor != null && file != null
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -57,17 +54,5 @@ class GoToTracePointInTreeAction : AnAction() {
         val end = selectionModel.selectionEnd
         val endForLine = if (end > start) end - 1 else end
         return document.getLineNumber(start) == document.getLineNumber(endForLine)
-    }
-
-    private fun hasTracePointAtCaret(
-        project: com.intellij.openapi.project.Project,
-        editor: Editor,
-        absoluteFilePath: String,
-        projectBasePath: String?
-    ): Boolean {
-        val service = project.service<TracePointService>()
-        val filePath = absoluteFilePath.removePrefix(projectBasePath?.let { "$it/" } ?: "")
-        val lineNumber = editor.document.getLineNumber(editor.caretModel.offset) + 1
-        return service.findValidTracePointsAt(filePath, lineNumber).isNotEmpty()
     }
 }

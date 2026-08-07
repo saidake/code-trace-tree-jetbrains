@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.3"
+val pluginVersion = "1.2.4"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.4</h3>
+            <ul>
+              <li>Always show <b>Go to the Trace Point in the tree panel (Only matching)</b> in the editor context menu; no-ops when nothing matches</li>
+            </ul>
             <h3>1.2.3</h3>
             <ul>
               <li>Advanced Settings: persist highlight line background colors (light/dark) in shared project XML</li>

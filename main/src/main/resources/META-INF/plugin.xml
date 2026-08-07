@@ -49,8 +49,8 @@
 
         <action id="com.pidifa.codetracetree.GoToTracePointInTreeAction"
                 class="com.pidifa.codetracetree.actions.GoToTracePointInTreeAction"
-                text="Go to the Trace Point in the tree panel"
-                description="Selects the trace point for the current line in the Code Trace Tree tool window">
+                text="Go to the Trace Point in the tree panel (Only matching)"
+                description="Selects matching trace point(s) for the current line in the Code Trace Tree tool window; does nothing when none match">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
