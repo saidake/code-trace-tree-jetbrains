@@ -136,6 +136,47 @@ class ProjectStorage(private val projectBasePath: String) {
     fun boundProjectId(): String? = boundProjectId
 
     /**
+     * Case C agent handshake (path mode): bind global XML for [signalProjectId].
+     * When [signalProjectPath] is non-blank, use it for the workspace filter (no XML read
+     * for reject). Otherwise fall back to XML `<path>` (legacy signal body).
+     * Writes `.idea` id as a local cache (like Case B).
+     *
+     * @return null when the XML is not ready yet (caller may retry);
+     *         false when the signal is not for this workspace (skip);
+     *         true when newly bound or already bound.
+     */
+    fun tryBindFromStorageReady(
+        signalProjectId: String,
+        signalProjectPath: String? = null,
+    ): Boolean? {
+        if (boundProjectId != null) return true
+        Files.createDirectories(GlobalStoragePaths.resolveAppDir())
+
+        if (!signalProjectPath.isNullOrBlank()) {
+            if (normalizePath(signalProjectPath) != normalizePath(projectBase.toString())) {
+                return false
+            }
+        }
+
+        val doc = findDocumentByProjectId(signalProjectId) ?: return null
+        if (signalProjectPath.isNullOrBlank() &&
+            normalizePath(doc.path) != normalizePath(projectBase.toString())
+        ) {
+            return false
+        }
+
+        ProjectIdFiles.writeProjectId(projectBase, doc.projectId)
+        val updated = doc.copy(
+            path = projectBase.toString(),
+            updatedAt = System.currentTimeMillis(),
+            storageFile = doc.storageFile
+        )
+        bind(updated)
+        save(updated)
+        return true
+    }
+
+    /**
      * Re-reads the currently bound global XML without re-running project resolution.
      * Returns null when unbound or the file is missing/unreadable.
      */

@@ -13,12 +13,14 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.wm.ToolWindowManager
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.util.TracePathEligibility
 
 class GoToTracePointInTreeAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        if (!TracePathEligibility.isEligible(project, file)) return
         if (!isSingleLineSelection(editor)) return
 
         val service = project.service<TracePointService>()
@@ -41,7 +43,8 @@ class GoToTracePointInTreeAction : AnAction() {
         val project = e.project
         val editor = e.getData(CommonDataKeys.EDITOR)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabledAndVisible = project != null && editor != null && file != null
+        e.presentation.isEnabledAndVisible =
+            editor != null && TracePathEligibility.isEligible(project, file)
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

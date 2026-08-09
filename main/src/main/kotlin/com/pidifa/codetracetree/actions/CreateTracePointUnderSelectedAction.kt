@@ -12,6 +12,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ui.Messages
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.util.TracePathEligibility
 
 class CreateTracePointUnderSelectedAction : AnAction() {
 
@@ -19,6 +20,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        if (!TracePathEligibility.isEligible(project, file)) return
         val service = project.service<TracePointService>()
 
         // ---- caret validation -------------------------------------------------
@@ -64,21 +66,26 @@ class CreateTracePointUnderSelectedAction : AnAction() {
             "Create Trace Point (Under Selected)"
         ) ?: return
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
-        selectedIds.forEach { parentId ->
-            service.addTracePoint(tracePointName, file, lineNumber,  parentId = parentId)
-        }
+        val createdIds = selectedIds.mapNotNull { parentId ->
+            service.addTracePoint(tracePointName, file, lineNumber, parentId = parentId)
+        }.toSet()
         service.attachDocumentListener(file)
         service.highlightTracePointsInFile(file)
         service.notifyListeners()
+        if (createdIds.isNotEmpty()) {
+            service.revealTracePointsInTree(createdIds, focusTree = false)
+        }
     }
 
     override fun update(e: AnActionEvent) {
         val editor = e.getData(CommonDataKeys.EDITOR)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         val project = e.project
+        val eligible = editor != null && TracePathEligibility.isEligible(project, file)
         val service = project?.service<TracePointService>()
         val hasSelection = service?.getSelectedTracePointIds()?.isNotEmpty() ?: false
-        e.presentation.isEnabled = editor != null && file != null && hasSelection
+        e.presentation.isVisible = eligible
+        e.presentation.isEnabled = eligible && hasSelection
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

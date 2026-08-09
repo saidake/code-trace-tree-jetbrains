@@ -8,6 +8,7 @@ package com.pidifa.codetracetree.storage
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Global agent notify signals under `<appDir>/signals/`.
@@ -16,7 +17,8 @@ import java.nio.file.Path
  * - `<projectId>.request_refresh_profile` — one profile; body = profile name
  *   (empty / missing name → active profile). Does not change activeProfileName or flags.
  * - `<projectId>.select_trace_points`
- * - `<projectId>.storage-ready` — Case C bind handshake (no TTL; agent overwrites)
+ * - `<projectId>.storage-ready` — Case C bind handshake (no TTL; agent overwrites).
+ *   Body = absolute project path (first non-empty line); empty/legacy → IDE reads XML `<path>`.
  *
  * Refresh/select files older than [TTL_MS] are ignored and deleted so a late IDE open
  * does not replay a stale select/refresh. Fresh refresh/select signals are left in place
@@ -73,6 +75,21 @@ object AgentSignalFiles {
                 .map { it.trim() }
                 .firstOrNull { it.isNotEmpty() }
                 .orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /**
+     * Absolute project path from a storage-ready signal body (first non-empty line).
+     * Empty when missing/unreadable or legacy unused body (e.g. `1`) — then IDE falls
+     * back to reading XML `<path>`.
+     */
+    fun readStorageReadyProjectPath(projectId: String): String {
+        val line = readProfileRefreshName(storageReadyPath(projectId))
+        if (line.isBlank() || line == "1") return ""
+        return try {
+            if (Paths.get(line).isAbsolute) line else ""
         } catch (_: Exception) {
             ""
         }

@@ -32,21 +32,21 @@
 <ol>
   <li>Open the <b>Code Trace Tree</b> tool window (right side of the IDE).</li>
   <li>Use the <b>Profile</b> selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.</li>
-  <li>In the editor, right-click a line and choose:
+  <li>In the editor, right-click a line in a <b>project file</b> and choose:
     <ul>
-      <li><b>Create a Root Trace Point</b> — start a new line-level trace tree</li>
-      <li><b>Create a Trace Point (Under Selected)</b> — add a child under the selected node(s) in the tree</li>
+      <li><b>Create a Root Trace Point</b> — start a new line-level trace tree (selects the new node; does not jump)</li>
+      <li><b>Create a Trace Point (Under Selected)</b> — add a child under the selected node(s) in the tree (new node is selected)</li>
       <li><b>Update the selected code trace point</b> — move the selected tree node(s) to the current line</li>
       <li><b>Go to the Trace Point in the tree panel (Only matching)</b> — selects and reveals matching node(s) for the current line; does nothing when none match</li>
     </ul>
   </li>
-  <li>In the <b>Project</b> tool window, right-click a file or directory and choose:
+  <li>In the <b>Project</b> tool window, right-click a file or directory <b>inside the project</b> and choose:
     <ul>
       <li><b>Create a Root Trace Point</b> — add a file or directory node at the root</li>
       <li><b>Create a Trace Point (Under Selected)</b> — add that file/directory under the selected tree node(s)</li>
     </ul>
   </li>
-  <li>Double-click a node in the tree to jump to that location (line, file, or Project View for directories).</li>
+  <li>Single-click a node to select it; double-click to jump to that location (line, file, or Project View for directories).</li>
   <li>Right-click a node and choose <b>Copy</b> (or use Ctrl/Cmd+C) to copy its display text, e.g. <code>test233 (TestControllerWebFlux.java:54)</code>.</li>
   <li>Right-click a line trace point and choose <b>Show Line Content</b> to view its saved trimmed line text.</li>
   <li>Use the tool window toolbar to expand/collapse, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
@@ -88,7 +88,7 @@
 
 <h2>Install skill — extract locations</h2>
 <p>
-  Download <code>code-trace-tree-skill-1.2.4.zip</code> from the GitHub Release
+  Download <code>code-trace-tree-skill-1.2.5.zip</code> from the GitHub Release
   (one zip for all agents).
   Remove any existing <code>code-trace-tree</code> skill folder first, then extract into the
   skills directory for your agent:
@@ -107,20 +107,20 @@
 </table>
 
 <h2>Install example (Claude Code, Linux &amp; macOS)</h2>
-<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.2.4/code-trace-tree-skill-1.2.4.zip -o code-trace-tree-skill-1.2.4.zip</code>
+<pre><code>curl -L https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.2.5/code-trace-tree-skill-1.2.5.zip -o code-trace-tree-skill-1.2.5.zip</code>
 <code>rm -rf ~/.claude/skills/code-trace-tree</code>
 <code>mkdir -p ~/.claude/skills</code>
-<code>unzip code-trace-tree-skill-1.2.4.zip -d ~/.claude/skills/</code>
-<code>rm code-trace-tree-skill-1.2.4.zip</code>
+<code>unzip code-trace-tree-skill-1.2.5.zip -d ~/.claude/skills/</code>
+<code>rm code-trace-tree-skill-1.2.5.zip</code>
 </pre>
 <p>Project-local: extract into <code>.claude/skills/</code> instead of <code>~/.claude/skills/</code>. For other agents, use the same zip and extract into that agent’s folder from the table above.</p>
 
 <h2>Install example (Claude Code, Windows PowerShell)</h2>
-<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.2.4/code-trace-tree-skill-1.2.4.zip" -OutFile "code-trace-tree-skill-1.2.4.zip"</code>
+<pre><code>Invoke-WebRequest -Uri "https://github.com/saidake/code-trace-tree-jetbrains/releases/download/v1.2.5/code-trace-tree-skill-1.2.5.zip" -OutFile "code-trace-tree-skill-1.2.5.zip"</code>
 <code>Remove-Item -Recurse -Force "$HOME\.claude\skills\code-trace-tree" -ErrorAction SilentlyContinue</code>
 <code>New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null</code>
-<code>Expand-Archive -Path "code-trace-tree-skill-1.2.4.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
-<code>Remove-Item "code-trace-tree-skill-1.2.4.zip"</code>
+<code>Expand-Archive -Path "code-trace-tree-skill-1.2.5.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
+<code>Remove-Item "code-trace-tree-skill-1.2.5.zip"</code>
 </pre>
 <p>Project-local: extract into <code>.claude\skills\</code>. For Cursor / Copilot / Codex / Gemini, use the same zip and change the destination path using the table above.</p>
 
@@ -147,8 +147,11 @@ Add a root trace point at the login handler, then children for validation and to
 <p>
   Each project uses <code>&lt;projectId&gt;.xml</code> in that folder
   (legacy <code>&lt;FolderName&gt;.xml</code> files from older releases are still resolved and
-  renamed when found). The project id is stored in
-  <code>.idea/code-trace-tree.project.id</code>.
+  renamed when found). The IDE may cache the id in
+  <code>.idea/code-trace-tree.project.id</code>. Agents use path mode: prefer an existing
+  <code>.idea</code> id (recreate that XML if missing), else path match, else Case C create
+  with <code>&lt;path&gt;</code> only (never write the <code>.idea</code> id). The IDE binds
+  via path match + <code>storage-ready</code> (signal body = project path).
 </p>
 <!-- Plugin description end -->
 

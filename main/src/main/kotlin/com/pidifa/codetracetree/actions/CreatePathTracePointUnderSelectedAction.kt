@@ -11,9 +11,8 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VfsUtilCore
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.util.TracePathEligibility
 
 /** Creates a FILE or DIRECTORY child under selected tree nodes from Project View. */
 class CreatePathTracePointUnderSelectedAction : AnAction() {
@@ -21,16 +20,7 @@ class CreatePathTracePointUnderSelectedAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val basePath = project.basePath ?: return
-        val projectRoot = LocalFileSystem.getInstance().findFileByPath(basePath) ?: return
-        if (!VfsUtilCore.isAncestor(projectRoot, file, false)) {
-            Messages.showWarningDialog(
-                project,
-                "Select a file or directory inside the project.",
-                "Create Trace Point (Under Selected)"
-            )
-            return
-        }
+        if (!TracePathEligibility.isEligible(project, file)) return
 
         val service = project.service<TracePointService>()
         val selectedIds = service.getSelectedTracePointIds()
@@ -53,18 +43,23 @@ class CreatePathTracePointUnderSelectedAction : AnAction() {
         ) ?: return
 
         service.setExpandedTracePointIds(service.getExpandedTracePointIds() + selectedIds)
-        selectedIds.forEach { parentId ->
+        val createdIds = selectedIds.mapNotNull { parentId ->
             service.addPathTracePoint(tracePointName, file, parentId = parentId)
-        }
+        }.toSet()
         service.notifyListeners()
+        if (createdIds.isNotEmpty()) {
+            service.revealTracePointsInTree(createdIds, focusTree = false)
+        }
     }
 
     override fun update(e: AnActionEvent) {
         val project = e.project
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
+        val eligible = TracePathEligibility.isEligible(project, file)
         val service = project?.service<TracePointService>()
         val hasSelection = service?.getSelectedTracePointIds()?.isNotEmpty() ?: false
-        e.presentation.isEnabledAndVisible = project != null && file != null && hasSelection
+        e.presentation.isVisible = eligible
+        e.presentation.isEnabled = eligible && hasSelection
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

@@ -16,12 +16,14 @@ import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.services.TracePointService
 import com.pidifa.codetracetree.services.TracePointService.TracePointNode
+import com.pidifa.codetracetree.util.TracePathEligibility
 
 class UpdateTracePointAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        if (!TracePathEligibility.isEligible(project, file)) return
         val service = project.service<TracePointService>()
         val selectedTracePointIds = service.getSelectedTracePointIds()
         if (selectedTracePointIds.isEmpty()) {
@@ -87,7 +89,8 @@ class UpdateTracePointAction : AnAction() {
         val project = e.project
         val editor = project?.let { FileEditorManager.getInstance(it).selectedTextEditor }
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabled = project != null && editor != null && file != null
+        e.presentation.isEnabledAndVisible =
+            editor != null && TracePathEligibility.isEligible(project, file)
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {

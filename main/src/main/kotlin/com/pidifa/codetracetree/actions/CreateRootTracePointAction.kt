@@ -12,6 +12,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ui.Messages
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.util.TracePathEligibility
 
 class CreateRootTracePointAction : AnAction() {
 
@@ -19,6 +20,7 @@ class CreateRootTracePointAction : AnAction() {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        if (!TracePathEligibility.isEligible(project, file)) return
 
         // ---- caret validation -------------------------------------------------
         val carets = editor.caretModel.getCaretsAndSelections()
@@ -53,16 +55,21 @@ class CreateRootTracePointAction : AnAction() {
         ) ?: return
 
         // **root** → parentId = null
-        service.addTracePoint(tracePointName, file, lineNumber,  parentId = null)
+        val id = service.addTracePoint(tracePointName, file, lineNumber, parentId = null)
         service.attachDocumentListener(file)
         service.highlightTracePointsInFile(file)
         service.notifyListeners()
+        if (id != null) {
+            service.revealTracePointsInTree(setOf(id), focusTree = false)
+        }
     }
 
     override fun update(e: AnActionEvent) {
+        val project = e.project
         val editor = e.getData(CommonDataKeys.EDITOR)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabled = editor != null && file != null
+        e.presentation.isEnabledAndVisible =
+            editor != null && TracePathEligibility.isEligible(project, file)
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

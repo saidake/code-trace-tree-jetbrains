@@ -27,8 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * creates on Windows when another process writes the signal files.
  *
  * On each signal, [onStorageReady] is invoked (must not block this watcher's threads —
- * typically posts work with `Application.invokeLater`). Call [clearSeen] if bind should
- * be retried later (e.g. local project id not ready yet).
+ * typically posts work with `Application.invokeLater`). The service filters by signal
+ * body path (or XML `<path>` for legacy bodies). Call [clearSeen] if bind should be
+ * retried later (e.g. XML not written yet).
  *
  * Once storage is bound, close this watcher and start [ExternalStorageWatcher].
  */

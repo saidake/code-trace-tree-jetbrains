@@ -49,11 +49,41 @@ def global_app_dir() -> Path:
     return Path(base) / "code-trace-tree"
 
 
-def read_project_id(project_root: Path) -> str:
+def find_path_matched_xmls(project_root: Path) -> list[Path]:
+    app_dir = global_app_dir()
+    if not app_dir.is_dir():
+        return []
+    target = normalize_path_key(str(project_root.resolve()))
+    matched: list[Path] = []
+    for xml in sorted(app_dir.glob("*.xml")):
+        stored = xml_tag_text(xml, "path")
+        if stored and normalize_path_key(stored) == target:
+            matched.append(xml)
+    return matched
+
+
+def read_local_project_id_file(project_root: Path) -> str:
+    """Optional IDE cache only — agents never create this file."""
     p = project_root / ".idea" / "code-trace-tree.project.id"
     if p.is_file():
         return p.read_text(encoding="utf-8").strip()
     return ""
+
+
+def read_project_id(project_root: Path) -> str:
+    """
+    Prefer IDE-local `.idea/code-trace-tree.project.id` when present; else path-matched XML.
+    """
+    local = read_local_project_id_file(project_root)
+    if local:
+        return local
+    matches = find_path_matched_xmls(project_root)
+    if not matches:
+        return ""
+    if len(matches) == 1:
+        return xml_tag_text(matches[0], "projectId")
+    latest = max(matches, key=lambda x: int(xml_tag_text(x, "updatedAt") or "0"))
+    return xml_tag_text(latest, "projectId")
 
 
 def xml_tag_text(path: Path, tag: str) -> str:
@@ -73,22 +103,26 @@ def normalize_path_key(p: str) -> str:
 
 
 def resolve_storage(project_root: Path) -> Path:
+    """
+    1. `.idea/code-trace-tree.project.id` → that project's XML (reuse existing bind)
+    2. Else XML whose `<path>` matches the project root
+    3. Else missing (caller may Case C create)
+    """
     app_dir = global_app_dir()
-    project_id = read_project_id(project_root)
     xmls = sorted(app_dir.glob("*.xml")) if app_dir.is_dir() else []
 
-    if project_id:
-        canonical = app_dir / f"{project_id}.xml"
-        if canonical.is_file() and xml_tag_text(canonical, "projectId") == project_id:
+    local_id = read_local_project_id_file(project_root)
+    if local_id:
+        canonical = app_dir / f"{local_id}.xml"
+        if canonical.is_file() and xml_tag_text(canonical, "projectId") == local_id:
             return canonical
-        # Legacy: previous releases used <FolderName>.xml
         for xml in xmls:
             try:
                 if xml.resolve() == canonical.resolve():
                     continue
             except OSError:
                 pass
-            if xml_tag_text(xml, "projectId") != project_id:
+            if xml_tag_text(xml, "projectId") != local_id:
                 continue
             if not canonical.exists():
                 try:
@@ -98,21 +132,11 @@ def resolve_storage(project_root: Path) -> Path:
                     pass
             return xml
 
-    target = normalize_path_key(str(project_root.resolve()))
-    path_matches: list[Path] = []
-    for xml in xmls:
-        stored = xml_tag_text(xml, "path")
-        if stored and normalize_path_key(stored) == target:
-            path_matches.append(xml)
-    if len(path_matches) == 1:
-        return path_matches[0]
-    if len(path_matches) > 1:
-        def updated_at(p: Path) -> int:
-            try:
-                return int(xml_tag_text(p, "updatedAt") or "0")
-            except ValueError:
-                return 0
-        return max(path_matches, key=updated_at)
+    matches = find_path_matched_xmls(project_root)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        return max(matches, key=lambda x: int(xml_tag_text(x, "updatedAt") or "0"))
 
     raise SystemExit(
         "ERROR: no Code Trace Tree storage XML found. "
@@ -122,24 +146,27 @@ def resolve_storage(project_root: Path) -> Path:
 
 
 def write_project_id_files(project_root: Path, project_id: str) -> list[Path]:
-    """Write the local project id for JetBrains: `.idea/code-trace-tree.project.id` only."""
-    path = project_root / ".idea" / "code-trace-tree.project.id"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(project_id.strip() + "\n", encoding="utf-8")
-    return [path]
+    """
+    Path mode: agents never write `.idea/code-trace-tree.project.id`.
+    The IDE may create that cache itself after binding by path.
+    """
+    return []
 
 
 def create_fresh_storage(project_root: Path) -> Path:
     """
-    Case C: allocate a new project id, write `.idea/code-trace-tree.project.id`,
-    and create empty global XML with profile `main`. Idempotent if storage already resolves.
+    Case C (path mode): create empty `<projectId>.xml` (`main`) when storage is missing.
+    If `.idea/code-trace-tree.project.id` exists but XML is gone, recreate with that same id.
+    Otherwise allocate a new project id. Does not write `.idea/code-trace-tree.project.id`.
+    Idempotent if storage already resolves.
     """
     try:
         return resolve_storage(project_root)
     except SystemExit:
         pass
 
-    project_id = str(uuid.uuid4())
+    local_id = read_local_project_id_file(project_root)
+    project_id = local_id or str(uuid.uuid4())
     app_dir = global_app_dir()
     app_dir.mkdir(parents=True, exist_ok=True)
     storage_xml = app_dir / f"{project_id}.xml"
@@ -164,7 +191,7 @@ def create_fresh_storage(project_root: Path) -> Path:
 
 
 def ensure_storage(project_root: Path) -> Path:
-    """Return existing storage XML, or create Case C storage when missing."""
+    """Return existing storage (local id or path), or create Case C when missing."""
     try:
         return resolve_storage(project_root)
     except SystemExit:
@@ -1038,7 +1065,8 @@ def signals_dir() -> Path:
 def write_storage_ready(project_root: Path) -> Optional[Path]:
     """
     Case C bind handshake: `signals/<projectId>.storage-ready` (no TTL).
-    JetBrains compares the filename id to `.idea/code-trace-tree.project.id` and binds when equal.
+    Body = absolute project path (same as XML `<path>`) so IDEs can filter without
+    opening XML; empty/legacy body falls back to reading XML `<path>`.
     """
     project_id = read_project_id(project_root)
     if not project_id:
@@ -1046,7 +1074,7 @@ def write_storage_ready(project_root: Path) -> Optional[Path]:
     dest = signals_dir()
     dest.mkdir(parents=True, exist_ok=True)
     req = dest / f"{project_id}.storage-ready"
-    req.write_text("1\n", encoding="utf-8")
+    req.write_text(str(project_root.resolve()) + "\n", encoding="utf-8")
     return req
 
 

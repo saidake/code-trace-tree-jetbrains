@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.4"
+val pluginVersion = "1.2.5"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,12 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.5</h3>
+            <ul>
+              <li>Editor and Project View Code Trace Tree actions only for files under the project root (relative <code>tracePath</code>)</li>
+              <li>After create, select the new node in the tree without jumping to source</li>
+              <li>Agent path-mode storage: <code>storage-ready</code> carries project path; reuse existing <code>.idea</code> id; recreate missing XML with the same id</li>
+            </ul>
             <h3>1.2.4</h3>
             <ul>
               <li>Always show <b>Go to the Trace Point in the tree panel (Only matching)</b> in the editor context menu; no-ops when nothing matches</li>

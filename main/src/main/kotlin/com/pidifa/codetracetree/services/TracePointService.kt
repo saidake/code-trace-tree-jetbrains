@@ -35,12 +35,10 @@ import com.pidifa.codetracetree.storage.AdvancedSettings
 import com.pidifa.codetracetree.storage.AgentSignalFiles
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
-import com.pidifa.codetracetree.storage.ProjectIdFiles
 import com.pidifa.codetracetree.storage.ProjectStorage
 import com.pidifa.codetracetree.storage.StorageReadyWatcher
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.Paths
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -416,8 +414,8 @@ class TracePointService(private val project: Project) {
     }
 
     /**
-     * Agent wrote `signals/<projectId>.storage-ready` after creating project id + XML (Case C).
-     * Bind only when that id matches `.idea/code-trace-tree.project.id`.
+     * Agent wrote `signals/<projectId>.storage-ready` after creating global XML (Case C).
+     * Prefer path from the signal body; fall back to XML `<path>` for legacy signals.
      * @return true when handled (bound or permanently skipped); false to retry later.
      */
     private fun handleStorageReadySignal(signalProjectId: String): Boolean {
@@ -426,12 +424,13 @@ class TracePointService(private val project: Project) {
             return true
         }
         val basePath = project.basePath ?: return true
-        val localId = ProjectIdFiles.readProjectId(Paths.get(basePath)) ?: return false
-        if (localId != signalProjectId) return true
-
         val storage = projectStorage ?: ProjectStorage(basePath).also { projectStorage = it }
-        val doc = storage.resolveAndLoad() ?: return false
-        if (storage.boundProjectId() != signalProjectId) return true
+        val signalPath = AgentSignalFiles.readStorageReadyProjectPath(signalProjectId)
+            .ifBlank { null }
+        val bound = storage.tryBindFromStorageReady(signalProjectId, signalPath) ?: return false
+        if (!bound) return true
+
+        val doc = storage.reloadBoundDocument() ?: return false
         suppressPersist = true
         try {
             applyDocument(doc, validate = true, notifyUi = true)
@@ -932,9 +931,9 @@ class TracePointService(private val project: Project) {
         lineNumber: Int,
         parentId: String? = null,
         description: String = ""
-    ) {
+    ): String? {
         ensureStorage()
-        ApplicationManager.getApplication().runReadAction {
+        return ApplicationManager.getApplication().runReadAction<String?> {
             val document = FileDocumentManager.getInstance().getDocument(file)
             val lineContent = document?.let {
                 val start = it.getLineStartOffset(lineNumber - 1)
@@ -942,7 +941,7 @@ class TracePointService(private val project: Project) {
                 it.getText(TextRange(start, end)).trim()
             }
             if (lineContent.isNullOrEmpty()) {
-                return@runReadAction
+                return@runReadAction null
             }
             val (totalOccurrences, matchingLines) = if (document != null) {
                 getLineOccurrences(document, lineContent)
@@ -951,6 +950,7 @@ class TracePointService(private val project: Project) {
 
             val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
             val baseName = file.name
+            val id = UUID.randomUUID().toString()
 
             val tracePoint = TracePoint(
                 traceName = name,
@@ -965,7 +965,8 @@ class TracePointService(private val project: Project) {
                 description = description
             )
 
-            insertTracePointNode(TracePointNode(UUID.randomUUID().toString(), tracePoint), parentId)
+            insertTracePointNode(TracePointNode(id, tracePoint), parentId)
+            id
         }
     }
 
@@ -977,11 +978,12 @@ class TracePointService(private val project: Project) {
         file: VirtualFile,
         parentId: String? = null,
         description: String = ""
-    ) {
+    ): String? {
         ensureStorage()
-        ApplicationManager.getApplication().runReadAction {
+        return ApplicationManager.getApplication().runReadAction<String?> {
             val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
             val kind = if (file.isDirectory) TraceType.DIRECTORY else TraceType.FILE
+            val id = UUID.randomUUID().toString()
             val tracePoint = TracePoint(
                 traceName = name,
                 traceType = kind,
@@ -994,7 +996,8 @@ class TracePointService(private val project: Project) {
                 occurrenceIndex = 0,
                 description = description
             )
-            insertTracePointNode(TracePointNode(UUID.randomUUID().toString(), tracePoint), parentId)
+            insertTracePointNode(TracePointNode(id, tracePoint), parentId)
+            id
         }
     }
 
@@ -1482,17 +1485,21 @@ class TracePointService(private val project: Project) {
     }
 
     @Volatile
-    private var treeRevealer: ((Set<String>) -> Unit)? = null
+    private var treeRevealer: ((Set<String>, Boolean) -> Unit)? = null
 
-    fun setTreeRevealer(revealer: ((Set<String>) -> Unit)?) {
+    fun setTreeRevealer(revealer: ((Set<String>, Boolean) -> Unit)?) {
         treeRevealer = revealer
     }
 
-    fun revealTracePointsInTree(ids: Set<String>) {
+    /**
+     * Select / reveal nodes in the tool-window tree.
+     * @param focusTree when true, moves keyboard focus to the tree (agent go-to); false keeps editor focus (create).
+     */
+    fun revealTracePointsInTree(ids: Set<String>, focusTree: Boolean = true) {
         if (ids.isEmpty()) return
         selectTracePoints(ids)
         ApplicationManager.getApplication().invokeLater {
-            treeRevealer?.invoke(ids)
+            treeRevealer?.invoke(ids, focusTree)
         }
     }
 }
