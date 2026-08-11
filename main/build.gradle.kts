@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.5"
+val pluginVersion = "1.2.6"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.6</h3>
+            <ul>
+              <li>Align version with VS Code / Cursor companions (Trace Points webview list on those IDEs)</li>
+            </ul>
             <h3>1.2.5</h3>
             <ul>
               <li>Editor and Project View Code Trace Tree actions only for files under the project root (relative <code>tracePath</code>)</li>
