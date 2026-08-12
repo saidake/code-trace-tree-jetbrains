@@ -63,6 +63,7 @@ intellijPlatform {
               <li>Add Plugin home page button linking to JetBrains Marketplace</li>
               <li>Document the Agent Skill as agent-agnostic (listed agents are examples)</li>
               <li>Preferred workflow format: nest by call flow (sibling fan-out under a call)</li>
+              <li>Clarify skill auto-load (project/global) and real-time IDE sync in README</li>
               <li>Align version with VS Code / Cursor companions</li>
             </ul>
             <h3>1.2.6</h3>
