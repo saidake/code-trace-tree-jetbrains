@@ -7,6 +7,12 @@
 
 <img src="docs/assets/logo.png" width="100" alt="Code Trace Tree logo">
 
+<p>
+  <a href="https://plugins.jetbrains.com/plugin/33246-code-trace-tree">
+    <img src="https://img.shields.io/badge/Plugin_home_page-black?style=for-the-badge&logo=jetbrains&logoColor=white" alt="Plugin home page">
+  </a>
+</p>
+
 ----
 
 <!-- Plugin description -->
@@ -17,8 +23,8 @@
   Double-click any trace point to navigate to its source, with support for multiple trace levels.
 </p>
 <p>
-  Pair it with the Agent Skill so Claude Code, Cursor, GitHub Copilot, Codex, or Gemini CLI can search,
-  add, move, and rebind traces, and refresh the IDE when you ask.<br/>
+  Pair it with the Agent Skill so a coding agent can search, add, move, and rebind traces, and
+  refresh the IDE when you ask (for example Claude Code, Cursor, or Gemini CLI).<br/>
   This plugin does <b>not</b> include an AI agent; install your preferred agent separately, then
   install and load the Code Trace Tree skill.
 </p>
@@ -59,11 +65,11 @@
 
 <h1>Agent Skill</h1>
 <p>
-  This plugin does <b>not</b> ship an AI agent. Install one of the supported agents first, then install
+  This plugin does <b>not</b> ship an AI agent. Install your preferred coding agent, then install
   the Code Trace Tree skill and ensure it is <b>loaded</b> in the agent session so the agent can talk
-  to the plugin.
+  to the plugin. The skill is general — any agent that can load skill folders can use it.
 </p>
-<p>Supported agents:</p>
+<p>Example agents:</p>
 <ul>
   <li><a href="https://claude.com/claude-code">Claude Code</a></li>
   <li><a href="https://cursor.com">Cursor</a></li>
@@ -89,13 +95,13 @@
 <h2>Install skill — extract locations</h2>
 <p>
   Download <code>code-trace-tree-skill-1.2.6.zip</code> from the GitHub Release
-  (one zip for all agents).
-  Remove any existing <code>code-trace-tree</code> skill folder first, then extract into the
-  skills directory for your agent:
+  (one zip works across agents).
+  Remove any existing <code>code-trace-tree</code> skill folder first, then extract into your
+  agent’s skills directory. Known paths for some agents:
 </p>
 <table>
   <thead>
-    <tr><th>Agent</th><th>Global</th><th>Project-local</th></tr>
+    <tr><th>Agent (examples)</th><th>Global</th><th>Project-local</th></tr>
   </thead>
   <tbody>
     <tr><td>Claude Code</td><td><code>~/.claude/skills/</code></td><td><code>.claude/skills/</code></td></tr>
@@ -122,7 +128,7 @@
 <code>Expand-Archive -Path "code-trace-tree-skill-1.2.6.zip" -DestinationPath "$HOME\.claude\skills" -Force</code>
 <code>Remove-Item "code-trace-tree-skill-1.2.6.zip"</code>
 </pre>
-<p>Project-local: extract into <code>.claude\skills\</code>. For Cursor / Copilot / Codex / Gemini, use the same zip and change the destination path using the table above.</p>
+<p>Project-local: extract into <code>.claude\skills\</code>. For other agents, use the same zip and change the destination to that agent’s skills path (see the table above for examples).</p>
 
 <h2>How to use the skill</h2>
 <p>
