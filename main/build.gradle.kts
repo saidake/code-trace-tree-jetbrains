@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.6"
+val pluginVersion = "1.2.8"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,14 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.8</h3>
+            <ul>
+              <li>Update Marketplace plugin icons (light/dark)</li>
+              <li>Add Plugin home page button linking to JetBrains Marketplace</li>
+              <li>Document the Agent Skill as agent-agnostic (listed agents are examples)</li>
+              <li>Preferred workflow format: nest by call flow (sibling fan-out under a call)</li>
+              <li>Align version with VS Code / Cursor companions</li>
+            </ul>
             <h3>1.2.6</h3>
             <ul>
               <li>Align version with VS Code / Cursor companions (Trace Points webview list on those IDEs)</li>
