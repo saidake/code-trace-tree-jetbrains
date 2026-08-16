@@ -571,7 +571,8 @@ class TracePointService(private val project: Project) {
                 profiles.add(cloned)
             }
             if (cloned.name == activeProfileName) {
-                loadActiveProfileFromStore()
+                // Keep tree selection across peer/agent profile refresh (and ignore self-echo).
+                loadActiveProfileFromStore(preserveSelection = true)
             }
             notifyProfileListeners()
         } finally {
@@ -586,7 +587,9 @@ class TracePointService(private val project: Project) {
         val request = AgentSignalFiles.refreshProfilePath(projectId)
         if (!AgentSignalFiles.isFresh(request)) return
         val name = AgentSignalFiles.readProfileRefreshName(request)
-        reloadProfileFromExternalStorage(name.ifBlank { null }, bypassIgnoreWindow = true)
+        // Respect self-write ignore window so our own move/persist signal does not
+        // clear selection a moment later via loadActiveProfileFromStore().
+        reloadProfileFromExternalStorage(name.ifBlank { null }, bypassIgnoreWindow = false)
     }
 
     /**
@@ -630,7 +633,7 @@ class TracePointService(private val project: Project) {
         val projectId = projectStorage?.boundProjectId() ?: return
         val request = AgentSignalFiles.refreshSettingsPath(projectId)
         if (!AgentSignalFiles.isFresh(request)) return
-        reloadSettingsFromExternalStorage(bypassIgnoreWindow = true)
+        reloadSettingsFromExternalStorage(bypassIgnoreWindow = false)
     }
 
     /**
@@ -1508,7 +1511,7 @@ class TracePointService(private val project: Project) {
         profile.expandedTracePointIds = expandedTracePointIds.toMutableSet()
     }
 
-    private fun loadActiveProfileFromStore() {
+    private fun loadActiveProfileFromStore(preserveSelection: Boolean = false) {
         val profile = profiles.find { it.name == activeProfileName }
             ?: profiles.firstOrNull()?.also { activeProfileName = it.name }
             ?: TraceProfile(name = DEFAULT_PROFILE_NAME).also {
@@ -1517,14 +1520,18 @@ class TracePointService(private val project: Project) {
                 activeProfileName = it.name
             }
         clearAllHighlights()
+        val keepIds = if (preserveSelection) selectedTracePointIds.toSet() else emptySet()
         selectedTracePointIds.clear()
         tracePointNodes = profile.tracePointNodes
         expandedTracePointIds = profile.expandedTracePointIds.toMutableSet()
         rebuildNodeMapAndFileNodesMap()
+        if (preserveSelection) {
+            selectedTracePointIds.addAll(keepIds.filter { nodeMap.containsKey(it) })
+        }
         validateTracePointsOnLoad()
         FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
         reattachListenersAndHighlights()
-        notifyListeners()
+        notifyListeners(restoreSelection = preserveSelection)
     }
 
     private fun clearAllHighlights() {

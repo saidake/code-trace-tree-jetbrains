@@ -1,4 +1,4 @@
-﻿---
+---
 name: code-trace-tree
 description: >
   Read, edit, and refresh Code Trace Tree plugin data (JetBrains / VS Code shared storage).
