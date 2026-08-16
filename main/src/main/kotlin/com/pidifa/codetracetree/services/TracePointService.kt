@@ -1272,6 +1272,55 @@ class TracePointService(private val project: Project) {
         }
     }
 
+    /** Count invalid nodes in the active profile (current isValid flags). */
+    fun countInvalidTracePoints(): Int {
+        var count = 0
+        fun walk(node: TracePointNode) {
+            if (!node.tracePoint.isValid) count++
+            node.children.forEach { walk(it) }
+        }
+        tracePointNodes.forEach { walk(it) }
+        return count
+    }
+
+    /**
+     * Remove invalid nodes from the active profile.
+     * Valid children of an invalid parent are reparented in place.
+     * @return number of nodes removed
+     */
+    fun removeInvalidTracePoints(): Int {
+        val removedIds = mutableListOf<String>()
+
+        fun prune(nodes: MutableList<TracePointNode>, parentId: String?) {
+            var i = nodes.size - 1
+            while (i >= 0) {
+                val node = nodes[i]
+                prune(node.children, node.id)
+                if (!node.tracePoint.isValid) {
+                    removedIds.add(node.id)
+                    node.children.forEach { it.parentId = parentId }
+                    val children = node.children.toList()
+                    node.children.clear()
+                    nodes.removeAt(i)
+                    nodes.addAll(i, children)
+                }
+                i--
+            }
+        }
+
+        ApplicationManager.getApplication().runReadAction {
+            prune(tracePointNodes, null)
+            if (removedIds.isEmpty()) return@runReadAction
+            selectedTracePointIds.removeAll(removedIds.toSet())
+            expandedTracePointIds.removeAll(removedIds.toSet())
+            rebuildNodeMapAndFileNodesMap()
+            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+            markPeerProfileRefresh()
+            notifyListeners()
+        }
+        return removedIds.size
+    }
+
     private fun pruneRecursively(node: TracePointNode, toDelete: Set<String>) {
         node.children.removeIf { toDelete.contains(it.id) }
         node.children.forEach { pruneRecursively(it, toDelete) }

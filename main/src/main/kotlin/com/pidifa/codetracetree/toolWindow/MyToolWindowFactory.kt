@@ -19,6 +19,7 @@ import com.pidifa.codetracetree.actions.MoveDownTracePointAction
 import com.pidifa.codetracetree.actions.ExpandSelectedTracePointAction
 import com.pidifa.codetracetree.actions.CollapseAllTracePointAction
 import com.pidifa.codetracetree.actions.RecheckTracePointsAction
+import com.pidifa.codetracetree.actions.RemoveInvalidTracePointsAction
 import com.pidifa.codetracetree.actions.ExportTracePointsAction
 import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
@@ -383,7 +384,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                         service.selectTracePoints(selectedIds)
                         val popupMenu = JPopupMenu()
-                        val copyItem = JMenuItem("Copy")
+                        val copyItem = JMenuItem("Copy Label")
                         copyItem.addActionListener {
                             val toCopy = if (selectedTracePoints.any { it.id == tracePointNode.id }) {
                                 selectedTracePoints
@@ -555,6 +556,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             })
 
             val actionGroup = DefaultActionGroup().apply {
+                add(RecheckTracePointsAction())
                 add(MoveUpTracePointAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Move Up"
                     templatePresentation.description = "Move the selected trace point up in the list"
@@ -577,14 +579,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.description =
                         "Ask for a name when creating a new trace point; when off, create with an empty name (rename later via the tree)"
                 })
-                add(ExportTracePointsAction().apply {
-                    templatePresentation.text = "Export Trace Points"
-                    templatePresentation.description = "Export the current profile or all profiles to an XML file"
-                })
-                add(ImportTracePointsAction().apply {
-                    templatePresentation.text = "Import Trace Points"
-                    templatePresentation.description = "Import trace points from a single- or multi-profile XML file"
-                })
                 add(ExpandSelectedTracePointAction(this@MyToolWindow).apply {
                     templatePresentation.text = "Expand Selected"
                     templatePresentation.description = "Expand the selected trace point node"
@@ -593,7 +587,15 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Collapse All"
                     templatePresentation.description = "Collapse all trace point nodes"
                 })
-                add(RecheckTracePointsAction())
+                add(RemoveInvalidTracePointsAction())
+                add(ExportTracePointsAction().apply {
+                    templatePresentation.text = "Export Trace Points"
+                    templatePresentation.description = "Export the current profile or all profiles to an XML file"
+                })
+                add(ImportTracePointsAction().apply {
+                    templatePresentation.text = "Import Trace Points"
+                    templatePresentation.description = "Import trace points from a single- or multi-profile XML file"
+                })
                 add(AdvancedSettingsAction().apply {
                     templatePresentation.text = "Advanced Settings"
                     templatePresentation.description =
