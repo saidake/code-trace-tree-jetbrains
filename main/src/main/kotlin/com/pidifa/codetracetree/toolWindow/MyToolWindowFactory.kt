@@ -18,6 +18,7 @@ import com.pidifa.codetracetree.actions.MoveUpTracePointAction
 import com.pidifa.codetracetree.actions.MoveDownTracePointAction
 import com.pidifa.codetracetree.actions.ExpandSelectedTracePointAction
 import com.pidifa.codetracetree.actions.CollapseAllTracePointAction
+import com.pidifa.codetracetree.actions.RecheckTracePointsAction
 import com.pidifa.codetracetree.actions.ExportTracePointsAction
 import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
@@ -591,6 +592,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.text = "Collapse All"
                     templatePresentation.description = "Collapse all trace point nodes"
                 })
+                add(RecheckTracePointsAction())
                 add(AdvancedSettingsAction().apply {
                     templatePresentation.text = "Advanced Settings"
                     templatePresentation.description =

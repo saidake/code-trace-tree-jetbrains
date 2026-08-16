@@ -20,6 +20,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
@@ -175,13 +176,15 @@ class TracePointService(private val project: Project) {
             persistNow()
         })
 
-        // Listen for file openings to attach DocumentListener and apply highlights
+        // Listen for file openings: rebind LINE availability, then attach listener and highlight
         ApplicationManager.getApplication().messageBus.connect(project).subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    val changed = rebindLineNodesForFile(file)
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
+                    if (changed) notifyListeners()
                 }
             }
         )
@@ -254,6 +257,35 @@ class TracePointService(private val project: Project) {
                 }
             }
         }, EXTERNAL_REBIND_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * Rebind LINE nodes in an opened editor against the document buffer.
+     * Updates runtime `isValid` (and line/occurrence if the match moved).
+     */
+    private fun rebindLineNodesForFile(file: VirtualFile): Boolean {
+        if (file.isDirectory) return false
+        return ApplicationManager.getApplication().runReadAction<Boolean> {
+            val relativePath = relativeProjectPath(file)
+                ?: project.basePath?.let { file.path.removePrefix("$it/") }
+                    ?.takeIf { it != file.path }
+                ?: return@runReadAction false
+            val nodes = fileNodesMap[relativePath] ?: return@runReadAction false
+            if (nodes.none { it.tracePoint.traceType == TraceType.LINE }) return@runReadAction false
+            val document = FileDocumentManager.getInstance().getDocument(file)
+                ?: return@runReadAction false
+            val lines = document.text.split("\n")
+            var changed = false
+            for (node in nodes) {
+                if (node.tracePoint.traceType != TraceType.LINE) continue
+                val rebound = rebindLineTracePoint(node.tracePoint, lines)
+                if (rebound != node.tracePoint) {
+                    node.tracePoint = rebound
+                    changed = true
+                }
+            }
+            changed
+        }
     }
 
     /**
@@ -866,6 +898,56 @@ class TracePointService(private val project: Project) {
     }
 
 
+    /**
+     * Recheck all LINE / FILE / DIRECTORY nodes against the project.
+     * Uses open editor documents when present. Does not reload XML.
+     * Persists only if LINE line/occurrence fields moved.
+     */
+    fun recheckAllTracePoints() {
+        refreshMissingTracePathsFromDisk()
+        val before = persistedLineSnapshot()
+        validateTracePointsOnLoad()
+        val persistedChanged = persistedLineSnapshot() != before
+        ApplicationManager.getApplication().runReadAction {
+            FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
+        }
+        val copy = getTracePoints()
+        listenersMap[NodeListenerEventType.FULL_UPDATE]?.forEach { it(copy, false) }
+        if (persistedChanged) schedulePersist()
+    }
+
+    private fun persistedLineSnapshot(): String {
+        val sb = StringBuilder()
+        fun walk(node: TracePointNode) {
+            val tp = node.tracePoint
+            if (tp.traceType == TraceType.LINE) {
+                sb.append(node.id).append(':')
+                    .append(tp.lineNumber).append(':')
+                    .append(tp.totalOccurrences).append(':')
+                    .append(tp.occurrenceIndex).append(';')
+            }
+            node.children.forEach(::walk)
+        }
+        tracePointNodes.forEach(::walk)
+        return sb.toString()
+    }
+
+    /** VFS refresh for missing paths (must not run inside a read action). */
+    private fun refreshMissingTracePathsFromDisk() {
+        val basePath = project.basePath ?: return
+        fun walk(node: TracePointNode) {
+            val tracePath = node.tracePoint.tracePath
+            if (tracePath.isNotEmpty()) {
+                val cached = VirtualFileManager.getInstance().findFileByUrl("file:///$basePath/$tracePath")
+                if (cached == null) {
+                    LocalFileSystem.getInstance().refreshAndFindFileByPath("$basePath/$tracePath")
+                }
+            }
+            node.children.forEach(::walk)
+        }
+        tracePointNodes.forEach(::walk)
+    }
+
     private fun validateTracePointsOnLoad() {
         ApplicationManager.getApplication().runReadAction {
             fun validateNode(node: TracePointNode) {
@@ -876,7 +958,7 @@ class TracePointService(private val project: Project) {
                     return
                 }
 
-                val file = VirtualFileManager.getInstance().findFileByUrl("file:///${basePath}/${tp.tracePath}")
+                val file = VirtualFileManager.getInstance().findFileByUrl("file:///$basePath/${tp.tracePath}")
                 if (file == null) {
                     node.tracePoint = tp.copy(isValid = false, totalOccurrences = 0, occurrenceIndex = 0)
                     return

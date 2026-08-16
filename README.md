@@ -55,12 +55,14 @@
   <li>Single-click a node to select it; double-click to jump to that location (line, file, or Project View for directories).</li>
   <li>Right-click a node and choose <b>Copy</b> (or use Ctrl/Cmd+C) to copy its display text, e.g. <code>test233 (TestControllerWebFlux.java:54)</code>.</li>
   <li>Right-click a line trace point and choose <b>Show Line Content</b> to view its saved trimmed line text.</li>
-  <li>Use the tool window toolbar to expand/collapse, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
+  <li>Use the tool window toolbar to expand/collapse, recheck traces, reorder, highlight, prompt for name on create, import/export, or edit descriptions.</li>
 </ol>
 <p>
   <b>TIPS:</b> Prefer creating line trace points on text that is <b>unique in that file</b> (or uncommon),
   not generic lines like <code>}</code> or <code>return;</code>. Empty lines are not allowed.
   The plugin stores occurrence counts to re-find the line after it moves; unique content rebinds more reliably.
+  Opening a file re-checks line traces in that file so highlights and validity stay aligned.
+  Use <b>Recheck Trace Points</b> in the toolbar to recheck every line, file, and directory trace.
 </p>
 
 <h1>Agent Skill</h1>
