@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.8"
+val pluginVersion = "1.2.9"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,13 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.9</h3>
+            <ul>
+              <li><b>Recheck Trace Availability</b>: reload bound XML and validate all traces; tiered peer refresh (full / profile / settings)</li>
+              <li>Rebind LINE traces on file open; content-rebind after bulk external edits</li>
+              <li>Toolbar: <b>Remove Invalid Trace Points</b>; Import/Export moved into Advanced Settings; context menu <b>Copy Label</b></li>
+              <li>Preserve tree selection across self profile-refresh echoes; scope disk watching to open LINE buffers and path tips</li>
+            </ul>
             <h3>1.2.8</h3>
             <ul>
               <li>Update Marketplace plugin icons (light/dark)</li>
