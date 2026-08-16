@@ -9,6 +9,9 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.DataContext
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -27,16 +30,19 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
 import javax.swing.BorderFactory
+import javax.swing.Box
+import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JSeparator
 
 /**
- * Right-most toolbar action: opens Advanced Settings (highlight line background colors).
+ * Right-most toolbar action: opens Advanced Settings (highlight colors, import/export).
  */
 class AdvancedSettingsAction : AnAction(
     null,
-    "Advanced settings (highlight line background color)",
+    "Advanced settings (highlight colors, import/export)",
     AllIcons.Actions.More
 ), DumbAware {
 
@@ -49,7 +55,7 @@ class AdvancedSettingsAction : AnAction(
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project != null
         e.presentation.text = "Advanced Settings"
-        e.presentation.description = "Advanced settings (highlight line background color)"
+        e.presentation.description = "Advanced settings (highlight colors, import/export)"
         e.presentation.icon = AllIcons.Actions.More
     }
 
@@ -57,7 +63,7 @@ class AdvancedSettingsAction : AnAction(
 }
 
 private class AdvancedSettingsDialog(
-    project: Project,
+    private val project: Project,
     private val service: TracePointService
 ) : DialogWrapper(project) {
 
@@ -130,10 +136,46 @@ private class AdvancedSettingsDialog(
             hintConstraints
         )
 
+        val dataPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = JBUI.Borders.empty(16, 8, 0, 8)
+            alignmentX = JComponent.LEFT_ALIGNMENT
+            add(JSeparator())
+            add(Box.createVerticalStrut(12))
+            add(JBLabel("Data").apply {
+                font = font.deriveFont(font.style or java.awt.Font.BOLD)
+                alignmentX = JComponent.LEFT_ALIGNMENT
+            })
+            add(Box.createVerticalStrut(4))
+            add(JBLabel("Export or import profile XML.").apply {
+                foreground = JBColor.GRAY
+                alignmentX = JComponent.LEFT_ALIGNMENT
+            })
+            add(Box.createVerticalStrut(8))
+            add(JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+                alignmentX = JComponent.LEFT_ALIGNMENT
+                add(JButton("Export Trace Points").apply {
+                    addActionListener { runToolbarAction(ExportTracePointsAction()) }
+                })
+                add(JButton("Import Trace Points").apply {
+                    addActionListener { runToolbarAction(ImportTracePointsAction()) }
+                })
+            })
+        }
+
         val wrap = JPanel(BorderLayout())
-        wrap.add(form, BorderLayout.CENTER)
-        wrap.preferredSize = Dimension(480, 140)
+        wrap.add(form, BorderLayout.NORTH)
+        wrap.add(dataPanel, BorderLayout.CENTER)
+        wrap.preferredSize = Dimension(480, 260)
         return wrap
+    }
+
+    private fun runToolbarAction(action: AnAction) {
+        val context: DataContext = SimpleDataContext.builder()
+            .add(CommonDataKeys.PROJECT, project)
+            .build()
+        val event = AnActionEvent.createFromDataContext("CodeTraceTree.AdvancedSettings", null, context)
+        action.actionPerformed(event)
     }
 
     override fun doOKAction() {

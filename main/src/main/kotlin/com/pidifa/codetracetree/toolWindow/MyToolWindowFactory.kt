@@ -20,8 +20,6 @@ import com.pidifa.codetracetree.actions.ExpandSelectedTracePointAction
 import com.pidifa.codetracetree.actions.CollapseAllTracePointAction
 import com.pidifa.codetracetree.actions.RecheckTracePointsAction
 import com.pidifa.codetracetree.actions.RemoveInvalidTracePointsAction
-import com.pidifa.codetracetree.actions.ExportTracePointsAction
-import com.pidifa.codetracetree.actions.ImportTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
 import com.pidifa.codetracetree.actions.AdvancedSettingsAction
 import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
@@ -588,18 +586,10 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.description = "Collapse all trace point nodes"
                 })
                 add(RemoveInvalidTracePointsAction())
-                add(ExportTracePointsAction().apply {
-                    templatePresentation.text = "Export Trace Points"
-                    templatePresentation.description = "Export the current profile or all profiles to an XML file"
-                })
-                add(ImportTracePointsAction().apply {
-                    templatePresentation.text = "Import Trace Points"
-                    templatePresentation.description = "Import trace points from a single- or multi-profile XML file"
-                })
                 add(AdvancedSettingsAction().apply {
                     templatePresentation.text = "Advanced Settings"
                     templatePresentation.description =
-                        "Advanced settings (highlight line background color)"
+                        "Advanced settings (highlight colors, import/export)"
                 })
             }
             val actionToolbar = ActionManager.getInstance().createActionToolbar(

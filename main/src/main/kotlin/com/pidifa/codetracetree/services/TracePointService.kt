@@ -935,11 +935,33 @@ class TracePointService(private val project: Project) {
                         if (affectedNodes==null || affectedNodes.isEmpty()) return
 
                         ApplicationManager.getApplication().runReadAction {
+                            // Bulk / agent rewrite from file start: offset math collapses tips to line 1.
+                            if (shouldContentRebindDocumentEvent(event)) {
+                                val changed = rebindLineNodesForFile(docFile)
+                                highlightTracePointsInFile(docFile)
+                                if (changed) notifyListeners()
+                                return@runReadAction
+                            }
+
                             val newLines = event.document.text.split("\n")
                             val oldLinesCount = event.oldFragment.toString().count { it == '\n' }
                             val newLinesCount = event.newFragment.toString().count { it == '\n' }
                             val lineOffset = newLinesCount - oldLinesCount
                             val changedLine = event.document.getLineNumber(event.offset) + 1
+
+                            // Negative shift from line 1 that would clamp tips → content rebind.
+                            if (changedLine == 1 && lineOffset < 0 &&
+                                affectedNodes.any {
+                                    it.tracePoint.traceType == TraceType.LINE &&
+                                        it.tracePoint.isValid &&
+                                        it.tracePoint.lineNumber + lineOffset < 1
+                                }
+                            ) {
+                                val changed = rebindLineNodesForFile(docFile)
+                                highlightTracePointsInFile(docFile)
+                                if (changed) notifyListeners()
+                                return@runReadAction
+                            }
 
                             val updatedNodes = mutableListOf<TracePointNode>()
                             for( tracePointNode:TracePointNode in affectedNodes ){
@@ -956,6 +978,16 @@ class TracePointService(private val project: Project) {
         }
     }
 
+
+    private fun shouldContentRebindDocumentEvent(event: DocumentEvent): Boolean {
+        if (event.offset != 0) return false
+        val oldDocLen = event.document.textLength - event.newLength + event.oldLength
+        if (oldDocLen > 0 && event.oldLength == oldDocLen) return true
+        val oldLineBreaks = event.oldFragment.count { it == '\n' }
+        val newLineBreaks = event.newFragment.count { it == '\n' }
+        // Multi-line replace/insert from the start of the file (agent patch / rewrite).
+        return oldLineBreaks >= 1 || newLineBreaks >= 2
+    }
 
     private fun updateNodeWhenDocChanged(
         document: com.intellij.openapi.editor.Document,
@@ -991,13 +1023,11 @@ class TracePointService(private val project: Project) {
                 // This will move the tracepoint down to the next line of code.
                 tp.lineNumber == changedLine && isNewLineAtLineStart -> {
                     val newLineNum = tp.lineNumber + lineOffset
-                    val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
-                    val (total, matches) = getLineOccurrences(document, newContent)
-                    val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
+                    val (total, matches) = getLineOccurrences(document, tp.lineContent)
+                    val occIdx = matches.indexOf(newLineNum) + 1
                     node.tracePoint = tp.copy(
                         lineNumber = newLineNum,
-                        lineContent = newContent,
-                        isValid = newContent != null,
+                        isValid = occIdx > 0,
                         totalOccurrences = total,
                         occurrenceIndex = occIdx.coerceAtLeast(0)
                     )
@@ -1020,17 +1050,20 @@ class TracePointService(private val project: Project) {
                     }
                 }
                 // Move only the nodes whose trace point line number is below the changed line.
+                // Keep lineContent (anchor); never clamp to 1 — that corrupts tips on bulk deletes.
                 tp.lineNumber > changedLine && lineOffset != 0 -> {
-                    val newLineNum = (tp.lineNumber + lineOffset).coerceAtLeast(1)
-                    val newContent = newLines.getOrNull(newLineNum - 1)?.trim()
-                    val (total, matches) = getLineOccurrences(document, newContent)
-                    val occIdx = if (newContent == tp.lineContent) tp.occurrenceIndex else matches.indexOf(newLineNum) + 1
+                    val newLineNum = tp.lineNumber + lineOffset
+                    if (newLineNum < 1) {
+                        return
+                    }
+                    val (total, matches) = getLineOccurrences(document, tp.lineContent)
+                    val occIdx = matches.indexOf(newLineNum) + 1
+                    val stillThere = occIdx > 0
                     val newTp = tp.copy(
-                        lineNumber = newLineNum,
-                        lineContent = newContent,
-                        isValid = newContent != null,
+                        lineNumber = if (stillThere) newLineNum else tp.lineNumber,
+                        isValid = stillThere,
                         totalOccurrences = total,
-                        occurrenceIndex = occIdx.coerceAtLeast(0)
+                        occurrenceIndex = if (stillThere) occIdx else 0
                     )
                     if (tp != newTp) {
                         node.tracePoint = newTp
