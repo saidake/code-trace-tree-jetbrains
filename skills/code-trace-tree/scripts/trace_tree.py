@@ -1124,6 +1124,17 @@ def request_refresh_profile(
     write_storage_ready(project_root)
     return req
 
+def request_refresh_settings(project_root: Path) -> Optional[Path]:
+    """Reload toolbar flags / advancedSettings / activeProfileName only."""
+    project_id = read_project_id(project_root)
+    if not project_id:
+        return None
+    dest = signals_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    req = dest / f"{project_id}.request_refresh_settings"
+    req.write_text("1\n", encoding="utf-8")
+    write_storage_ready(project_root)
+    return req
 
 def request_select(project_root: Path, ids: Sequence[str]) -> Path:
     project_id = read_project_id(project_root)
@@ -1327,7 +1338,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     bump_updated_at(root)
     write_atomic(tree, storage_xml)
     if not args.no_refresh:
-        request_refresh(project_root)
+        request_refresh_profile(project_root, profile_name)
 
     payload = {
         "action": "add",
@@ -1418,7 +1429,7 @@ def cmd_move(args: argparse.Namespace) -> int:
     bump_updated_at(root)
     write_atomic(tree, storage_xml)
     if not args.no_refresh:
-        request_refresh(project_root)
+        request_refresh_profile(project_root, profile_name)
 
     print(
         json.dumps(
@@ -1461,7 +1472,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
     bump_updated_at(root)
     write_atomic(tree, storage_xml)
     if not args.no_refresh:
-        request_refresh(project_root)
+        request_refresh_profile(project_root, profile_name)
 
     print(
         json.dumps(
@@ -1547,7 +1558,7 @@ def cmd_rebind(args: argparse.Namespace) -> int:
         bump_updated_at(root)
         write_atomic(tree, storage_xml)
         if not args.no_refresh:
-            request_refresh(project_root)
+            request_refresh_profile(project_root, profile_name)
 
     print(
         json.dumps(

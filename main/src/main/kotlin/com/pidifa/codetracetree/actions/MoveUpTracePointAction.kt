@@ -55,6 +55,7 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
 //        service.updateNodeMap(allTracePoints)
 //        service.refreshDocumentListener(allTracePoints)
         service.selectTracePoints(selectedIds)
+        service.markPeerProfileRefresh()
         service.notifyListeners(true)
         // Restore selection after moving
     }

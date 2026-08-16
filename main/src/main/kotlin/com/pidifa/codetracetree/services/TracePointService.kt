@@ -151,6 +151,10 @@ class TracePointService(private val project: Project) {
     private var projectStorage: ProjectStorage? = null
     private var persistScheduled = false
     private var suppressPersist = false
+    /** After persist, notify peer IDEs (debounced with schedulePersist). */
+    private var pendingPeerProfileRefresh = false
+    private var pendingPeerSettingsRefresh = false
+    private var pendingPeerFullRefresh = false
     @Volatile
     private var ignoreExternalChangesUntilMs = 0L
     private var externalStorageWatcher: ExternalStorageWatcher? = null
@@ -469,6 +473,13 @@ class TracePointService(private val project: Project) {
                     }
                 }
             },
+            onSettingsRefresh = {
+                ApplicationManager.getApplication().invokeLater {
+                    if (!project.isDisposed) {
+                        handleExternalSettingsRefreshRequest()
+                    }
+                }
+            },
             onSelectRequest = {
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) {
@@ -579,6 +590,50 @@ class TracePointService(private val project: Project) {
     }
 
     /**
+     * Reloads project toolbar flags, advancedSettings, and activeProfileName from XML.
+     * Does not replace other profile trees unless the active profile name changed.
+     */
+    fun reloadSettingsFromExternalStorage(bypassIgnoreWindow: Boolean = false): Boolean {
+        val storage = projectStorage ?: return false
+        if (!bypassIgnoreWindow && System.currentTimeMillis() < ignoreExternalChangesUntilMs) return false
+        val doc = storage.reloadBoundDocument() ?: return false
+        LOG.info("Code Trace Tree: reloading settings from external storage")
+        suppressPersist = true
+        try {
+            val prevActive = activeProfileName
+            activeProfileName = doc.activeProfileName
+                .takeIf { name -> profiles.any { it.name == name } }
+                ?: profiles.firstOrNull()?.name
+                ?: DEFAULT_PROFILE_NAME
+            isDescriptionAreaOpened = doc.descriptionAreaOpened
+            isHighlightingEnabled = doc.highlightingEnabled
+            isNamePromptEnabled = doc.namePromptEnabled
+            advancedSettings = doc.advancedSettings
+            if (prevActive != activeProfileName) {
+                loadActiveProfileFromStore()
+                notifyProfileListeners()
+            } else {
+                ApplicationManager.getApplication().runReadAction {
+                    FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                        if (isHighlightingEnabled) highlightTracePointsInFile(file) else removeHighlights(file)
+                    }
+                }
+            }
+        } finally {
+            suppressPersist = false
+        }
+        return true
+    }
+
+    /** Handles `<projectId>.request_refresh_settings`. */
+    fun handleExternalSettingsRefreshRequest() {
+        val projectId = projectStorage?.boundProjectId() ?: return
+        val request = AgentSignalFiles.refreshSettingsPath(projectId)
+        if (!AgentSignalFiles.isFresh(request)) return
+        reloadSettingsFromExternalStorage(bypassIgnoreWindow = true)
+    }
+
+    /**
      * Selects / reveals trace points listed in the global select signal
      * (`signals/<projectId>.select_trace_points`, one UUID per line).
      * TTL-stale files are ignored; fresh signals are left for other windows (TTL cleans up).
@@ -671,6 +726,39 @@ class TracePointService(private val project: Project) {
         }
     }
 
+    /** Mark peer profile refresh (structure ops). Prefer calling before [notifyListeners]. */
+    fun markPeerProfileRefresh() {
+        pendingPeerProfileRefresh = true
+    }
+
+    /** Mark peer settings refresh. */
+    fun markPeerSettingsRefresh() {
+        pendingPeerSettingsRefresh = true
+    }
+
+    /** Mark peer full refresh (profile add/delete/switch/import). */
+    fun markPeerFullRefresh() {
+        pendingPeerFullRefresh = true
+    }
+
+    /** Persist and ask peers to reload this profile's tree. */
+    fun scheduleStructurePersist() {
+        markPeerProfileRefresh()
+        schedulePersist()
+    }
+
+    /** Persist and ask peers to reload project settings / active profile. */
+    fun scheduleSettingsPersist() {
+        markPeerSettingsRefresh()
+        schedulePersist()
+    }
+
+    /** Persist and ask peers for a full storage reload. */
+    fun scheduleFullPeerPersist() {
+        markPeerFullRefresh()
+        schedulePersist()
+    }
+
     private fun persistNow() {
         val storage = projectStorage ?: return
         ignoreExternalChangesUntilMs = System.currentTimeMillis() + SELF_WRITE_IGNORE_MS
@@ -683,7 +771,30 @@ class TracePointService(private val project: Project) {
             namePromptEnabled = isNamePromptEnabled,
             advancedSettings = advancedSettings
         )
+        emitPendingPeerSignals()
         externalStorageWatcher?.refreshRegistrations()
+    }
+
+    private fun emitPendingPeerSignals() {
+        val projectId = projectStorage?.boundProjectId()
+        val root = project.basePath
+        val full = pendingPeerFullRefresh
+        val profile = pendingPeerProfileRefresh
+        val settings = pendingPeerSettingsRefresh
+        pendingPeerFullRefresh = false
+        pendingPeerProfileRefresh = false
+        pendingPeerSettingsRefresh = false
+        if (projectId.isNullOrBlank()) return
+        if (full) {
+            AgentSignalFiles.writeRequestRefresh(projectId, root)
+            return
+        }
+        if (profile) {
+            AgentSignalFiles.writeRequestRefreshProfile(projectId, activeProfileName, root)
+        }
+        if (settings) {
+            AgentSignalFiles.writeRequestRefreshSettings(projectId, root)
+        }
     }
 
     // === Highlighting ===
@@ -706,19 +817,19 @@ class TracePointService(private val project: Project) {
                 if (isHighlightingEnabled) highlightTracePointsInFile(file)
             }
         }
-        schedulePersist()
+        scheduleSettingsPersist()
     }
 
     fun setDescriptionAreaOpened(opened: Boolean) {
         ensureStorage()
         isDescriptionAreaOpened = opened
-        schedulePersist()
+        scheduleSettingsPersist()
     }
 
     fun setNamePromptEnabled(enabled: Boolean) {
         ensureStorage()
         isNamePromptEnabled = enabled
-        schedulePersist()
+        scheduleSettingsPersist()
     }
 
     fun setHighlightingEnabled(enabled: Boolean) {
@@ -729,7 +840,7 @@ class TracePointService(private val project: Project) {
                 if (enabled) highlightTracePointsInFile(file) else removeHighlights(file)
             }
         }
-        schedulePersist()
+        scheduleSettingsPersist()
     }
 
     fun highlightTracePointsInFile(file: VirtualFile) {
@@ -935,37 +1046,20 @@ class TracePointService(private val project: Project) {
 
 
     /**
-     * Recheck all LINE / FILE / DIRECTORY nodes against the project.
-     * Uses open editor documents when present. Does not reload XML.
-     * Persists only if LINE line/occurrence fields moved.
+     * Reload bound XML (bypass ignore window), then recheck LINE / FILE / DIRECTORY nodes.
+     * Reload already validates; falls back to in-memory validate when reload fails.
      */
     fun recheckAllTracePoints() {
         refreshMissingTracePathsFromDisk()
-        val before = persistedLineSnapshot()
-        validateTracePointsOnLoad()
-        val persistedChanged = persistedLineSnapshot() != before
+        val reloaded = reloadFromExternalStorage("recheck", bypassIgnoreWindow = true)
+        if (!reloaded) {
+            validateTracePointsOnLoad()
+        }
         ApplicationManager.getApplication().runReadAction {
             FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
         }
         val copy = getTracePoints()
         listenersMap[NodeListenerEventType.FULL_UPDATE]?.forEach { it(copy, false) }
-        if (persistedChanged) schedulePersist()
-    }
-
-    private fun persistedLineSnapshot(): String {
-        val sb = StringBuilder()
-        fun walk(node: TracePointNode) {
-            val tp = node.tracePoint
-            if (tp.traceType == TraceType.LINE) {
-                sb.append(node.id).append(':')
-                    .append(tp.lineNumber).append(':')
-                    .append(tp.totalOccurrences).append(':')
-                    .append(tp.occurrenceIndex).append(';')
-            }
-            node.children.forEach(::walk)
-        }
-        tracePointNodes.forEach(::walk)
-        return sb.toString()
     }
 
     /** VFS refresh for missing paths (must not run inside a read action). */
@@ -1134,7 +1228,7 @@ class TracePointService(private val project: Project) {
         ApplicationManager.getApplication().runReadAction {
             nodeMap[id]?.let {
                 it.tracePoint = it.tracePoint.copy(description = newDescription)
-                schedulePersist()
+                scheduleStructurePersist()
             }
         }
     }
@@ -1143,6 +1237,7 @@ class TracePointService(private val project: Project) {
         ApplicationManager.getApplication().runReadAction {
             nodeMap[id]?.let {
                 it.tracePoint = it.tracePoint.copy(traceName = newName)
+                markPeerProfileRefresh()
                 notifyListeners()
             }
         }
@@ -1172,6 +1267,7 @@ class TracePointService(private val project: Project) {
                     highlightTracePointsInFile(it)
                 }
             }
+            markPeerProfileRefresh()
             notifyListeners()
         }
     }
@@ -1361,6 +1457,7 @@ class TracePointService(private val project: Project) {
         activeProfileName = name
         loadActiveProfileFromStore()
         notifyProfileListeners()
+        scheduleFullPeerPersist()
     }
 
     fun addProfile(name: String): Boolean {
@@ -1374,6 +1471,7 @@ class TracePointService(private val project: Project) {
         activeProfileName = trimmed
         loadActiveProfileFromStore()
         notifyProfileListeners()
+        scheduleFullPeerPersist()
         return true
     }
 
@@ -1387,6 +1485,7 @@ class TracePointService(private val project: Project) {
             loadActiveProfileFromStore()
         }
         notifyProfileListeners()
+        scheduleFullPeerPersist()
         return true
     }
 
@@ -1404,6 +1503,7 @@ class TracePointService(private val project: Project) {
         FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
         reattachListenersAndHighlights()
         syncActiveProfileToStore()
+        markPeerProfileRefresh()
         notifyListeners()
     }
 
@@ -1451,6 +1551,7 @@ class TracePointService(private val project: Project) {
         activeProfileName = name
         loadActiveProfileFromStore()
         notifyProfileListeners()
+        scheduleFullPeerPersist()
         return name
     }
 
@@ -1478,6 +1579,7 @@ class TracePointService(private val project: Project) {
         activeProfileName = created.first()
         loadActiveProfileFromStore()
         notifyProfileListeners()
+        scheduleFullPeerPersist()
         return created
     }
 
@@ -1513,6 +1615,7 @@ class TracePointService(private val project: Project) {
         }
         loadActiveProfileFromStore()
         notifyProfileListeners()
+        scheduleFullPeerPersist()
     }
 
     /**
@@ -1533,6 +1636,7 @@ class TracePointService(private val project: Project) {
             ?: profiles.first().name
         loadActiveProfileFromStore()
         notifyProfileListeners()
+        scheduleFullPeerPersist()
     }
 
     fun addNodeListener(nodeListenerEventType: NodeListenerEventType,

@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Signals (no XML file watch — agents must write refresh signals after edits):
  * - `<projectId>.request_refresh`
  * - `<projectId>.request_refresh_profile`
+ * - `<projectId>.request_refresh_settings`
  * - `<projectId>.select_trace_points`
  *
  * Uses [WatchService] plus a periodic mtime poll — native watches often miss repeated
@@ -38,6 +39,7 @@ class ExternalStorageWatcher(
     private val projectId: String,
     private val onFullRefresh: (reason: String) -> Unit,
     private val onProfileRefresh: () -> Unit,
+    private val onSettingsRefresh: () -> Unit,
     private val onSelectRequest: () -> Unit,
 ) : AutoCloseable {
     private val log = Logger.getInstance(ExternalStorageWatcher::class.java)
@@ -49,13 +51,14 @@ class ExternalStorageWatcher(
     private var pollFuture: ScheduledFuture<*>? = null
     private var pendingReason: String? = null
     private var profilePending = false
+    private var settingsPending = false
     private var selectPending = false
     /** Last observed mtime per signal file name; poll re-fires when the agent overwrites. */
     private val lastSeenMtimeMs = ConcurrentHashMap<String, Long>()
 
     /**
-     * @param replayExistingRefresh when true, schedule fresh request_refresh / _profile
-     *   already on disk (IDE was closed or late start). Pass false after a Case C
+     * @param replayExistingRefresh when true, schedule fresh request_refresh / _profile /
+     *   _settings already on disk (IDE was closed or late start). Pass false after a Case C
      *   storage-ready bind — document was just loaded; refresh would be redundant.
      *   Fresh select signals are still replayed either way.
      */
@@ -77,10 +80,15 @@ class ExternalStorageWatcher(
                     AgentSignalFiles.refreshProfilePath(projectId),
                     AgentSignalFiles.refreshProfileFileName(projectId)
                 ) { scheduleProfileReload() }
+                considerSignal(
+                    AgentSignalFiles.refreshSettingsPath(projectId),
+                    AgentSignalFiles.refreshSettingsFileName(projectId)
+                ) { scheduleSettingsReload() }
             } else {
                 // Do not reload again, but remember mtimes so poll does not immediately replay.
                 rememberMtime(AgentSignalFiles.refreshPath(projectId))
                 rememberMtime(AgentSignalFiles.refreshProfilePath(projectId))
+                rememberMtime(AgentSignalFiles.refreshSettingsPath(projectId))
             }
             considerSignal(
                 AgentSignalFiles.selectPath(projectId),
@@ -147,6 +155,10 @@ class ExternalStorageWatcher(
             AgentSignalFiles.refreshProfilePath(projectId),
             AgentSignalFiles.refreshProfileFileName(projectId)
         ) { scheduleProfileReload() }
+        considerSignal(
+            AgentSignalFiles.refreshSettingsPath(projectId),
+            AgentSignalFiles.refreshSettingsFileName(projectId)
+        ) { scheduleSettingsReload() }
         considerSignal(
             AgentSignalFiles.selectPath(projectId),
             AgentSignalFiles.selectFileName(projectId)
@@ -238,6 +250,11 @@ class ExternalStorageWatcher(
                     AgentSignalFiles.refreshProfilePath(projectId),
                     fileName
                 ) { scheduleProfileReload() }
+            AgentSignalFiles.refreshSettingsFileName(projectId) ->
+                considerSignal(
+                    AgentSignalFiles.refreshSettingsPath(projectId),
+                    fileName
+                ) { scheduleSettingsReload() }
         }
     }
 
@@ -268,6 +285,21 @@ class ExternalStorageWatcher(
             } catch (e: Exception) {
                 clearSeen(AgentSignalFiles.refreshProfileFileName(projectId))
                 log.warn("Code Trace Tree external profile refresh failed", e)
+            }
+        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    private fun scheduleSettingsReload() {
+        settingsPending = true
+        val executor = debounceExecutor ?: return
+        executor.schedule({
+            if (closed.get() || !settingsPending) return@schedule
+            settingsPending = false
+            try {
+                onSettingsRefresh()
+            } catch (e: Exception) {
+                clearSeen(AgentSignalFiles.refreshSettingsFileName(projectId))
+                log.warn("Code Trace Tree external settings refresh failed", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }

@@ -32,6 +32,7 @@ class CreateRootPathTracePointAction : AnAction() {
         ) ?: return
 
         val id = service.addPathTracePoint(tracePointName, file, parentId = null)
+        service.markPeerProfileRefresh()
         service.notifyListeners()
         if (id != null) {
             service.revealTracePointsInTree(setOf(id), focusTree = false)

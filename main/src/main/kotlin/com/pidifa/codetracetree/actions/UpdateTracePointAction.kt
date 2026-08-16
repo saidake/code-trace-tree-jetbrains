@@ -81,6 +81,7 @@ class UpdateTracePointAction : AnAction() {
             service.updateInFileNodesMap(prevFilePath, tp)
         }
         service.selectTracePoints(selectedTracePointIds) // Preserve selection
+        service.markPeerProfileRefresh()
         service.notifyListeners(NodeListenerEventType.PARTIAL_UPDATE,updatedNodes )
         service.refreshDocumentListener(mutableSetOf(relativePath))
     }

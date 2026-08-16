@@ -14,18 +14,18 @@ import com.intellij.openapi.project.DumbAware
 import com.pidifa.codetracetree.services.TracePointService
 
 /**
- * Recheck LINE / FILE / DIRECTORY traces against the project (not an XML reload).
+ * Reload storage from disk, then recheck LINE / FILE / DIRECTORY traces against the project.
  */
 class RecheckTracePointsAction : AnAction(
     null,
-    "Recheck line, file, and directory traces against the project",
+    "Reload stored data and recheck line, file, and directory traces against the project",
     AllIcons.Actions.Refresh
 ), DumbAware {
 
     init {
         templatePresentation.text = "Recheck Trace Points"
         templatePresentation.description =
-            "Recheck line, file, and directory traces against the project"
+            "Reload stored data and recheck line, file, and directory traces against the project"
     }
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -37,7 +37,7 @@ class RecheckTracePointsAction : AnAction(
         e.presentation.isEnabled = e.project != null
         e.presentation.text = "Recheck Trace Points"
         e.presentation.description =
-            "Recheck line, file, and directory traces against the project"
+            "Reload stored data and recheck line, file, and directory traces against the project"
         e.presentation.icon = AllIcons.Actions.Refresh
     }
 

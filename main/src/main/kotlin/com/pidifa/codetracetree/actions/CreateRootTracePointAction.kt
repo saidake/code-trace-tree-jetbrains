@@ -58,6 +58,7 @@ class CreateRootTracePointAction : AnAction() {
         val id = service.addTracePoint(tracePointName, file, lineNumber, parentId = null)
         service.attachDocumentListener(file)
         service.highlightTracePointsInFile(file)
+        service.markPeerProfileRefresh()
         service.notifyListeners()
         if (id != null) {
             service.revealTracePointsInTree(setOf(id), focusTree = false)

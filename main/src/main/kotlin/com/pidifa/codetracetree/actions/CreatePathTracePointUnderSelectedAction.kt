@@ -46,6 +46,7 @@ class CreatePathTracePointUnderSelectedAction : AnAction() {
         val createdIds = selectedIds.mapNotNull { parentId ->
             service.addPathTracePoint(tracePointName, file, parentId = parentId)
         }.toSet()
+        service.markPeerProfileRefresh()
         service.notifyListeners()
         if (createdIds.isNotEmpty()) {
             service.revealTracePointsInTree(createdIds, focusTree = false)

@@ -315,6 +315,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                             // Notify listeners and reload
                             //(support.component as? JTree)?.repaint()
+                            service.markPeerProfileRefresh()
                             service.notifyListeners()
                             return true
                         } catch (e: Exception) {

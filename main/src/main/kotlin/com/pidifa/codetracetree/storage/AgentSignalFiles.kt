@@ -16,6 +16,7 @@ import java.nio.file.Paths
  * - `<projectId>.request_refresh` — full project reload (all profiles + toolbar flags)
  * - `<projectId>.request_refresh_profile` — one profile; body = profile name
  *   (empty / missing name → active profile). Does not change activeProfileName or flags.
+ * - `<projectId>.request_refresh_settings` — toolbar flags / advancedSettings / activeProfileName
  * - `<projectId>.select_trace_points`
  * - `<projectId>.storage-ready` — Case C bind handshake (no TTL; agent overwrites).
  *   Body = absolute project path (first non-empty line); empty/legacy → IDE reads XML `<path>`.
@@ -29,6 +30,7 @@ object AgentSignalFiles {
     const val SIGNALS_DIR_NAME = "signals"
     const val REFRESH_SUFFIX = ".request_refresh"
     const val REFRESH_PROFILE_SUFFIX = ".request_refresh_profile"
+    const val REFRESH_SETTINGS_SUFFIX = ".request_refresh_settings"
     const val SELECT_SUFFIX = ".select_trace_points"
     const val STORAGE_READY_SUFFIX = ".storage-ready"
     /** Ignore / delete refresh and select signal files older than this age. */
@@ -46,6 +48,8 @@ object AgentSignalFiles {
 
     fun refreshProfileFileName(projectId: String): String = "$projectId$REFRESH_PROFILE_SUFFIX"
 
+    fun refreshSettingsFileName(projectId: String): String = "$projectId$REFRESH_SETTINGS_SUFFIX"
+
     fun selectFileName(projectId: String): String = "$projectId$SELECT_SUFFIX"
 
     fun storageReadyFileName(projectId: String): String = "$projectId$STORAGE_READY_SUFFIX"
@@ -54,6 +58,9 @@ object AgentSignalFiles {
 
     fun refreshProfilePath(projectId: String): Path =
         signalsDir().resolve(refreshProfileFileName(projectId))
+
+    fun refreshSettingsPath(projectId: String): Path =
+        signalsDir().resolve(refreshSettingsFileName(projectId))
 
     fun selectPath(projectId: String): Path = signalsDir().resolve(selectFileName(projectId))
 
@@ -122,5 +129,51 @@ object AgentSignalFiles {
             Files.deleteIfExists(path)
         } catch (_: Exception) {
         }
+    }
+
+    private fun writeUtf8(path: Path, body: String) {
+        Files.writeString(path, body, StandardCharsets.UTF_8)
+    }
+
+    /** Case C bind handshake; body = absolute project path when known. */
+    fun writeStorageReady(projectId: String, projectPath: String? = null) {
+        ensureSignalsDir()
+        val trimmed = projectPath?.trim().orEmpty()
+        val body = if (trimmed.isNotEmpty()) {
+            try {
+                Paths.get(trimmed).toAbsolutePath().normalize().toString() + "\n"
+            } catch (_: Exception) {
+                "1\n"
+            }
+        } else {
+            "1\n"
+        }
+        writeUtf8(storageReadyPath(projectId), body)
+    }
+
+    /** Full project reload signal for peer IDEs / agents. */
+    fun writeRequestRefresh(projectId: String, projectPath: String? = null) {
+        ensureSignalsDir()
+        writeUtf8(refreshPath(projectId), "1\n")
+        writeStorageReady(projectId, projectPath)
+    }
+
+    /** One-profile tree reload signal. */
+    fun writeRequestRefreshProfile(
+        projectId: String,
+        profileName: String,
+        projectPath: String? = null
+    ) {
+        ensureSignalsDir()
+        val body = profileName.trim()
+        writeUtf8(refreshProfilePath(projectId), if (body.isNotEmpty()) "$body\n" else "")
+        writeStorageReady(projectId, projectPath)
+    }
+
+    /** Toolbar / advancedSettings / activeProfileName reload signal. */
+    fun writeRequestRefreshSettings(projectId: String, projectPath: String? = null) {
+        ensureSignalsDir()
+        writeUtf8(refreshSettingsPath(projectId), "1\n")
+        writeStorageReady(projectId, projectPath)
     }
 }

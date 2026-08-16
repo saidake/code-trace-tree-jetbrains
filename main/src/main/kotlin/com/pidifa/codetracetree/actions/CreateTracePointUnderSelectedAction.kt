@@ -71,6 +71,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         }.toSet()
         service.attachDocumentListener(file)
         service.highlightTracePointsInFile(file)
+        service.markPeerProfileRefresh()
         service.notifyListeners()
         if (createdIds.isNotEmpty()) {
             service.revealTracePointsInTree(createdIds, focusTree = false)
