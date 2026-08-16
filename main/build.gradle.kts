@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.9"
+val pluginVersion = "1.2.10"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.2.10</h3>
+            <ul>
+              <li>Expand the drop-target parent after drag-and-drop reparent so the moved child stays visible</li>
+            </ul>
             <h3>1.2.9</h3>
             <ul>
               <li><b>Recheck Trace Availability</b>: reload bound XML and validate all traces; tiered peer refresh (full / profile / settings)</li>

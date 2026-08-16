@@ -253,6 +253,7 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                         try {
 //                            tree.repaint()
+                            val parentsToExpand = mutableSetOf<String>()
                             // For each dragged trace point, move if valid
                             for (tracePointId in draggedIds) {
                                 val draggedTreeNode = getTreeNodeById(tracePointId) ?: continue
@@ -310,6 +311,14 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 val newParentTracePointNode = service.getTracePointNodeById(newParentId)
                                 newParentTracePointNode?.children?.add(draggedTracePointNode)
                                 draggedTracePointNode.parentId = newParentId
+                                parentsToExpand.add(newParentId)
+                            }
+
+                            // Expand drop targets so the moved child is visible (same as VS Code / create-under-selected)
+                            if (parentsToExpand.isNotEmpty()) {
+                                service.setExpandedTracePointIds(
+                                    service.getExpandedTracePointIds() + parentsToExpand
+                                )
                             }
 
                             // Notify listeners and reload
