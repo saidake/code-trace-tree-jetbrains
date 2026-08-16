@@ -3,7 +3,7 @@
 # Builds the plugin ZIP and shared agent skill ZIP, attaches them to the GitHub Release,
 # and publishes to JetBrains Marketplace.
 # Triggered on push of a git tag matching v* (e.g. v1.0.8).
-# Release title format: "Code Trace Tree vX.Y.Z"
+# Release title format: "vX.Y.Z"
 # Attachments: plugin zip + code-trace-tree-skill-X.Y.Z.zip
 # Release notes are written manually (CI does not generate or overwrite them).
 
@@ -69,7 +69,7 @@ jobs:
           VERSION="${TAG#v}"
           PLUGIN_ZIP="$(ls main/build/distributions/*.zip | head -n1)"
           SKILL_ZIP="dist/skills/code-trace-tree-skill-${VERSION}.zip"
-          TITLE="Code Trace Tree ${TAG}"
+          TITLE="${TAG}"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$PLUGIN_ZIP" "$SKILL_ZIP" --clobber
