@@ -24,8 +24,8 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
-import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.wm.ToolWindowId
 import com.intellij.openapi.wm.ToolWindowManager
@@ -53,7 +53,7 @@ class TracePointService(private val project: Project) {
     companion object {
         const val DEFAULT_PROFILE_NAME = "main"
         private const val SELF_WRITE_IGNORE_MS = 1500L
-        private const val EXTERNAL_REBIND_DEBOUNCE_MS = 350L
+        private const val PATH_VALIDITY_DEBOUNCE_MS = 350L
         private val LOG = Logger.getInstance(TracePointService::class.java)
     }
 
@@ -155,20 +155,20 @@ class TracePointService(private val project: Project) {
     private var ignoreExternalChangesUntilMs = 0L
     private var externalStorageWatcher: ExternalStorageWatcher? = null
     private var storageReadyWatcher: StorageReadyWatcher? = null
-    private val pendingExternalRebindPaths = ConcurrentHashMap.newKeySet<String>()
-    private val externalRebindExecutor = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "code-trace-tree-rebind-debounce").apply { isDaemon = true }
+    private val pendingPathValidityPaths = ConcurrentHashMap.newKeySet<String>()
+    private val pathValidityExecutor = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "code-trace-tree-path-validity").apply { isDaemon = true }
     }
     @Volatile
-    private var externalRebindFuture: ScheduledFuture<*>? = null
+    private var pathValidityFuture: ScheduledFuture<*>? = null
 
     init {
         loadFromHybridStorage()
         startExternalStorageWatcher()
 
         Disposer.register(project, Disposable {
-            externalRebindFuture?.cancel(false)
-            externalRebindExecutor.shutdownNow()
+            pathValidityFuture?.cancel(false)
+            pathValidityExecutor.shutdownNow()
             externalStorageWatcher?.close()
             externalStorageWatcher = null
             storageReadyWatcher?.close()
@@ -189,7 +189,7 @@ class TracePointService(private val project: Project) {
             }
         )
 
-        // External disk edits (e.g. Claude) — content rebind when no DocumentListener is active
+        // FILE/DIRECTORY existence only (LINE content is handled for open editors)
         project.messageBus.connect(project).subscribe(
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
@@ -197,16 +197,20 @@ class TracePointService(private val project: Project) {
                     if (isFileSystemRefreshing) return
                     var scheduled = false
                     for (event in events) {
-                        if (event !is VFileContentChangeEvent) continue
-                        val file = event.file
-                        if (monitoredDocuments.containsKey(file)) continue
-                        val relativePath = relativeProjectPath(file) ?: continue
-                        val nodes = fileNodesMap[relativePath] ?: continue
-                        if (nodes.none { it.tracePoint.traceType == TraceType.LINE }) continue
-                        pendingExternalRebindPaths.add(relativePath)
-                        scheduled = true
+                        for (relativePath in relativePathsAffectedBy(event)) {
+                            val nodes = fileNodesMap[relativePath] ?: continue
+                            if (nodes.none {
+                                    it.tracePoint.traceType == TraceType.FILE ||
+                                        it.tracePoint.traceType == TraceType.DIRECTORY
+                                }
+                            ) {
+                                continue
+                            }
+                            pendingPathValidityPaths.add(relativePath)
+                            scheduled = true
+                        }
                     }
-                    if (scheduled) scheduleExternalContentRebind()
+                    if (scheduled) schedulePathValidityCheck()
                 }
             }
         )
@@ -218,7 +222,7 @@ class TracePointService(private val project: Project) {
             notifyListeners()
         }
 
-        // Refresh trace points on file system changes
+        // After VFS refresh: path traces + open LINE buffers only (not closed LINE files)
         VirtualFileManager.getInstance().addVirtualFileManagerListener(object : VirtualFileManagerListener {
             override fun beforeRefreshStart(isAsync: Boolean) {
                 isFileSystemRefreshing = true
@@ -226,9 +230,13 @@ class TracePointService(private val project: Project) {
 
             override fun afterRefreshFinish(isAsync: Boolean) {
                 ApplicationManager.getApplication().runReadAction {
-                    validateTracePointsOnLoad()
-                    FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
-                    notifyListeners()
+                    val pathChanged = revalidateAllPathTracePoints()
+                    var lineChanged = false
+                    FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                        if (rebindLineNodesForFile(file)) lineChanged = true
+                        highlightTracePointsInFile(file)
+                    }
+                    if (pathChanged || lineChanged) notifyListeners()
                     isFileSystemRefreshing = false
                 }
             }
@@ -242,21 +250,76 @@ class TracePointService(private val project: Project) {
             ?: file.path.removePrefix(basePath.replace('\\', '/') + "/").takeIf { it != file.path }
     }
 
-    private fun scheduleExternalContentRebind() {
-        externalRebindFuture?.cancel(false)
-        externalRebindFuture = externalRebindExecutor.schedule({
+    private fun relativeFromAbsolutePath(absolutePath: String): String? {
+        val basePath = project.basePath ?: return null
+        val normalized = absolutePath.replace('\\', '/')
+        val prefix = basePath.replace('\\', '/') + "/"
+        return if (normalized.startsWith(prefix)) normalized.removePrefix(prefix) else null
+    }
+
+    private fun relativePathsAffectedBy(event: VFileEvent): List<String> {
+        val paths = mutableListOf<String>()
+        relativeFromAbsolutePath(event.path)?.let { paths.add(it) }
+        if (event is VFileMoveEvent) {
+            relativeFromAbsolutePath(event.oldPath)?.let { paths.add(it) }
+        }
+        return paths
+    }
+
+    private fun schedulePathValidityCheck() {
+        pathValidityFuture?.cancel(false)
+        pathValidityFuture = pathValidityExecutor.schedule({
             ApplicationManager.getApplication().invokeLater {
                 if (project.isDisposed) return@invokeLater
-                val paths = pendingExternalRebindPaths.toSet()
-                pendingExternalRebindPaths.clear()
+                val paths = pendingPathValidityPaths.toSet()
+                pendingPathValidityPaths.clear()
                 if (paths.isEmpty()) return@invokeLater
-                val changed = rebindLineNodesForPaths(paths)
-                if (changed) {
-                    FileEditorManager.getInstance(project).openFiles.forEach { highlightTracePointsInFile(it) }
-                    notifyListeners()
+                val changed = revalidatePathTracePoints(paths)
+                if (changed) notifyListeners()
+            }
+        }, PATH_VALIDITY_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    /** Update isValid for FILE/DIRECTORY nodes at the given relative paths. */
+    private fun revalidatePathTracePoints(relativePaths: Set<String>): Boolean {
+        var changed = false
+        ApplicationManager.getApplication().runReadAction {
+            val basePath = project.basePath ?: return@runReadAction
+            for (relativePath in relativePaths) {
+                val nodes = fileNodesMap[relativePath] ?: continue
+                val file = VirtualFileManager.getInstance()
+                    .findFileByUrl("file:///$basePath/$relativePath")
+                for (node in nodes) {
+                    val tp = node.tracePoint
+                    val valid = when (tp.traceType) {
+                        TraceType.DIRECTORY -> file != null && file.isDirectory
+                        TraceType.FILE -> file != null && !file.isDirectory
+                        else -> continue
+                    }
+                    if (tp.isValid != valid) {
+                        node.tracePoint = tp.copy(
+                            isValid = valid,
+                            totalOccurrences = 0,
+                            occurrenceIndex = 0,
+                            lineNumber = 0,
+                            lineContent = null
+                        )
+                        changed = true
+                    }
                 }
             }
-        }, EXTERNAL_REBIND_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+        }
+        return changed
+    }
+
+    private fun revalidateAllPathTracePoints(): Boolean {
+        val paths = fileNodesMap.filterValues { nodes ->
+            nodes.any {
+                it.tracePoint.traceType == TraceType.FILE ||
+                    it.tracePoint.traceType == TraceType.DIRECTORY
+            }
+        }.keys
+        return if (paths.isEmpty()) false else revalidatePathTracePoints(paths)
     }
 
     /**
@@ -286,33 +349,6 @@ class TracePointService(private val project: Project) {
             }
             changed
         }
-    }
-
-    /**
-     * Content-based LINE rebind for external disk edits (Claude / other tools).
-     * Does not use DocumentListener offset math.
-     */
-    private fun rebindLineNodesForPaths(relativePaths: Set<String>): Boolean {
-        var changed = false
-        ApplicationManager.getApplication().runReadAction {
-            for (relativePath in relativePaths) {
-                val nodes = fileNodesMap[relativePath] ?: continue
-                val basePath = project.basePath ?: continue
-                val file = VirtualFileManager.getInstance()
-                    .findFileByUrl("file:///$basePath/$relativePath") ?: continue
-                val doc = FileDocumentManager.getInstance().getDocument(file) ?: continue
-                val lines = doc.text.split("\n")
-                for (node in nodes) {
-                    if (node.tracePoint.traceType != TraceType.LINE) continue
-                    val rebound = rebindLineTracePoint(node.tracePoint, lines)
-                    if (rebound != node.tracePoint) {
-                        node.tracePoint = rebound
-                        changed = true
-                    }
-                }
-            }
-        }
-        return changed
     }
 
     /**
