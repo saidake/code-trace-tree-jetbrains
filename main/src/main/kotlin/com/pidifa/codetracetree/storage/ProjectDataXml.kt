@@ -5,10 +5,13 @@
  */
 package com.pidifa.codetracetree.storage
 
-import com.intellij.openapi.util.JDOMUtil
 import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.services.TracePointService
 import org.jdom.Element
+import org.jdom.input.SAXBuilder
+import org.jdom.output.Format
+import org.jdom.output.XMLOutputter
+import java.io.StringReader
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -42,7 +45,7 @@ object ProjectDataXml {
     private const val ROOT = "project"
 
     fun parse(xml: String, storageFile: Path? = null): ProjectDocument {
-        val root = JDOMUtil.load(xml)
+        val root = SAXBuilder().build(StringReader(xml)).rootElement
         return parseElement(root, storageFile)
     }
 
@@ -141,7 +144,8 @@ object ProjectDataXml {
     }
 
     fun toXmlString(doc: ProjectDocument): String {
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + JDOMUtil.write(toElement(doc))
+        val outputter = XMLOutputter(Format.getPrettyFormat().setEncoding("UTF-8"))
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + outputter.outputString(toElement(doc))
     }
 
     fun writeAtomic(doc: ProjectDocument, file: Path) {

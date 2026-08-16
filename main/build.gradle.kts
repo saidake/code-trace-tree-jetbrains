@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.10"
+val pluginVersion = "1.2.9"
 version = pluginVersion
 
 repositories {
@@ -57,13 +57,6 @@ intellijPlatform {
         }
 
         changeNotes = """
-            <h3>1.2.10</h3>
-            <ul>
-              <li>Replace deprecated / scheduled-for-removal Platform APIs flagged by Plugin Verifier</li>
-              <li>Use <code>JDOMUtil</code> instead of <code>SAXBuilder</code> / <code>XMLOutputter</code></li>
-              <li>Invoke Advanced Settings import/export via <code>AnActionEvent.createEvent</code> + <code>ActionUtil.invokeAction</code></li>
-              <li>Use focused <code>UIUtil.getTreeSelectionForeground(true)</code> in the tree renderer</li>
-            </ul>
             <h3>1.2.9</h3>
             <ul>
               <li><b>Recheck Trace Availability</b>: reload bound XML and validate all traces; tiered peer refresh (full / profile / settings)</li>

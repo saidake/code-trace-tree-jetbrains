@@ -36,7 +36,7 @@ class TracePointTreeRenderer(
         text = when (userObject) {
             is TracePointService.TracePointNode -> {
                 val restForeground = if (selected || service.isTracePointSelected(userObject.id)) {
-                    UIUtil.getTreeSelectionForeground(true)
+                    UIUtil.getTreeSelectionForeground()
                 } else {
                     UIUtil.getTreeForeground()
                 }

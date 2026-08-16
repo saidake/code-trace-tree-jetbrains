@@ -6,12 +6,11 @@
 package com.pidifa.codetracetree.actions
 
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.actionSystem.ActionUiKind
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
@@ -172,17 +171,11 @@ private class AdvancedSettingsDialog(
     }
 
     private fun runToolbarAction(action: AnAction) {
-        val context = SimpleDataContext.builder()
+        val context: DataContext = SimpleDataContext.builder()
             .add(CommonDataKeys.PROJECT, project)
             .build()
-        val event = AnActionEvent.createEvent(
-            context,
-            null,
-            "CodeTraceTree.AdvancedSettings",
-            ActionUiKind.NONE,
-            null
-        )
-        ActionUtil.invokeAction(action, event, null)
+        val event = AnActionEvent.createFromDataContext("CodeTraceTree.AdvancedSettings", null, context)
+        action.actionPerformed(event)
     }
 
     override fun doOKAction() {
