@@ -13,9 +13,8 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.JDOMUtil
 import com.pidifa.codetracetree.services.TracePointService
-import org.jdom.output.Format
-import org.jdom.output.XMLOutputter
 import java.io.File
 
 /**
@@ -82,7 +81,7 @@ class ExportTracePointsAction : AnAction(null, "Export Trace Points", AllIcons.A
                 )
             }
 
-            val xml = XMLOutputter(Format.getPrettyFormat()).outputString(rootElement)
+            val xml = JDOMUtil.write(rootElement)
             File(path).writeText(xml, Charsets.UTF_8)
 
             val scope = if (exportAll) "all profiles" else "profile \"${service.getActiveProfileName()}\""

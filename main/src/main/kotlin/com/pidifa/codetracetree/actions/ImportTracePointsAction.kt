@@ -14,8 +14,9 @@ import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.JDOMUtil
 import com.pidifa.codetracetree.services.TracePointService
-import org.jdom.input.SAXBuilder
+import java.nio.file.Path
 
 /**
  * Import single-profile (`<traceProfile>`) or multi-profile (`<traceProfiles>`) files.
@@ -40,7 +41,7 @@ class ImportTracePointsAction : AnAction(null, "Import Trace Points", AllIcons.A
 
         FileChooser.chooseFile(descriptor, project, null) { file ->
             try {
-                val root = SAXBuilder().build(file.path).rootElement
+                val root = JDOMUtil.load(Path.of(file.path))
                 when (root.name) {
                     TraceProfileXml.ROOT_SINGLE -> importSingle(project, service, TraceProfileXml.parseSingle(root))
                     TraceProfileXml.ROOT_MULTI -> importMulti(project, service, TraceProfileXml.parseMulti(root))
