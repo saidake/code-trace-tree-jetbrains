@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.2.10"
+val pluginVersion = "1.3.0"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,14 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.3.0</h3>
+            <ul>
+              <li>Split skill <code>add</code> vs <code>ensure</code>; slim skill docs to script ops</li>
+              <li>Disable trace highlights and editor context menus in Git / IDE diff panes</li>
+              <li>Skill: do not delete existing traces unless the user asks</li>
+              <li>Clarify Agent Skill install: extract the zip into the agent skills directory (replace <code>code-trace-tree</code> if present)</li>
+              <li>Update Marketplace preview screenshot</li>
+            </ul>
             <h3>1.2.10</h3>
             <ul>
               <li>Expand the drop-target parent after drag-and-drop reparent so the moved child stays visible</li>
