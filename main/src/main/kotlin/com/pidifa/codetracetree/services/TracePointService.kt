@@ -10,6 +10,7 @@ import com.intellij.openapi.vfs.VirtualFileManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -38,6 +39,7 @@ import com.pidifa.codetracetree.storage.ExternalStorageWatcher
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectStorage
 import com.pidifa.codetracetree.storage.StorageReadyWatcher
+import com.pidifa.codetracetree.util.TracePathEligibility
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.*
@@ -185,6 +187,7 @@ class TracePointService(private val project: Project) {
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    if (!TracePathEligibility.isEligible(project, file)) return
                     val changed = rebindLineNodesForFile(file)
                     attachDocumentListener(file)
                     highlightTracePointsInFile(file)
@@ -848,6 +851,7 @@ class TracePointService(private val project: Project) {
 
     fun highlightTracePointsInFile(file: VirtualFile) {
         if (!isHighlightingEnabled) return
+        if (!TracePathEligibility.isEligible(project, file)) return
         ApplicationManager.getApplication().runReadAction {
             // Remove existing highlighters for this file
             removeHighlights(file)
@@ -857,7 +861,8 @@ class TracePointService(private val project: Project) {
                 ?.filter { it.tracePoint.traceType == TraceType.LINE && it.tracePoint.isValid }
                 ?: emptyList()
             val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
-            val editors = FileEditorManager.getInstance(project).getEditors(file).filterIsInstance<TextEditor>()
+            val editors = EditorFactory.getInstance().getEditors(document, project)
+                .filter { TracePathEligibility.isEligibleEditor(project, file, it) }
             if (editors.isEmpty()) return@runReadAction
 
             // Use configured highlight colors (light / dark theme)
@@ -874,7 +879,7 @@ class TracePointService(private val project: Project) {
                     val start = document.getLineStartOffset(tp.tracePoint.lineNumber - 1)
                     val end = document.getLineEndOffset(tp.tracePoint.lineNumber - 1)
                     editors.forEach { editor ->
-                        val h = editor.editor.markupModel.addRangeHighlighter(
+                        val h = editor.markupModel.addRangeHighlighter(
                             start, end,
                             HighlighterLayer.SELECTION - 1,
                             textAttributes,
@@ -920,6 +925,7 @@ class TracePointService(private val project: Project) {
 
     // A document listener will not be added for the same file
     fun attachDocumentListener(file: VirtualFile) {
+        if (!TracePathEligibility.isEligible(project, file)) return
         ApplicationManager.getApplication().runReadAction {
             val relativePath = file.path.removePrefix(project.basePath?.let { "$it/" } ?: "")
             val affectedFileNodes = fileNodesMap[relativePath]

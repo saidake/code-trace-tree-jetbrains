@@ -20,7 +20,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        if (!TracePathEligibility.isEligible(project, file)) return
+        if (!TracePathEligibility.isEligibleEditor(project, file, editor)) return
         val service = project.service<TracePointService>()
 
         // ---- caret validation -------------------------------------------------
@@ -82,7 +82,7 @@ class CreateTracePointUnderSelectedAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         val project = e.project
-        val eligible = editor != null && TracePathEligibility.isEligible(project, file)
+        val eligible = TracePathEligibility.isEligibleEditor(project, file, editor)
         val service = project?.service<TracePointService>()
         val hasSelection = service?.getSelectedTracePointIds()?.isNotEmpty() ?: false
         e.presentation.isVisible = eligible

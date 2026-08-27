@@ -23,7 +23,7 @@ class UpdateTracePointAction : AnAction() {
         val project = e.project ?: return
         val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        if (!TracePathEligibility.isEligible(project, file)) return
+        if (!TracePathEligibility.isEligibleEditor(project, file, editor)) return
         val service = project.service<TracePointService>()
         val selectedTracePointIds = service.getSelectedTracePointIds()
         if (selectedTracePointIds.isEmpty()) {
@@ -91,7 +91,7 @@ class UpdateTracePointAction : AnAction() {
         val editor = project?.let { FileEditorManager.getInstance(it).selectedTextEditor }
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         e.presentation.isEnabledAndVisible =
-            editor != null && TracePathEligibility.isEligible(project, file)
+            editor != null && TracePathEligibility.isEligibleEditor(project, file, editor)
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {
