@@ -17,6 +17,7 @@ import java.nio.file.Paths
  */
 object GlobalStoragePaths {
     const val APP_DIR_NAME = "code-trace-tree"
+    const val SETTINGS_FILE_NAME = "settings.xml"
 
     fun resolveBaseDir(): Path {
         val os = System.getProperty("os.name").orEmpty().lowercase()
@@ -45,4 +46,14 @@ object GlobalStoragePaths {
     }
 
     fun resolveAppDir(): Path = resolveBaseDir().resolve(APP_DIR_NAME)
+
+    fun resolveSettingsFile(): Path = resolveAppDir().resolve(SETTINGS_FILE_NAME)
+
+    /** Project documents are `*.xml` except `settings.xml` and write temps. */
+    fun isProjectXmlFile(file: Path): Boolean {
+        val name = file.fileName.toString()
+        return name.endsWith(".xml") &&
+            !name.endsWith(".tmp") &&
+            name != SETTINGS_FILE_NAME
+    }
 }

@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Case C (no bound project id): watch `<appDir>/signals/` for
- * `<projectId>.storage-ready` (no TTL).
+ * `<projectId>.storage-ready` (no TTL) and `request_refresh_global_settings`
+ * (global highlight colors).
  *
  * Uses [WatchService] plus a periodic directory poll — native watches often miss
  * creates on Windows when another process writes the signal files.
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class StorageReadyWatcher(
     private val onStorageReady: (projectId: String) -> Unit,
+    private val onGlobalSettingsRefresh: () -> Unit = {},
 ) : AutoCloseable {
     private val log = Logger.getInstance(StorageReadyWatcher::class.java)
     private val closed = AtomicBoolean(false)
@@ -44,6 +46,7 @@ class StorageReadyWatcher(
     private var debounceExecutor: ScheduledExecutorService? = null
     private var pollFuture: ScheduledFuture<*>? = null
     private var pendingProjectId: String? = null
+    private var globalSettingsPending = false
     /** Last observed mtime per projectId so poll re-fires when the agent overwrites. */
     private val lastSeenMtimeMs = ConcurrentHashMap<String, Long>()
 
@@ -58,10 +61,12 @@ class StorageReadyWatcher(
             val dir = AgentSignalFiles.ensureSignalsDir()
             registerDir(ws, dir)
             scanExisting(dir)
+            rememberGlobalSettingsMtime()
             pollFuture = debounceExecutor?.scheduleWithFixedDelay(
                 {
                     if (!closed.get()) {
                         scanExisting(dir)
+                        considerGlobalSettingsSignal()
                     }
                 },
                 POLL_MS,
@@ -151,7 +156,11 @@ class StorageReadyWatcher(
                 val kind = event.kind()
                 if (kind == StandardWatchEventKinds.OVERFLOW) continue
                 val name = (event.context() as? Path)?.fileName?.toString() ?: continue
-                handleEvent(name)
+                if (name == AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME) {
+                    considerGlobalSettingsSignal()
+                } else {
+                    handleEvent(name)
+                }
             }
             if (!key.reset()) {
                 keys.remove(key)
@@ -172,6 +181,44 @@ class StorageReadyWatcher(
         val prev = lastSeenMtimeMs.put(projectId, mtime)
         if (prev == mtime) return
         scheduleReady(projectId)
+    }
+
+    private fun rememberGlobalSettingsMtime() {
+        val path = AgentSignalFiles.globalRefreshSettingsPath()
+        if (!Files.isRegularFile(path)) return
+        try {
+            lastSeenMtimeMs[AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME] =
+                Files.getLastModifiedTime(path).toMillis()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun considerGlobalSettingsSignal() {
+        val path = AgentSignalFiles.globalRefreshSettingsPath()
+        if (!AgentSignalFiles.isFresh(path)) return
+        val mtime = try {
+            Files.getLastModifiedTime(path).toMillis()
+        } catch (_: Exception) {
+            return
+        }
+        val prev = lastSeenMtimeMs.put(AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME, mtime)
+        if (prev == mtime) return
+        scheduleGlobalSettings()
+    }
+
+    private fun scheduleGlobalSettings() {
+        globalSettingsPending = true
+        val executor = debounceExecutor ?: return
+        executor.schedule({
+            if (closed.get() || !globalSettingsPending) return@schedule
+            globalSettingsPending = false
+            try {
+                onGlobalSettingsRefresh()
+            } catch (e: Exception) {
+                lastSeenMtimeMs.remove(AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME)
+                log.warn("Code Trace Tree global settings refresh failed", e)
+            }
+        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
 
     private fun scheduleReady(projectId: String) {

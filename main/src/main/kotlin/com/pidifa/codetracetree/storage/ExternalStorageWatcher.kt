@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - `<projectId>.request_refresh`
  * - `<projectId>.request_refresh_profile`
  * - `<projectId>.request_refresh_settings`
+ * - `request_refresh_global_settings` (global highlight colors; no projectId)
  * - `<projectId>.select_trace_points`
  *
  * Uses [WatchService] plus a periodic mtime poll — native watches often miss repeated
@@ -90,6 +91,7 @@ class ExternalStorageWatcher(
                 rememberMtime(AgentSignalFiles.refreshProfilePath(projectId))
                 rememberMtime(AgentSignalFiles.refreshSettingsPath(projectId))
             }
+            rememberMtime(AgentSignalFiles.globalRefreshSettingsPath())
             considerSignal(
                 AgentSignalFiles.selectPath(projectId),
                 AgentSignalFiles.selectFileName(projectId)
@@ -158,6 +160,10 @@ class ExternalStorageWatcher(
         considerSignal(
             AgentSignalFiles.refreshSettingsPath(projectId),
             AgentSignalFiles.refreshSettingsFileName(projectId)
+        ) { scheduleSettingsReload() }
+        considerSignal(
+            AgentSignalFiles.globalRefreshSettingsPath(),
+            AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME
         ) { scheduleSettingsReload() }
         considerSignal(
             AgentSignalFiles.selectPath(projectId),
@@ -255,6 +261,11 @@ class ExternalStorageWatcher(
                     AgentSignalFiles.refreshSettingsPath(projectId),
                     fileName
                 ) { scheduleSettingsReload() }
+            AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME ->
+                considerSignal(
+                    AgentSignalFiles.globalRefreshSettingsPath(),
+                    fileName
+                ) { scheduleSettingsReload() }
         }
     }
 
@@ -299,6 +310,7 @@ class ExternalStorageWatcher(
                 onSettingsRefresh()
             } catch (e: Exception) {
                 clearSeen(AgentSignalFiles.refreshSettingsFileName(projectId))
+                clearSeen(AgentSignalFiles.GLOBAL_REFRESH_SETTINGS_FILE_NAME)
                 log.warn("Code Trace Tree external settings refresh failed", e)
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)

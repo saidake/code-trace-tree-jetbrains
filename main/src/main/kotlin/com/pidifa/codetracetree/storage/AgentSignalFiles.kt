@@ -16,7 +16,8 @@ import java.nio.file.Paths
  * - `<projectId>.request_refresh` — full project reload (all profiles + toolbar flags)
  * - `<projectId>.request_refresh_profile` — one profile; body = profile name
  *   (empty / missing name → active profile). Does not change activeProfileName or flags.
- * - `<projectId>.request_refresh_settings` — toolbar flags / advancedSettings / activeProfileName
+ * - `<projectId>.request_refresh_settings` — toolbar flags / activeProfileName
+ * - `request_refresh_global_settings` — global highlight colors (`settings.xml`; no projectId)
  * - `<projectId>.select_trace_points`
  * - `<projectId>.storage-ready` — Case C bind handshake (no TTL; agent overwrites).
  *   Body = absolute project path (first non-empty line); empty/legacy → IDE reads XML `<path>`.
@@ -31,6 +32,8 @@ object AgentSignalFiles {
     const val REFRESH_SUFFIX = ".request_refresh"
     const val REFRESH_PROFILE_SUFFIX = ".request_refresh_profile"
     const val REFRESH_SETTINGS_SUFFIX = ".request_refresh_settings"
+    /** Global highlight-color reload (no projectId). Distinct from `<projectId>.request_refresh_settings`. */
+    const val GLOBAL_REFRESH_SETTINGS_FILE_NAME = "request_refresh_global_settings"
     const val SELECT_SUFFIX = ".select_trace_points"
     const val STORAGE_READY_SUFFIX = ".storage-ready"
     /** Ignore / delete refresh and select signal files older than this age. */
@@ -61,6 +64,9 @@ object AgentSignalFiles {
 
     fun refreshSettingsPath(projectId: String): Path =
         signalsDir().resolve(refreshSettingsFileName(projectId))
+
+    fun globalRefreshSettingsPath(): Path =
+        signalsDir().resolve(GLOBAL_REFRESH_SETTINGS_FILE_NAME)
 
     fun selectPath(projectId: String): Path = signalsDir().resolve(selectFileName(projectId))
 
@@ -170,10 +176,16 @@ object AgentSignalFiles {
         writeStorageReady(projectId, projectPath)
     }
 
-    /** Toolbar / advancedSettings / activeProfileName reload signal. */
+    /** Toolbar / activeProfileName reload signal. */
     fun writeRequestRefreshSettings(projectId: String, projectPath: String? = null) {
         ensureSignalsDir()
         writeUtf8(refreshSettingsPath(projectId), "1\n")
         writeStorageReady(projectId, projectPath)
+    }
+
+    /** Global highlight-color reload (`settings.xml`). Does not write storage-ready. */
+    fun writeGlobalRequestRefreshSettings() {
+        ensureSignalsDir()
+        writeUtf8(globalRefreshSettingsPath(), "1\n")
     }
 }

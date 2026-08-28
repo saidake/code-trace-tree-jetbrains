@@ -36,6 +36,7 @@ import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.storage.AdvancedSettings
 import com.pidifa.codetracetree.storage.AgentSignalFiles
 import com.pidifa.codetracetree.storage.ExternalStorageWatcher
+import com.pidifa.codetracetree.storage.GlobalSettingsXml
 import com.pidifa.codetracetree.storage.ProjectDocument
 import com.pidifa.codetracetree.storage.ProjectStorage
 import com.pidifa.codetracetree.storage.StorageReadyWatcher
@@ -144,6 +145,9 @@ class TracePointService(private val project: Project) {
     private var isDescriptionAreaOpened = false
     private var isNamePromptEnabled = true
     private var advancedSettings: AdvancedSettings = AdvancedSettings.defaults()
+    /** Leftover project `<advancedSettings>`; highlight fallback until `settings.xml` exists. */
+    private var legacyAdvancedSettings: AdvancedSettings? = null
+    private var ignoreGlobalSettingsUntilMs = 0L
 
     private var profiles: MutableList<TraceProfile> = mutableListOf(TraceProfile(name = DEFAULT_PROFILE_NAME))
     private var activeProfileName: String = DEFAULT_PROFILE_NAME
@@ -401,6 +405,7 @@ class TracePointService(private val project: Project) {
         val basePath = project.basePath
         if (basePath.isNullOrBlank()) {
             LOG.info("Code Trace Tree: project has no base path; using in-memory defaults")
+            applyHighlightSettings(null)
             return
         }
         try {
@@ -409,10 +414,13 @@ class TracePointService(private val project: Project) {
             val doc = storage.resolveAndLoad()
             if (doc != null) {
                 applyDocument(doc, validate = false, notifyUi = false)
+            } else {
+                applyHighlightSettings(null)
             }
-            // Lazy Case C: keep in-memory defaults until first real use
+            // Lazy Case C: keep in-memory tree defaults until first real use
         } catch (e: Exception) {
             LOG.warn("Code Trace Tree: failed to load hybrid storage; using defaults", e)
+            applyHighlightSettings(null)
         }
     }
 
@@ -442,14 +450,21 @@ class TracePointService(private val project: Project) {
             externalStorageWatcher?.close()
             externalStorageWatcher = null
             if (storageReadyWatcher == null) {
-                val watcher = StorageReadyWatcher { signalProjectId ->
-                    ApplicationManager.getApplication().invokeLater {
-                        if (project.isDisposed) return@invokeLater
-                        if (!handleStorageReadySignal(signalProjectId)) {
-                            storageReadyWatcher?.clearSeen(signalProjectId)
+                val watcher = StorageReadyWatcher(
+                    onStorageReady = { signalProjectId ->
+                        ApplicationManager.getApplication().invokeLater {
+                            if (project.isDisposed) return@invokeLater
+                            if (!handleStorageReadySignal(signalProjectId)) {
+                                storageReadyWatcher?.clearSeen(signalProjectId)
+                            }
+                        }
+                    },
+                    onGlobalSettingsRefresh = {
+                        ApplicationManager.getApplication().invokeLater {
+                            if (!project.isDisposed) reloadGlobalHighlightSettings()
                         }
                     }
-                }
+                )
                 storageReadyWatcher = watcher
                 watcher.start()
             }
@@ -596,7 +611,8 @@ class TracePointService(private val project: Project) {
     }
 
     /**
-     * Reloads project toolbar flags, advancedSettings, and activeProfileName from XML.
+     * Reloads project toolbar flags and activeProfileName from XML.
+     * Highlight colors come from `settings.xml` (legacy project block only if that file is missing).
      * Does not replace other profile trees unless the active profile name changed.
      */
     fun reloadSettingsFromExternalStorage(bypassIgnoreWindow: Boolean = false): Boolean {
@@ -614,7 +630,7 @@ class TracePointService(private val project: Project) {
             isDescriptionAreaOpened = doc.descriptionAreaOpened
             isHighlightingEnabled = doc.highlightingEnabled
             isNamePromptEnabled = doc.namePromptEnabled
-            advancedSettings = doc.advancedSettings
+            applyHighlightSettings(doc.legacyAdvancedSettings)
             if (prevActive != activeProfileName) {
                 loadActiveProfileFromStore()
                 notifyProfileListeners()
@@ -631,12 +647,18 @@ class TracePointService(private val project: Project) {
         return true
     }
 
-    /** Handles `<projectId>.request_refresh_settings`. */
+    /** Handles `<projectId>.request_refresh_settings` and `request_refresh_global_settings`. */
     fun handleExternalSettingsRefreshRequest() {
-        val projectId = projectStorage?.boundProjectId() ?: return
-        val request = AgentSignalFiles.refreshSettingsPath(projectId)
-        if (!AgentSignalFiles.isFresh(request)) return
-        reloadSettingsFromExternalStorage(bypassIgnoreWindow = false)
+        val projectId = projectStorage?.boundProjectId()
+        if (projectId != null) {
+            val request = AgentSignalFiles.refreshSettingsPath(projectId)
+            if (AgentSignalFiles.isFresh(request)) {
+                reloadSettingsFromExternalStorage(bypassIgnoreWindow = false)
+            }
+        }
+        if (AgentSignalFiles.isFresh(AgentSignalFiles.globalRefreshSettingsPath())) {
+            reloadGlobalHighlightSettings()
+        }
     }
 
     /**
@@ -684,7 +706,7 @@ class TracePointService(private val project: Project) {
         isHighlightingEnabled = doc.highlightingEnabled
         isDescriptionAreaOpened = doc.descriptionAreaOpened
         isNamePromptEnabled = doc.namePromptEnabled
-        advancedSettings = doc.advancedSettings
+        applyHighlightSettings(doc.legacyAdvancedSettings)
         profiles = doc.profiles.map {
             TraceProfile(
                 name = it.name.ifBlank { DEFAULT_PROFILE_NAME },
@@ -775,7 +797,8 @@ class TracePointService(private val project: Project) {
             descriptionAreaOpened = isDescriptionAreaOpened,
             highlightingEnabled = isHighlightingEnabled,
             namePromptEnabled = isNamePromptEnabled,
-            advancedSettings = advancedSettings
+            // Drop leftover <advancedSettings> from project XML once settings.xml exists.
+            legacyAdvancedSettings = if (GlobalSettingsXml.exists()) null else legacyAdvancedSettings
         )
         emitPendingPeerSignals()
         externalStorageWatcher?.refreshRegistrations()
@@ -810,20 +833,43 @@ class TracePointService(private val project: Project) {
     fun isNamePromptEnabled(): Boolean = isNamePromptEnabled
     fun getAdvancedSettings(): AdvancedSettings = advancedSettings
 
+    /**
+     * Persist highlight colors to global `settings.xml` (create + migrate on first save).
+     * Does not create project storage.
+     */
     fun setAdvancedSettings(settings: AdvancedSettings) {
-        ensureStorage()
-        advancedSettings = AdvancedSettings(
-            highlightLineBackgroundLight = AdvancedSettings.normalizeHex(settings.highlightLineBackgroundLight)
-                ?: AdvancedSettings.DEFAULT_HIGHLIGHT_LIGHT,
-            highlightLineBackgroundDark = AdvancedSettings.normalizeHex(settings.highlightLineBackgroundDark)
-                ?: AdvancedSettings.DEFAULT_HIGHLIGHT_DARK
-        )
+        ignoreGlobalSettingsUntilMs = System.currentTimeMillis() + SELF_WRITE_IGNORE_MS
+        // First create seeds settings.xml from leftover project colors, then overlays the dialog values.
+        advancedSettings = GlobalSettingsXml.ensureAndWrite(settings, legacyAdvancedSettings)
+        legacyAdvancedSettings = null
+        AgentSignalFiles.writeGlobalRequestRefreshSettings()
         ApplicationManager.getApplication().runReadAction {
             FileEditorManager.getInstance(project).openFiles.forEach { file ->
                 if (isHighlightingEnabled) highlightTracePointsInFile(file)
             }
         }
-        scheduleSettingsPersist()
+    }
+
+    fun reloadGlobalHighlightSettings() {
+        if (System.currentTimeMillis() < ignoreGlobalSettingsUntilMs) return
+        val resolved = GlobalSettingsXml.resolve(legacyAdvancedSettings)
+        if (resolved == advancedSettings) {
+            if (GlobalSettingsXml.exists()) legacyAdvancedSettings = null
+            return
+        }
+        advancedSettings = resolved
+        if (GlobalSettingsXml.exists()) legacyAdvancedSettings = null
+        ApplicationManager.getApplication().runReadAction {
+            FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                if (isHighlightingEnabled) highlightTracePointsInFile(file) else removeHighlights(file)
+            }
+        }
+    }
+
+    private fun applyHighlightSettings(legacy: AdvancedSettings?) {
+        // Keep leftover project colors only while settings.xml is missing (fallback + first-save migrate).
+        legacyAdvancedSettings = if (GlobalSettingsXml.exists()) null else legacy
+        advancedSettings = GlobalSettingsXml.resolve(legacy)
     }
 
     fun setDescriptionAreaOpened(opened: Boolean) {

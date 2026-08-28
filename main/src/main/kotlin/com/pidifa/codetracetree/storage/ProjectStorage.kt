@@ -200,7 +200,7 @@ class ProjectStorage(private val projectBasePath: String) {
         descriptionAreaOpened: Boolean,
         highlightingEnabled: Boolean,
         namePromptEnabled: Boolean,
-        advancedSettings: AdvancedSettings = AdvancedSettings.defaults()
+        legacyAdvancedSettings: AdvancedSettings? = null
     ) {
         val file = boundFile ?: return
         val projectId = boundProjectId ?: return
@@ -219,7 +219,8 @@ class ProjectStorage(private val projectBasePath: String) {
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
             namePromptEnabled = namePromptEnabled,
-            advancedSettings = advancedSettings,
+            // Once settings.xml exists, stop persisting leftover project <advancedSettings>.
+            legacyAdvancedSettings = if (GlobalSettingsXml.exists()) null else legacyAdvancedSettings,
             storageFile = file
         )
         save(doc)
@@ -253,7 +254,7 @@ class ProjectStorage(private val projectBasePath: String) {
         val dir = GlobalStoragePaths.resolveAppDir()
         if (!Files.isDirectory(dir)) return emptyList()
         return Files.list(dir).use { stream ->
-            stream.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".xml") }
+            stream.filter { Files.isRegularFile(it) && GlobalStoragePaths.isProjectXmlFile(it) }
                 .collect(Collectors.toList())
         }
     }

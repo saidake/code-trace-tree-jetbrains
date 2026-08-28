@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.3.0"
+val pluginVersion = "1.3.1"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,11 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.3.1</h3>
+            <ul>
+              <li>Highlight line colors are a global preference (<code>settings.xml</code>), shared across projects and IDEs; dark default is <code>#236C60</code></li>
+              <li>First Advanced Settings save creates <code>settings.xml</code> and migrates leftover project colors; peers reload via <code>request_refresh_global_settings</code></li>
+            </ul>
             <h3>1.3.0</h3>
             <ul>
               <li>Split skill <code>add</code> vs <code>ensure</code>; slim skill docs to script ops</li>

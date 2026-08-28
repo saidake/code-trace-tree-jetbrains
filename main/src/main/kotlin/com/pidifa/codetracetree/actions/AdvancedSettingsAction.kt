@@ -130,7 +130,7 @@ private class AdvancedSettingsDialog(
             insets = Insets(12, 0, 0, 0)
         }
         form.add(
-            JBLabel("Used when editor highlights are enabled. Defaults: #FFFFC8 (light), #646400 (dark).").apply {
+            JBLabel("Shared across projects and IDEs. Defaults: #FFFFC8 (light), #236C60 (dark).").apply {
                 foreground = JBColor.GRAY
             },
             hintConstraints

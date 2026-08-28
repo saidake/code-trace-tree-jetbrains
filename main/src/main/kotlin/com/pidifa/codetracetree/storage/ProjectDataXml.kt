@@ -32,7 +32,11 @@ data class ProjectDocument(
     val highlightingEnabled: Boolean = true,
     /** When true, creating a trace point prompts for a name; when false, creates with an empty name. */
     val namePromptEnabled: Boolean = true,
-    val advancedSettings: AdvancedSettings = AdvancedSettings.defaults(),
+    /**
+     * Leftover project `<advancedSettings>` (only if that tag is present).
+     * Highlight fallback until `settings.xml` exists; omitted on write after that.
+     */
+    val legacyAdvancedSettings: AdvancedSettings? = null,
     /** Absolute path of the XML file this document was loaded from / should be saved to. */
     val storageFile: Path? = null
 ) {
@@ -81,11 +85,17 @@ object ProjectDataXml {
         val namePromptEnabled =
             root.getChildTextTrim("namePromptEnabled")?.toBooleanStrictOrNull() ?: true
 
-        val hlBg = root.getChild("advancedSettings")?.getChild("highlightLineBackground")
-        val advancedSettings = AdvancedSettings.fromXmlOrDefaults(
-            hlBg?.getChildTextTrim("light"),
-            hlBg?.getChildTextTrim("dark")
-        )
+        // Leftover project <advancedSettings> (pre-settings.xml). Used as highlight fallback.
+        val advancedEl = root.getChild("advancedSettings")
+        val legacyAdvancedSettings = if (advancedEl != null) {
+            val hlBg = advancedEl.getChild("highlightLineBackground")
+            AdvancedSettings.fromXmlOrDefaults(
+                hlBg?.getChildTextTrim("light"),
+                hlBg?.getChildTextTrim("dark")
+            )
+        } else {
+            null
+        }
 
         val profileList = if (profiles.isEmpty()) {
             mutableListOf(TracePointService.TraceProfile(name = TracePointService.DEFAULT_PROFILE_NAME))
@@ -103,7 +113,7 @@ object ProjectDataXml {
             descriptionAreaOpened = descriptionAreaOpened,
             highlightingEnabled = highlightingEnabled,
             namePromptEnabled = namePromptEnabled,
-            advancedSettings = advancedSettings,
+            legacyAdvancedSettings = legacyAdvancedSettings,
             storageFile = storageFile
         )
     }
@@ -117,17 +127,15 @@ object ProjectDataXml {
         root.addContent(Element("activeProfileName").setText(doc.activeProfileName))
         root.addContent(Element("highlightingEnabled").setText(doc.highlightingEnabled.toString()))
         root.addContent(Element("namePromptEnabled").setText(doc.namePromptEnabled.toString()))
-        if (!doc.advancedSettings.isDefault()) {
+        val legacy = doc.legacyAdvancedSettings
+        // Keep writing leftover colors until settings.xml exists; then omit the project block.
+        if (legacy != null && !GlobalSettingsXml.exists()) {
             root.addContent(
                 Element("advancedSettings").apply {
                     addContent(
                         Element("highlightLineBackground").apply {
-                            addContent(
-                                Element("light").setText(doc.advancedSettings.highlightLineBackgroundLight)
-                            )
-                            addContent(
-                                Element("dark").setText(doc.advancedSettings.highlightLineBackgroundDark)
-                            )
+                            addContent(Element("light").setText(legacy.highlightLineBackgroundLight))
+                            addContent(Element("dark").setText(legacy.highlightLineBackgroundDark))
                         }
                     )
                 }

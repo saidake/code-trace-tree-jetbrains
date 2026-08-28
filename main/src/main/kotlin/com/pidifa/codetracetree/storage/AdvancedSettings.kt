@@ -8,8 +8,9 @@ package com.pidifa.codetracetree.storage
 import java.awt.Color
 
 /**
- * Project-level advanced UI settings stored under `<advancedSettings>`.
- * Omit from XML when [isDefault] is true.
+ * Highlight colors shared across projects and IDEs (`settings.xml`).
+ * Project XML may still carry a legacy `<advancedSettings>` block until the first
+ * Advanced Settings save creates `settings.xml`.
  */
 data class AdvancedSettings(
     val highlightLineBackgroundLight: String = DEFAULT_HIGHLIGHT_LIGHT,
@@ -25,10 +26,10 @@ data class AdvancedSettings(
 
     companion object {
         const val DEFAULT_HIGHLIGHT_LIGHT = "#FFFFC8"
-        const val DEFAULT_HIGHLIGHT_DARK = "#646400"
+        const val DEFAULT_HIGHLIGHT_DARK = "#236C60"
 
         val DEFAULT_LIGHT_COLOR: Color = Color(255, 255, 200)
-        val DEFAULT_DARK_COLOR: Color = Color(100, 100, 0)
+        val DEFAULT_DARK_COLOR: Color = Color(0x23, 0x6C, 0x60)
 
         private val HEX_RGB = Regex("^#([0-9A-Fa-f]{6})$")
 
