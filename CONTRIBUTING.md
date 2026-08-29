@@ -82,7 +82,8 @@ On Windows (PowerShell):
 | `main/` | Plugin module (`build.gradle.kts`, sources, resources) |
 | `main/src/main/kotlin/` | Kotlin sources (`com.pidifa.codetracetree`) |
 | `main/src/main/resources/` | `plugin.xml`, icons, and other resources |
-| `docs/` | Documentation assets (logo, preview image) |
+| `main/CHANGELOG.md` | Marketplace changelog (converted to HTML `changeNotes` at build) |
+| `docs/` | Documentation assets (logo, preview images) |
 | `.run/` | Shared IDE run configuration (**Run Plugin**) |
 | `.github/workflows/` | CI / release workflows |
 
