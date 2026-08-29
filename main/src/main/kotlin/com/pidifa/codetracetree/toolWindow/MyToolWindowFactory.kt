@@ -391,6 +391,12 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
                         service.selectTracePoints(selectedIds)
                         val popupMenu = JPopupMenu()
+                        val goToItem = JMenuItem("Go to Trace Point")
+                        goToItem.addActionListener {
+                            tracePoint.navigateTo(project)
+                        }
+                        popupMenu.add(goToItem)
+                        popupMenu.addSeparator()
                         val copyItem = JMenuItem("Copy Label")
                         copyItem.addActionListener {
                             val toCopy = if (selectedTracePoints.any { it.id == tracePointNode.id }) {
@@ -449,12 +455,6 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                                 }
                             }
                             popupMenu.add(deleteItem)
-                            popupMenu.addSeparator()
-                            val goToItem = JMenuItem("Go to Trace Point")
-                            goToItem.addActionListener {
-                                tracePoint.navigateTo(project)
-                            }
-                            popupMenu.add(goToItem)
                         }
                         if (tracePoint.traceType == TraceType.LINE) {
                             popupMenu.addSeparator()

@@ -1,10 +1,11 @@
 # Build and Release
 #
-# Builds the plugin ZIP and shared agent skill ZIP, attaches them to the GitHub Release,
+# Builds the plugin ZIP, attaches it to the GitHub Release,
 # and publishes to JetBrains Marketplace.
 # Triggered on push of a git tag matching v* (e.g. v1.0.8).
 # Release title format: "vX.Y.Z"
 # Attachments: plugin zip + code-trace-tree-skill-X.Y.Z.zip
+# Agent skill: `npx skills add saidake/code-trace-tree-skill` or extract the zip
 # Release notes are written manually (CI does not generate or overwrite them).
 
 name: Build and Release
@@ -35,9 +36,7 @@ jobs:
 
       - name: Package agent skill ZIP
         run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
+          VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p dist/skills
           rm -f dist/skills/code-trace-tree-skill-*.zip
           (

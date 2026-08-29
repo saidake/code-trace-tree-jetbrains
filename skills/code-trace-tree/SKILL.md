@@ -1,10 +1,10 @@
 ---
 name: code-trace-tree
 description: >
-  Read, edit, and refresh Code Trace Tree plugin data.
+  Read, edit, and refresh Code Trace Tree plugin data (VS Code and JetBrains).
   Use when the user asks to add/update/remove trace points (line, file, or directory), inspect or
-  modify Code Trace Tree profiles, sync agent-written traces into the IDE, notify IntelliJ IDEA
-  to reload plugin data, or select/navigate to trace points in the IDE tree.
+  modify Code Trace Tree profiles, sync agent-written traces into the IDE, ask the IDE to
+  reload plugin data, or select/navigate to trace points in the IDE tree.
   Prefer scripts/trace_tree.py for search/add/ensure/move/delete/rebind (flexible LINE tips; no occurrence args).
   Prefer `ensure` when generating a workflow tree so retries do not duplicate; `add` always creates a new UUID.
   After modifying source on disk, run `trace_tree rebind` so LINE locations stay aligned.
@@ -128,7 +128,7 @@ python "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.py" <subcommand> [
 python "<Agent Skill Path>/code-trace-tree/scripts/trace_tree.py" [shared-flags] <subcommand> [flags…]
 ```
 
-Shared flags (`--project`, `--profile`, `--dry-run`, `--no-refresh`) may appear **before or after** the subcommand. Omit `--project` when CWD is already inside the IDE project (scripts walk upward to find `.idea` / `.git`, or other common project markers). Default profile: `<activeProfileName>`.
+Shared flags (`--project`, `--profile`, `--dry-run`, `--no-refresh`) may appear **before or after** the subcommand. Omit `--project` when CWD is already inside the IDE project (scripts walk upward to find `.vscode` / `.idea` / `.git`, or other common project markers). Default profile: `<activeProfileName>`.
 
 **LINE locators (forgiving):** stored tip is `[file, line, full-trimmed-line]`; persistence also keeps script-computed `occurrenceIndex` / `totalOccurrences` so **duplicate trimmed lines in one file** are distinct. Callers may pass a **stale line** and/or a **unique substring**; the script resolves to the full trimmed line. On PowerShell, protect quoted `--content` with `--%` (see [Windows PowerShell](#windows-powershell)) or use a substring tip plus `--line`. Never wrap the CLI in a helper that uses a parameter named `$Args`.
 

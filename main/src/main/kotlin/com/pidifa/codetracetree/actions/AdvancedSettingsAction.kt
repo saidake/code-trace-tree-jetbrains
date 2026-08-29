@@ -43,7 +43,7 @@ import javax.swing.JSeparator
 class AdvancedSettingsAction : AnAction(
     null,
     "Advanced settings (highlight colors, import/export)",
-    AllIcons.Actions.More
+    AllIcons.General.GearPlain
 ), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -56,7 +56,7 @@ class AdvancedSettingsAction : AnAction(
         e.presentation.isEnabled = e.project != null
         e.presentation.text = "Advanced Settings"
         e.presentation.description = "Advanced settings (highlight colors, import/export)"
-        e.presentation.icon = AllIcons.Actions.More
+        e.presentation.icon = AllIcons.General.GearPlain
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
