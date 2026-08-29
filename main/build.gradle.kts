@@ -26,6 +26,9 @@ dependencies {
         intellijIdeaCommunity("2025.1")
         testFramework(TestFrameworkType.Platform)
     }
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 intellijPlatform {
@@ -95,6 +98,9 @@ tasks {
     }
     buildPlugin {
         archiveFileName.set("code-trace-tree-$pluginVersion.zip")
+    }
+    test {
+        useJUnitPlatform()
     }
 }
 

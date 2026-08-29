@@ -10,6 +10,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
+import com.pidifa.codetracetree.domain.TreeOps
 import com.pidifa.codetracetree.services.TracePointService
 import com.pidifa.codetracetree.services.TracePointService.TracePointNode
 import com.pidifa.codetracetree.toolWindow.MyToolWindowFactory
@@ -30,7 +31,6 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
         val selectedPaths = tree.selectionPaths ?: return
         val project = e.project ?: return
         val service = project.service<TracePointService>()
-        val tracePoints = service.getTracePoints()
         val selectedIds = selectedPaths.mapNotNull { path ->
             (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? TracePointService.TracePointNode
         }.map { it.id }.toSet()
@@ -40,16 +40,10 @@ class MoveUpTracePointAction(private val myToolWindow: MyToolWindowFactory.MyToo
             .mapNotNull { service.getTracePointNodeById(it) }
             .groupBy { it.parentId }
 
-        for ((parentId, nodes) in groupedByParent) {
+        for ((parentId, _) in groupedByParent) {
             val parentNode = parentId?.let { service.getTracePointNodeById(parentId) }
             val siblings = parentNode?.children ?: tracePointNodes
-            val orderedSelected = nodes.sortedBy { siblings.indexOf(it) }
-            for (node in orderedSelected) {
-                val index = siblings.indexOf(node)
-                if (index > 0 && !selectedIds.contains(siblings[index - 1].id)) {
-                    siblings[index] = siblings[index - 1].also { siblings[index - 1] = siblings[index] }
-                }
-            }
+            TreeOps.moveSiblingsUp(siblings, selectedIds) { it.id }
         }
 
 //        service.updateNodeMap(allTracePoints)

@@ -10,6 +10,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.components.service
+import com.pidifa.codetracetree.domain.TreeOps
 import com.pidifa.codetracetree.services.TracePointService
 import com.pidifa.codetracetree.services.TracePointService.TracePointNode
 import com.pidifa.codetracetree.toolWindow.MyToolWindowFactory
@@ -39,20 +40,10 @@ class MoveDownTracePointAction(private val myToolWindow: MyToolWindowFactory.MyT
             .mapNotNull { service.getTracePointNodeById(it) }
             .groupBy { it.parentId }
 
-        for ((parentId, nodes) in groupedByParent) {
+        for ((parentId, _) in groupedByParent) {
             val parentNode = if (parentId == null) null else service.getTracePointNodeById(parentId)
             val originalSiblings = parentNode?.children ?: tracePointNodes
-            val orderedSelected = nodes.sortedBy { originalSiblings.indexOf(it) }
-
-            for (node in orderedSelected.asReversed()) {
-                val originalIndex = originalSiblings.indexOf(node)
-                if (originalIndex < originalSiblings.size - 1
-                    && !selectedIds.contains(originalSiblings[originalIndex + 1].id)) {
-                    originalSiblings[originalIndex] = originalSiblings[originalIndex + 1].also {
-                        originalSiblings[originalIndex + 1] = originalSiblings[originalIndex]
-                    }
-                }
-            }
+            TreeOps.moveSiblingsDown(originalSiblings, selectedIds) { it.id }
         }
 
 //        service.updateNodeMap(updateTracePoints)
