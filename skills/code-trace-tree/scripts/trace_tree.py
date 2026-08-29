@@ -39,6 +39,7 @@ def print_json(payload: dict) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+
 # ---------------------------------------------------------------------------
 # Resolve project + storage
 # ---------------------------------------------------------------------------
@@ -66,6 +67,14 @@ def global_app_dir() -> Path:
     return Path(base) / "code-trace-tree"
 
 
+def read_local_project_id_file(project_root: Path) -> str:
+    """Read IDE-local `.idea/code-trace-tree.project.id` when present. Agents never write it."""
+    p = project_root / ".idea" / "code-trace-tree.project.id"
+    if p.is_file():
+        return p.read_text(encoding="utf-8").strip()
+    return ""
+
+
 def find_path_matched_xmls(project_root: Path) -> list[Path]:
     app_dir = global_app_dir()
     if not app_dir.is_dir():
@@ -79,12 +88,19 @@ def find_path_matched_xmls(project_root: Path) -> list[Path]:
     return matched
 
 
-def read_local_project_id_file(project_root: Path) -> str:
-    """Optional IDE cache only — agents never create this file."""
-    p = project_root / ".idea" / "code-trace-tree.project.id"
-    if p.is_file():
-        return p.read_text(encoding="utf-8").strip()
-    return ""
+def find_xml_by_project_id(project_id: str) -> Optional[Path]:
+    if not project_id:
+        return None
+    app_dir = global_app_dir()
+    if not app_dir.is_dir():
+        return None
+    canonical = app_dir / f"{project_id}.xml"
+    if canonical.is_file() and xml_tag_text(canonical, "projectId") == project_id:
+        return canonical
+    for xml in sorted(app_dir.glob("*.xml")):
+        if xml_tag_text(xml, "projectId") == project_id:
+            return xml
+    return None
 
 
 def read_project_id(project_root: Path) -> str:
@@ -119,47 +135,22 @@ def normalize_path_key(p: str) -> str:
     return s
 
 
-def resolve_storage(project_root: Path) -> Path:
-    """
-    1. `.idea/code-trace-tree.project.id` → that project's XML (reuse existing bind)
-    2. Else XML whose `<path>` matches the project root
-    3. Else missing (caller may Case C create)
-    """
-    app_dir = global_app_dir()
-    xmls = sorted(app_dir.glob("*.xml")) if app_dir.is_dir() else []
+def sanitize_folder_name(name: str) -> str:
+    import re
 
-    local_id = read_local_project_id_file(project_root)
-    if local_id:
-        canonical = app_dir / f"{local_id}.xml"
-        if canonical.is_file() and xml_tag_text(canonical, "projectId") == local_id:
-            return canonical
-        for xml in xmls:
-            try:
-                if xml.resolve() == canonical.resolve():
-                    continue
-            except OSError:
-                pass
-            if xml_tag_text(xml, "projectId") != local_id:
-                continue
-            if not canonical.exists():
-                try:
-                    xml.rename(canonical)
-                    return canonical
-                except OSError:
-                    pass
-            return xml
+    s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", name).strip()
+    return s or "project"
 
-    matches = find_path_matched_xmls(project_root)
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        return max(matches, key=lambda x: int(xml_tag_text(x, "updatedAt") or "0"))
 
-    raise SystemExit(
-        "ERROR: no Code Trace Tree storage XML found. "
-        "Run resolve_storage.py, or create a trace point / profile in the IDE, "
-        "or import plugin data first."
-    )
+def allocate_folder_name_xml(app_dir: Path, project_root: Path) -> Path:
+    base = sanitize_folder_name(project_root.name)
+    candidate = app_dir / f"{base}.xml"
+    if not candidate.exists():
+        return candidate
+    i = 1
+    while (app_dir / f"{base}{i}.xml").exists():
+        i += 1
+    return app_dir / f"{base}{i}.xml"
 
 
 def write_project_id_files(project_root: Path, project_id: str) -> list[Path]:
@@ -172,21 +163,28 @@ def write_project_id_files(project_root: Path, project_id: str) -> list[Path]:
 
 def create_fresh_storage(project_root: Path) -> Path:
     """
-    Case C (path mode): create empty `<projectId>.xml` (`main`) when storage is missing.
-    If `.idea/code-trace-tree.project.id` exists but XML is gone, recreate with that same id.
-    Otherwise allocate a new project id. Does not write `.idea/code-trace-tree.project.id`.
+    Case C (path mode): create empty global XML (`main`) when storage is missing.
+    If `.idea/code-trace-tree.project.id` exists but XML is gone, recreate with that same id
+    at `<projectId>.xml`. Otherwise allocate a new id + folder-named XML.
+    Sets XML <path> to the project root. Does not write `.idea/code-trace-tree.project.id`.
     Idempotent if storage already resolves.
     """
-    try:
-        return resolve_storage(project_root)
-    except SystemExit:
-        pass
+    from resolve_storage import resolve_storage
+
+    existing = resolve_storage(project_root)
+    if existing is not None:
+        return existing
 
     local_id = read_local_project_id_file(project_root)
     project_id = local_id or str(uuid.uuid4())
     app_dir = global_app_dir()
     app_dir.mkdir(parents=True, exist_ok=True)
-    storage_xml = app_dir / f"{project_id}.xml"
+    # Prefer canonical id-named file when recovering an existing local bind.
+    storage_xml = (
+        app_dir / f"{project_id}.xml"
+        if local_id
+        else allocate_folder_name_xml(app_dir, project_root)
+    )
     write_project_id_files(project_root, project_id)
 
     root = ET.Element("project", {"version": "4"})
@@ -209,10 +207,12 @@ def create_fresh_storage(project_root: Path) -> Path:
 
 def ensure_storage(project_root: Path) -> Path:
     """Return existing storage (local id or path), or create Case C when missing."""
-    try:
-        return resolve_storage(project_root)
-    except SystemExit:
-        return create_fresh_storage(project_root)
+    from resolve_storage import resolve_storage
+
+    existing = resolve_storage(project_root)
+    if existing is not None:
+        return existing
+    return create_fresh_storage(project_root)
 
 
 def norm_rel(path: str) -> str:
@@ -1112,7 +1112,18 @@ def load_context(
 ):
     start = Path(project or ".")
     project_root = find_project_root(start)
-    storage_xml = ensure_storage(project_root) if ensure else resolve_storage(project_root)
+    if ensure:
+        storage_xml = ensure_storage(project_root)
+    else:
+        from resolve_storage import resolve_storage
+
+        storage_xml = resolve_storage(project_root)
+        if storage_xml is None:
+            raise SystemExit(
+                "ERROR: no Code Trace Tree storage XML found. "
+                "Run resolve_storage.py, or create a trace point / profile in the IDE, "
+                "or import plugin data first."
+            )
     tree = ET.parse(storage_xml)
     root = tree.getroot()
     profile_name = resolve_profile_name(root, profile)
@@ -1184,6 +1195,78 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def place_node(
+    project_root: Path,
+    roots_el: ET.Element,
+    *,
+    kind: str,
+    file: Optional[str],
+    line: Optional[int],
+    content: Optional[str],
+    name: str,
+    description: str,
+    parent: Optional[ET.Element],
+    get_or_add: bool,
+) -> Tuple[ET.Element, bool, Optional[dict]]:
+    """Create a node under parent (None = profile roots).
+
+    When get_or_add is True, return an existing identity match without attaching
+    (skipped=True). Otherwise always build and attach a new UUID.
+    Returns (element, skipped, resolve_meta).
+    """
+    kind = (kind or "LINE").upper()
+    parent_id = child_text(parent, "id") if parent is not None else ""
+    resolve_meta: Optional[dict] = None
+
+    if kind == "LINE":
+        if not file or content is None or line is None:
+            raise SystemExit(
+                "ERROR: LINE add/ensure requires --file, --line, and --content "
+                "(the script computes occurrenceIndex/totalOccurrences)"
+            )
+        resolved = resolve_source_locator(project_root, file, line, content)
+        loc = resolved.locator
+        total, occ_index = compute_occurrences(
+            project_root, loc.file, loc.line, loc.content
+        )
+        resolve_meta = {
+            "reason": resolved.reason,
+            "needle": resolved.needle,
+            "resolved": [loc.file, loc.line, loc.content],
+            "totalOccurrences": total,
+            "occurrenceIndex": occ_index,
+        }
+        if get_or_add:
+            existing = find_existing_line_node(roots_el, loc, occ_index)
+            if existing is not None:
+                return existing, True, resolve_meta
+        node = build_line_node(
+            project_root, loc, parent_id, name or "", description or ""
+        )
+    elif kind in ("FILE", "DIRECTORY"):
+        path = file
+        if not path:
+            raise SystemExit(f"ERROR: {kind} add/ensure requires --file (path)")
+        rel = norm_rel(path)
+        if get_or_add:
+            existing = find_existing_path_node(roots_el, rel, kind)
+            if existing is not None:
+                return existing, True, None
+        node = build_path_node(
+            project_root,
+            rel,
+            kind,
+            parent_id,
+            name or "",
+            description or "",
+        )
+    else:
+        raise SystemExit(f"ERROR: unknown --type {kind}")
+
+    attach_under(parent, roots_el, node)
+    return node, False, resolve_meta
+
+
 def _print_add_result(payload: dict) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
@@ -1211,76 +1294,34 @@ def _cmd_add_or_ensure(args: argparse.Namespace, *, get_or_add: bool) -> int:
     parent_path = parent_refs_from_args(args, required=False)
     parent = resolve_parent_path(roots_el, parent_path)
     parent_id = child_text(parent, "id") if parent is not None else ""
-    resolve_meta: Optional[dict] = None
 
-    if kind == "LINE":
-        resolved = resolve_source_locator(
-            project_root, args.file, args.line, args.content
+    node, skipped, resolve_meta = place_node(
+        project_root,
+        roots_el,
+        kind=kind,
+        file=args.file,
+        line=args.line,
+        content=args.content,
+        name=args.trace_name or "",
+        description=args.description or "",
+        parent=parent,
+        get_or_add=get_or_add,
+    )
+
+    if skipped:
+        _print_add_result(
+            {
+                "action": action,
+                "skipped": True,
+                "reason": "already_exists",
+                "profile": profile_name,
+                "id": child_text(node, "id"),
+                "parentId": child_text(node, "parentId"),
+                **({"resolve": resolve_meta} if resolve_meta is not None else {}),
+                "node": node_to_row(node, 0, child_text(node, "parentId")),
+            }
         )
-        loc = resolved.locator
-        total, occ_index = compute_occurrences(
-            project_root, loc.file, loc.line, loc.content
-        )
-        resolve_meta = {
-            "reason": resolved.reason,
-            "needle": resolved.needle,
-            "resolved": [loc.file, loc.line, loc.content],
-            "totalOccurrences": total,
-            "occurrenceIndex": occ_index,
-        }
-        if get_or_add:
-            existing = find_existing_line_node(roots_el, loc, occ_index)
-            if existing is not None:
-                _print_add_result(
-                    {
-                        "action": action,
-                        "skipped": True,
-                        "reason": "already_exists",
-                        "profile": profile_name,
-                        "id": child_text(existing, "id"),
-                        "parentId": child_text(existing, "parentId"),
-                        "resolve": resolve_meta,
-                        "node": node_to_row(
-                            existing, 0, child_text(existing, "parentId")
-                        ),
-                    }
-                )
-                return 0
-        node = build_line_node(
-            project_root, loc, parent_id, args.trace_name or "", args.description or ""
-        )
-    elif kind in ("FILE", "DIRECTORY"):
-        path = args.file
-        if not path:
-            raise SystemExit(f"ERROR: {kind} add/ensure requires --file (path)")
-        rel = norm_rel(path)
-        if get_or_add:
-            existing = find_existing_path_node(roots_el, rel, kind)
-            if existing is not None:
-                _print_add_result(
-                    {
-                        "action": action,
-                        "skipped": True,
-                        "reason": "already_exists",
-                        "profile": profile_name,
-                        "id": child_text(existing, "id"),
-                        "parentId": child_text(existing, "parentId"),
-                        "node": node_to_row(
-                            existing, 0, child_text(existing, "parentId")
-                        ),
-                    }
-                )
-                return 0
-        node = build_path_node(
-            project_root,
-            rel,
-            kind,
-            parent_id,
-            args.trace_name or "",
-            args.description or "",
-        )
-    else:
-        raise SystemExit(f"ERROR: unknown --type {kind}")
+        return 0
 
     if args.dry_run:
         payload: dict = {
@@ -1295,11 +1336,10 @@ def _cmd_add_or_ensure(args: argparse.Namespace, *, get_or_add: bool) -> int:
         _print_add_result(payload)
         return 0
 
-    attach_under(parent, roots_el, node)
     if kind == "LINE":
-        refresh_line_occurrence_fields(
-            roots_el, project_root, loc.file, loc.content
-        )
+        loc_file = child_text(node_trace(node), "tracePath")
+        loc_content = child_text(node_trace(node), "lineContent")
+        refresh_line_occurrence_fields(roots_el, project_root, loc_file, loc_content)
     bump_updated_at(root)
     write_atomic(tree, storage_xml)
     if not args.no_refresh:
