@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.3.1"
+val pluginVersion = "1.3.2"
 version = pluginVersion
 
 repositories {
@@ -57,6 +57,13 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.3.2</h3>
+            <ul>
+              <li>Toolbar Advanced Settings uses a gear icon</li>
+              <li>Tree context menu <b>Go to Trace Point</b> is first (navigates the clicked node)</li>
+              <li>Install the Agent Skill from the dedicated repo: <code>npx skills add saidake/code-trace-tree-skill</code></li>
+              <li>Add a second Marketplace preview screenshot</li>
+            </ul>
             <h3>1.3.1</h3>
             <ul>
               <li>Highlight line colors are a global preference (<code>settings.xml</code>), shared across projects and IDEs; dark default is <code>#236C60</code></li>
