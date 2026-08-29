@@ -237,7 +237,9 @@ class TracePointService(private val project: Project) {
             notifyListeners()
         }
 
-        // After VFS refresh: path traces + open LINE buffers only (not closed LINE files)
+        // DocumentListener cannot tell typing from a disk reload (both mutate Document).
+        // Bracket VFS refresh: skip DocumentListener / BulkFileListener, then content-rebind
+        // open LINE buffers and re-check FILE/DIRECTORY. Closed LINE files wait until fileOpened.
         VirtualFileManager.getInstance().addVirtualFileManagerListener(object : VirtualFileManagerListener {
             override fun beforeRefreshStart(isAsync: Boolean) {
                 isFileSystemRefreshing = true
@@ -970,7 +972,7 @@ class TracePointService(private val project: Project) {
                 val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
                 val listener = object : DocumentListener {
                     override fun documentChanged(event: DocumentEvent) {
-                        // Skip processing if event is due to file system refresh
+                        // VFS refresh already content-rebinds open files; offset math here would be wrong.
                         if (isFileSystemRefreshing) return
 
                         val docFile = FileDocumentManager.getInstance().getFile(event.document) ?: return
