@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.pidifa.codetracetree"
-val pluginVersion = "1.3.3"
+val pluginVersion = "1.3.5"
 version = pluginVersion
 
 repositories {

@@ -1,3 +1,7 @@
+## v1.3.5
+
+- Clarify Agent Skill install: Python 3 on PATH; ZIP first; `npx` only if Node.js is present
+
 ## v1.3.3
 
 - Agent skill `create_tree.py` generates a nested workflow in one call (ensures existing nodes, adds new ones)
