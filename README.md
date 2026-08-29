@@ -33,6 +33,7 @@
 
 # Preview
 ![](docs/assets/preview-1-jetbrains.png)
+![](docs/assets/preview-2-jetbrains.png)
 
 <!-- Plugin description -->
 <h1>How to use</h1>
