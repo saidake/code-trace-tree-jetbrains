@@ -8,6 +8,7 @@ package com.pidifa.codetracetree
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.skill.AgentSkillNotice
 
 /**
  * Initializes [TracePointService] when a project opens so existing hybrid storage
@@ -17,5 +18,6 @@ import com.pidifa.codetracetree.services.TracePointService
 class CodeTraceTreeProjectActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         project.getService(TracePointService::class.java)
+        AgentSkillNotice.schedule(project)
     }
 }

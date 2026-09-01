@@ -23,6 +23,7 @@
         />
         <projectService serviceImplementation="com.pidifa.codetracetree.services.TracePointService"/>
         <postStartupActivity implementation="com.pidifa.codetracetree.CodeTraceTreeProjectActivity"/>
+        <notificationGroup id="Code Trace Tree" displayType="BALLOON"/>
     </extensions>
 
     <actions>

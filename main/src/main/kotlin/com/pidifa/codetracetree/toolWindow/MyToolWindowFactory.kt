@@ -22,6 +22,7 @@ import com.pidifa.codetracetree.actions.RecheckTracePointsAction
 import com.pidifa.codetracetree.actions.RemoveInvalidTracePointsAction
 import com.pidifa.codetracetree.actions.ToggleHighlightTracePointsAction
 import com.pidifa.codetracetree.actions.AdvancedSettingsAction
+import com.pidifa.codetracetree.actions.AgentSkillAction
 import com.pidifa.codetracetree.actions.ToggleDescriptionAreaAction
 import com.pidifa.codetracetree.actions.ToggleMaximizeDescriptionAction
 import com.pidifa.codetracetree.actions.ToggleNamePromptAction
@@ -595,6 +596,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                     templatePresentation.description = "Collapse all trace point nodes"
                 })
                 add(RemoveInvalidTracePointsAction())
+                add(AgentSkillAction().apply {
+                    templatePresentation.text = "Agent Skill"
+                    templatePresentation.description =
+                        "Install or update the bundled Code Trace Tree agent skill"
+                })
                 add(AdvancedSettingsAction().apply {
                     templatePresentation.text = "Advanced Settings"
                     templatePresentation.description =

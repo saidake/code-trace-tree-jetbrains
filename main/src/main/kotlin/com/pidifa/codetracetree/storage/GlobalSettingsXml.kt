@@ -6,6 +6,7 @@
 package com.pidifa.codetracetree.storage
 
 import com.intellij.openapi.diagnostic.Logger
+import com.pidifa.codetracetree.skill.AgentSkillNoticeStatus
 import org.jdom.Element
 import org.jdom.input.SAXBuilder
 import org.jdom.output.Format
@@ -16,11 +17,24 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
+data class GlobalSettingsFile(
+    val highlightLineBackgroundLight: String,
+    val highlightLineBackgroundDark: String,
+    val agentSkillVersion: String? = null,
+    val agentSkillNoticeStatus: AgentSkillNoticeStatus? = null,
+) {
+    fun colors(): AdvancedSettings = AdvancedSettings(
+        highlightLineBackgroundLight = highlightLineBackgroundLight,
+        highlightLineBackgroundDark = highlightLineBackgroundDark,
+    )
+}
+
 /**
- * Global highlight settings at `<appDir>/settings.xml` (lazy create on Advanced Settings save).
+ * Global settings at `<appDir>/settings.xml` (highlight colors + agent-skill notice).
  *
- * Read: file if present, else caller-supplied legacy project colors, else code defaults.
- * First create migrates legacy project colors, then overlays the confirmed dialog values.
+ * Colors: file if present, else leftover project colors, else code defaults.
+ * First Advanced Settings save migrates leftover project colors.
+ * Agent-skill notice may also create the file (seeding colors).
  */
 object GlobalSettingsXml {
     private const val ROOT = "settings"
@@ -30,44 +44,80 @@ object GlobalSettingsXml {
 
     fun exists(): Boolean = Files.isRegularFile(file())
 
-    fun read(): AdvancedSettings? {
+    fun readFile(): GlobalSettingsFile? {
         val path = file()
         if (!Files.isRegularFile(path)) return null
         return try {
-            val xml = Files.readString(path, StandardCharsets.UTF_8)
-            val root = SAXBuilder().build(StringReader(xml)).rootElement
-            if (root.name != ROOT) return null
-            val hlBg = root.getChild("highlightLineBackground")
-            AdvancedSettings.fromXmlOrDefaults(
-                hlBg?.getChildTextTrim("light"),
-                hlBg?.getChildTextTrim("dark")
-            )
+            parse(Files.readString(path, StandardCharsets.UTF_8))
         } catch (e: Exception) {
             log.warn("Failed to read Code Trace Tree global settings from $path", e)
             null
         }
     }
 
+    fun parse(xml: String): GlobalSettingsFile? {
+        val root = SAXBuilder().build(StringReader(xml)).rootElement
+        if (root.name != ROOT) return null
+        val hlBg = root.getChild("highlightLineBackground")
+        val colors = AdvancedSettings.fromXmlOrDefaults(
+            hlBg?.getChildTextTrim("light"),
+            hlBg?.getChildTextTrim("dark")
+        )
+        val skill = root.getChild("agentSkill")
+        val version = skill?.getChildTextTrim("version")?.takeIf { it.isNotBlank() }
+        val status = when (skill?.getChildTextTrim("noticeStatus")) {
+            "dismissed" -> AgentSkillNoticeStatus.DISMISSED
+            "installed" -> AgentSkillNoticeStatus.INSTALLED
+            else -> null
+        }
+        return GlobalSettingsFile(
+            highlightLineBackgroundLight = colors.highlightLineBackgroundLight,
+            highlightLineBackgroundDark = colors.highlightLineBackgroundDark,
+            agentSkillVersion = version,
+            agentSkillNoticeStatus = status,
+        )
+    }
+
+    fun read(): AdvancedSettings? = readFile()?.colors()
+
     /** `settings.xml` if present; else leftover project `<advancedSettings>`; else code defaults. Does not create the file. */
     fun resolve(legacy: AdvancedSettings?): AdvancedSettings = read() ?: legacy ?: AdvancedSettings.defaults()
 
     /**
      * Ensure `settings.xml` exists (seed from leftover project colors on first create), then write.
-     * @return the colors that were written
+     * Preserves agent-skill notice fields when the file already exists.
      */
     fun ensureAndWrite(settings: AdvancedSettings, legacy: AdvancedSettings?): AdvancedSettings {
-        val path = file()
-        Files.createDirectories(path.parent)
-        val toWrite = if (!Files.isRegularFile(path)) {
-            migrateOnCreate(settings, legacy)
-        } else {
-            normalize(settings)
-        }
-        writeAtomic(toWrite, path)
-        return toWrite
+        val existing = readFile()
+        val colors = if (existing == null) migrateOnCreate(settings, legacy) else normalize(settings)
+        writeAtomic(
+            GlobalSettingsFile(
+                highlightLineBackgroundLight = colors.highlightLineBackgroundLight,
+                highlightLineBackgroundDark = colors.highlightLineBackgroundDark,
+                agentSkillVersion = existing?.agentSkillVersion,
+                agentSkillNoticeStatus = existing?.agentSkillNoticeStatus,
+            )
+        )
+        return colors
     }
 
-    /** First settings.xml: leftover project colors as seed, then overlay dialog values. */
+    fun upsertAgentSkillNotice(
+        version: String,
+        status: AgentSkillNoticeStatus,
+        colorSeed: AdvancedSettings,
+    ) {
+        val existing = readFile()
+        val colors = existing?.colors() ?: normalize(colorSeed)
+        writeAtomic(
+            GlobalSettingsFile(
+                highlightLineBackgroundLight = colors.highlightLineBackgroundLight,
+                highlightLineBackgroundDark = colors.highlightLineBackgroundDark,
+                agentSkillVersion = version,
+                agentSkillNoticeStatus = status,
+            )
+        )
+    }
+
     private fun migrateOnCreate(dialog: AdvancedSettings, legacy: AdvancedSettings?): AdvancedSettings {
         val seeded = legacy ?: AdvancedSettings.defaults()
         return AdvancedSettings(
@@ -86,14 +136,32 @@ object GlobalSettingsXml {
                 ?: AdvancedSettings.DEFAULT_HIGHLIGHT_DARK
         )
 
-    private fun writeAtomic(settings: AdvancedSettings, path: Path) {
+    private fun writeAtomic(doc: GlobalSettingsFile) {
+        val path = file()
+        Files.createDirectories(path.parent)
         val root = Element(ROOT)
         root.addContent(
             Element("highlightLineBackground").apply {
-                addContent(Element("light").setText(settings.highlightLineBackgroundLight))
-                addContent(Element("dark").setText(settings.highlightLineBackgroundDark))
+                addContent(Element("light").setText(doc.highlightLineBackgroundLight))
+                addContent(Element("dark").setText(doc.highlightLineBackgroundDark))
             }
         )
+        if (!doc.agentSkillVersion.isNullOrBlank() || doc.agentSkillNoticeStatus != null) {
+            root.addContent(
+                Element("agentSkill").apply {
+                    if (!doc.agentSkillVersion.isNullOrBlank()) {
+                        addContent(Element("version").setText(doc.agentSkillVersion))
+                    }
+                    if (doc.agentSkillNoticeStatus != null) {
+                        addContent(
+                            Element("noticeStatus").setText(
+                                doc.agentSkillNoticeStatus.name.lowercase()
+                            )
+                        )
+                    }
+                }
+            )
+        }
         val outputter = XMLOutputter(Format.getPrettyFormat().setEncoding("UTF-8"))
         val xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + outputter.outputString(root)
         val tmp = path.resolveSibling(path.fileName.toString() + ".tmp")
