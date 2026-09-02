@@ -17,8 +17,9 @@ import java.nio.file.Path
 class AgentSkillTest {
     @Test
     fun parseSkillVersionFromFrontmatter() {
-        val md = "---\nname: code-trace-tree\nversion: 1\ndescription: test\n---\n\n# Hi\n"
+        val md = "---\nname: code-trace-tree\nmetadata:\n  version: \"1\"\ndescription: test\n---\n\n# Hi\n"
         assertEquals("1", AgentSkill.parseSkillVersion(md))
+        assertEquals(null, AgentSkill.parseSkillVersion("---\nversion: 1\n---\n"))
     }
 
     @Test
@@ -35,19 +36,19 @@ class AgentSkillTest {
         Files.createDirectories(home.resolve(".cursor/skills/code-trace-tree"))
         Files.writeString(
             home.resolve(".cursor/skills/code-trace-tree/SKILL.md"),
-            "---\nname: code-trace-tree\nversion: 1.3.4\n---\n",
+            "---\nname: code-trace-tree\nmetadata:\n  version: \"1\"\n---\n",
         )
-        val statuses = AgentSkill.scanAgentStatuses("1", home)
+        val statuses = AgentSkill.scanAgentStatuses("2", home)
         val cursor = statuses.first { it.id == "cursor" }
         val claude = statuses.first { it.id == "claude-code" }
         assertTrue(cursor.detected)
         assertEquals(AgentSkillState.OUTDATED, cursor.state)
-        assertEquals("1.3.4", cursor.installedVersion)
+        assertEquals("1", cursor.installedVersion)
         assertFalse(claude.detected)
         assertEquals(AgentSkillState.MISSING, claude.state)
-        assertTrue(AgentSkill.shouldOfferSkillNotice("1", statuses, null))
-        assertTrue(AgentSkill.shouldOfferSkillNotice("1", statuses, "1.3.5"))
-        assertFalse(AgentSkill.shouldOfferSkillNotice("1", statuses, "1"))
+        assertTrue(AgentSkill.shouldOfferSkillNotice("2", statuses, null))
+        assertTrue(AgentSkill.shouldOfferSkillNotice("2", statuses, "1"))
+        assertFalse(AgentSkill.shouldOfferSkillNotice("2", statuses, "2"))
     }
 
     @Test
@@ -55,7 +56,7 @@ class AgentSkillTest {
         val src = root.resolve("src")
         val dest = root.resolve("dest/code-trace-tree")
         Files.createDirectories(src.resolve("scripts"))
-        Files.writeString(src.resolve("SKILL.md"), "---\nversion: 1.3.5\n---\n")
+        Files.writeString(src.resolve("SKILL.md"), "---\nmetadata:\n  version: \"1\"\n---\n")
         Files.writeString(src.resolve("scripts/trace_tree.py"), "print(1)\n")
         Files.createDirectories(dest)
         Files.writeString(dest.resolve("old.txt"), "stale")
@@ -69,7 +70,7 @@ class AgentSkillTest {
     fun removeSkillForAgentsDeletesInstalledFolder(@TempDir home: Path) {
         val dest = home.resolve(".cursor/skills/code-trace-tree")
         Files.createDirectories(dest)
-        Files.writeString(dest.resolve("SKILL.md"), "---\nversion: 1.3.5\n---\n")
+        Files.writeString(dest.resolve("SKILL.md"), "---\nmetadata:\n  version: \"1\"\n---\n")
         val removed = AgentSkill.removeSkillForAgents(listOf("cursor", "claude-code"), home)
         assertEquals(1, removed.size)
         assertEquals("cursor", removed[0].first)
@@ -92,7 +93,7 @@ class AgentSkillTest {
                 <dark>#236C60</dark>
               </highlightLineBackground>
               <agentSkill>
-                <version>1.3.5</version>
+                <version>1</version>
                 <noticeStatus>dismissed</noticeStatus>
               </agentSkill>
             </settings>
@@ -100,7 +101,7 @@ class AgentSkillTest {
         val parsed = GlobalSettingsXml.parse(xml)!!
         assertEquals("#FFFFC8", parsed.highlightLineBackgroundLight)
         assertEquals("#236C60", parsed.highlightLineBackgroundDark)
-        assertEquals("1.3.5", parsed.agentSkillVersion)
+        assertEquals("1", parsed.agentSkillVersion)
         assertEquals(AgentSkillNoticeStatus.DISMISSED, parsed.agentSkillNoticeStatus)
         val openedXml = xml.replace("<noticeStatus>dismissed</noticeStatus>", "<noticeStatus>opened</noticeStatus>")
         assertEquals(AgentSkillNoticeStatus.OPENED, GlobalSettingsXml.parse(openedXml)!!.agentSkillNoticeStatus)

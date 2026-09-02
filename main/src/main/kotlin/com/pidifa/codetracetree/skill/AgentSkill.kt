@@ -33,6 +33,7 @@ data class PythonStatus(
 
 object AgentSkill {
     const val SKILL_FOLDER = "code-trace-tree"
+    const val PYTHON_DOWNLOAD_URL = "https://www.python.org/downloads/"
 
     /** Same agents and global paths as `npx skills` (https://github.com/vercel-labs/skills/blob/main/src/agents.ts). */
     val AGENTS: List<AgentDef> = listOf(
@@ -196,10 +197,13 @@ object AgentSkill {
         return p
     }
 
+    /** Bundled skill version from SKILL.md `metadata.version`. */
     fun parseSkillVersion(skillMd: String): String? {
         val fm = Regex("^---\\r?\\n([\\s\\S]*?)\\r?\\n---").find(skillMd) ?: return null
-        return Regex("""^version:\s*['"]?([0-9]+(?:\.[0-9]+)*)['"]?\s*$""", RegexOption.MULTILINE)
-            .find(fm.groupValues[1])
+        val meta = Regex("""^metadata:\s*\r?\n((?:[ \t]+\S.*\r?\n?)*)""", RegexOption.MULTILINE)
+            .find(fm.groupValues[1]) ?: return null
+        return Regex("""^[ \t]+version:\s*['"]?([0-9]+)['"]?\s*$""", RegexOption.MULTILINE)
+            .find(meta.groupValues[1])
             ?.groupValues
             ?.get(1)
     }

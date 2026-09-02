@@ -14,6 +14,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.HyperlinkLabel
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
@@ -69,6 +70,16 @@ private data class AgentSkillRow(
 
 class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
     private val pythonLabel = JBLabel()
+    private val pythonInstallLink = HyperlinkLabel("Install Python 3").apply {
+        setHyperlinkTarget(AgentSkill.PYTHON_DOWNLOAD_URL)
+        alignmentX = JComponent.LEFT_ALIGNMENT
+        isVisible = false
+    }
+    private val pythonInstallHint = JBLabel("Add it to PATH, restart the IDE, then Refresh.").apply {
+        foreground = JBColor.GRAY
+        alignmentX = JComponent.LEFT_ALIGNMENT
+        isVisible = false
+    }
     private val bundledLabel = JBLabel()
     private val chooseButton = JButton("Choose agents to install")
     private val installButton = JButton("Install / Update")
@@ -136,10 +147,12 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
             })
             pythonLabel.alignmentX = JComponent.LEFT_ALIGNMENT
             add(pythonLabel)
-            add(JBLabel("Python is required when an agent runs skill scripts, not to copy the files.").apply {
+            add(JBLabel("Python 3 must be on PATH before the skill is copied to agents, so they can run the scripts.").apply {
                 foreground = JBColor.GRAY
                 alignmentX = JComponent.LEFT_ALIGNMENT
             })
+            add(pythonInstallLink)
+            add(pythonInstallHint)
             add(Box.createVerticalStrut(12))
             add(JSeparator())
             add(Box.createVerticalStrut(8))
@@ -186,15 +199,20 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
         pythonLabel.text = if (python.ready) {
             "Ready: Python ${python.version} (${python.command})"
         } else {
-            "Python 3 not found on PATH. Skill ops will fail until python3 or python is available."
+            "Python 3 not found on PATH."
         }
         pythonLabel.foreground = if (python.ready) PYTHON_READY else PYTHON_MISSING
+        pythonInstallLink.isVisible = !python.ready
+        pythonInstallHint.isVisible = !python.ready
 
         val statuses = AgentSkill.scanAgentStatuses(bundled ?: "0")
         val installed = AgentSkill.agentsWithInstalledSkill(statuses)
         tableModel.items = installed.map { AgentSkillRow(it) }.toMutableList()
-        chooseButton.isEnabled = statuses.any { it.state == AgentSkillState.MISSING }
-        installButton.isEnabled = installed.isNotEmpty()
+        val needPy = "Python 3 is required before installing the skill."
+        chooseButton.isEnabled = python.ready && statuses.any { it.state == AgentSkillState.MISSING }
+        installButton.isEnabled = python.ready && installed.isNotEmpty()
+        chooseButton.toolTipText = if (python.ready) null else needPy
+        installButton.toolTipText = if (python.ready) null else needPy
         removeButton.isEnabled = installed.isNotEmpty()
     }
 
@@ -284,6 +302,14 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
     }
 
     private fun installForAgents(ids: List<String>) {
+        if (!AgentSkill.detectPython3().ready) {
+            Messages.showErrorDialog(
+                project,
+                "Python 3 is required on PATH before the skill is copied to agents.",
+                "Agent Skill",
+            )
+            return
+        }
         val bundledVersion = try {
             BundledSkill.bundledVersion()
         } catch (e: Exception) {
