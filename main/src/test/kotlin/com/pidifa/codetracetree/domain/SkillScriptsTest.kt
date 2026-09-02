@@ -70,6 +70,46 @@ class SkillScriptsTest {
     }
 
     @Test
+    fun `trace_tree rename updates traceName and notifies the IDE`() {
+        val add = SkillProcess.runScript(
+            python,
+            "trace_tree.py",
+            listOf(
+                "add",
+                "--project", fixture.projectRoot.toString(),
+                "--file", "src/app.py",
+                "--line", "1",
+                "--content", "def alpha():",
+                "--trace-name", "alpha",
+            ),
+            fixture.projectRoot,
+            fixture.appDirBase,
+        )
+        assertEquals(0, add.status, add.stderr + add.stdout)
+        val nodeId = Regex("\"id\"\\s*:\\s*\"([^\"]+)\"").find(add.stdout)?.groupValues?.get(1)
+            ?: throw IllegalStateException(add.stdout)
+        val xmlPath = java.nio.file.Paths.get(SkillProcess.parseJsonField(add.stdout, "storage_xml"))
+        val projectId = SkillProcess.projectIdFromXml(xmlPath)
+        val rename = SkillProcess.runScript(
+            python,
+            "trace_tree.py",
+            listOf(
+                "rename",
+                "--project", fixture.projectRoot.toString(),
+                "--id", nodeId,
+                "--trace-name", "alpha-renamed",
+            ),
+            fixture.projectRoot,
+            fixture.appDirBase,
+        )
+        assertEquals(0, rename.status, rename.stderr + rename.stdout)
+        assertEquals("rename", SkillProcess.parseJsonField(rename.stdout, "action"))
+        val xml = Files.readString(xmlPath)
+        assertTrue(xml.contains("<traceName>alpha-renamed</traceName>"), xml)
+        assertTrue(Files.exists(fixture.signalsDir().resolve("$projectId.request_refresh_profile")))
+    }
+
+    @Test
     fun `trace_tree rebind updates the line after an external disk edit and notifies the IDE`() {
         val add = SkillProcess.runScript(
             python,
