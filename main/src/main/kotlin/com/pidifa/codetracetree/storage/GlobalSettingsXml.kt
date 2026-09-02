@@ -67,7 +67,7 @@ object GlobalSettingsXml {
         val version = skill?.getChildTextTrim("version")?.takeIf { it.isNotBlank() }
         val status = when (skill?.getChildTextTrim("noticeStatus")) {
             "dismissed" -> AgentSkillNoticeStatus.DISMISSED
-            "installed" -> AgentSkillNoticeStatus.INSTALLED
+            "opened", "installed" -> AgentSkillNoticeStatus.OPENED
             else -> null
         }
         return GlobalSettingsFile(

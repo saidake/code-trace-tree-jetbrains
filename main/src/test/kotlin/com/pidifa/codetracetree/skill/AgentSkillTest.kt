@@ -102,5 +102,9 @@ class AgentSkillTest {
         assertEquals("#236C60", parsed.highlightLineBackgroundDark)
         assertEquals("1.3.5", parsed.agentSkillVersion)
         assertEquals(AgentSkillNoticeStatus.DISMISSED, parsed.agentSkillNoticeStatus)
+        val openedXml = xml.replace("<noticeStatus>dismissed</noticeStatus>", "<noticeStatus>opened</noticeStatus>")
+        assertEquals(AgentSkillNoticeStatus.OPENED, GlobalSettingsXml.parse(openedXml)!!.agentSkillNoticeStatus)
+        val legacyInstalled = xml.replace("<noticeStatus>dismissed</noticeStatus>", "<noticeStatus>installed</noticeStatus>")
+        assertEquals(AgentSkillNoticeStatus.OPENED, GlobalSettingsXml.parse(legacyInstalled)!!.agentSkillNoticeStatus)
     }
 }

@@ -44,7 +44,7 @@ object AgentSkillNotice {
                 NotificationType.INFORMATION,
             )
         notification.addAction(
-            NotificationAction.createSimple("Install…") {
+            NotificationAction.createSimple("Install") {
                 if (!project.isDisposed) {
                     AgentSkillDialog(project).show()
                 }
@@ -52,7 +52,7 @@ object AgentSkillNotice {
             }
         )
         notification.addAction(
-            NotificationAction.createSimple("Later") {
+            NotificationAction.createSimple("Dismiss") {
                 val service = project.service<TracePointService>()
                 GlobalSettingsXml.upsertAgentSkillNotice(
                     bundled,

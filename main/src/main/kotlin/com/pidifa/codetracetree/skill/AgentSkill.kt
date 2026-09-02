@@ -14,7 +14,7 @@ data class AgentDef(
 
 enum class AgentSkillState { MISSING, OUTDATED, LATEST, NEWER }
 
-enum class AgentSkillNoticeStatus { DISMISSED, INSTALLED }
+enum class AgentSkillNoticeStatus { DISMISSED, OPENED }
 
 data class AgentSkillStatus(
     val id: String,
@@ -247,6 +247,7 @@ object AgentSkill {
         }
     }
 
+    /** True when a detected agent is missing/outdated and this bundled version has not been dismissed or opened. */
     fun shouldOfferSkillNotice(
         bundledVersion: String?,
         statuses: List<AgentSkillStatus>,

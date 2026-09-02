@@ -98,6 +98,21 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
         title = "Code Trace Tree — Agent Skill"
         init()
         refresh()
+        markOpened()
+    }
+
+    private fun markOpened() {
+        val bundled = try {
+            BundledSkill.bundledVersion()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        val service = project.service<TracePointService>()
+        GlobalSettingsXml.upsertAgentSkillNotice(
+            bundled,
+            AgentSkillNoticeStatus.OPENED,
+            service.getAdvancedSettings(),
+        )
     }
 
     override fun createCenterPanel(): JComponent {
@@ -283,12 +298,6 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
             try {
                 BundledSkill.copyTo(dest)
                 val installed = AgentSkill.installSkillForAgents(dest, ids)
-                val service = project.service<TracePointService>()
-                GlobalSettingsXml.upsertAgentSkillNotice(
-                    bundledVersion,
-                    AgentSkillNoticeStatus.INSTALLED,
-                    service.getAdvancedSettings(),
-                )
                 Messages.showInfoMessage(
                     project,
                     "Installed code-trace-tree v$bundledVersion for ${
