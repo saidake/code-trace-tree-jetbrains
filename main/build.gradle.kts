@@ -1,3 +1,4 @@
+import org.gradle.language.jvm.tasks.ProcessResources
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
@@ -101,6 +102,14 @@ tasks {
     }
     test {
         useJUnitPlatform()
+    }
+    // Copy repo-root skills/ into the plugin jar (do not commit src/main/resources/skills)
+    named<ProcessResources>("processResources") {
+        from(rootProject.layout.projectDirectory.dir("skills/code-trace-tree")) {
+            into("skills/code-trace-tree")
+            exclude("**/__pycache__/**")
+            exclude("**/*.pyc")
+        }
     }
 }
 

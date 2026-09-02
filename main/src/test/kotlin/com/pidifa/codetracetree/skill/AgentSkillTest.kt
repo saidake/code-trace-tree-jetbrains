@@ -17,16 +17,17 @@ import java.nio.file.Path
 class AgentSkillTest {
     @Test
     fun parseSkillVersionFromFrontmatter() {
-        val md = "---\nname: code-trace-tree\nversion: 1.3.5\ndescription: test\n---\n\n# Hi\n"
-        assertEquals("1.3.5", AgentSkill.parseSkillVersion(md))
+        val md = "---\nname: code-trace-tree\nversion: 1\ndescription: test\n---\n\n# Hi\n"
+        assertEquals("1", AgentSkill.parseSkillVersion(md))
     }
 
     @Test
-    fun compareSkillVersionsTreatsMissingAsOlder() {
-        assertTrue(AgentSkill.compareSkillVersions(null, "1.3.5") < 0)
-        assertTrue(AgentSkill.compareSkillVersions("1.3.4", "1.3.5") < 0)
-        assertEquals(0, AgentSkill.compareSkillVersions("1.3.5", "1.3.5"))
-        assertTrue(AgentSkill.compareSkillVersions("1.4.0", "1.3.5") > 0)
+    fun compareSkillVersionsTreatsMissingAndNonIntegerAsZero() {
+        assertTrue(AgentSkill.compareSkillVersions(null, "1") < 0)
+        assertTrue(AgentSkill.compareSkillVersions("1.3.5", "1") < 0)
+        assertTrue(AgentSkill.compareSkillVersions("", "1") < 0)
+        assertEquals(0, AgentSkill.compareSkillVersions("1", "1"))
+        assertTrue(AgentSkill.compareSkillVersions("2", "1") > 0)
     }
 
     @Test
@@ -36,7 +37,7 @@ class AgentSkillTest {
             home.resolve(".cursor/skills/code-trace-tree/SKILL.md"),
             "---\nname: code-trace-tree\nversion: 1.3.4\n---\n",
         )
-        val statuses = AgentSkill.scanAgentStatuses("1.3.5", home)
+        val statuses = AgentSkill.scanAgentStatuses("1", home)
         val cursor = statuses.first { it.id == "cursor" }
         val claude = statuses.first { it.id == "claude-code" }
         assertTrue(cursor.detected)
@@ -44,8 +45,9 @@ class AgentSkillTest {
         assertEquals("1.3.4", cursor.installedVersion)
         assertFalse(claude.detected)
         assertEquals(AgentSkillState.MISSING, claude.state)
-        assertTrue(AgentSkill.shouldOfferSkillNotice("1.3.5", statuses, null))
-        assertFalse(AgentSkill.shouldOfferSkillNotice("1.3.5", statuses, "1.3.5"))
+        assertTrue(AgentSkill.shouldOfferSkillNotice("1", statuses, null))
+        assertTrue(AgentSkill.shouldOfferSkillNotice("1", statuses, "1.3.5"))
+        assertFalse(AgentSkill.shouldOfferSkillNotice("1", statuses, "1"))
     }
 
     @Test
@@ -64,9 +66,20 @@ class AgentSkillTest {
     }
 
     @Test
+    fun removeSkillForAgentsDeletesInstalledFolder(@TempDir home: Path) {
+        val dest = home.resolve(".cursor/skills/code-trace-tree")
+        Files.createDirectories(dest)
+        Files.writeString(dest.resolve("SKILL.md"), "---\nversion: 1.3.5\n---\n")
+        val removed = AgentSkill.removeSkillForAgents(listOf("cursor", "claude-code"), home)
+        assertEquals(1, removed.size)
+        assertEquals("cursor", removed[0].first)
+        assertFalse(Files.exists(dest))
+    }
+
+    @Test
     fun bundledSkillMdIsOnClasspath() {
         val md = BundledSkill.skillMdText()
-        assertEquals("1.3.5", AgentSkill.parseSkillVersion(md))
+        assertEquals("1", AgentSkill.parseSkillVersion(md))
     }
 
     @Test

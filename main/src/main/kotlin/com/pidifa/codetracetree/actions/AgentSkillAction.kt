@@ -18,7 +18,10 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.table.TableView
+import com.intellij.util.ui.ColumnInfo
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.ListTableModel
 import com.pidifa.codetracetree.services.TracePointService
 import com.pidifa.codetracetree.skill.AgentSkill
 import com.pidifa.codetracetree.skill.AgentSkillNoticeStatus
@@ -34,6 +37,7 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JSeparator
+import javax.swing.ListSelectionModel
 
 /**
  * Toolbar action: Agent Skill status (Python, per-agent version) and install/update.
@@ -59,14 +63,36 @@ class AgentSkillAction : AnAction(
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 }
 
+private data class AgentSkillRow(
+    val status: AgentSkillStatus,
+)
+
 class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
     private val pythonLabel = JBLabel()
     private val bundledLabel = JBLabel()
-    private val agentsPanel = JPanel().apply {
-        layout = BoxLayout(this, BoxLayout.Y_AXIS)
-        alignmentX = JComponent.LEFT_ALIGNMENT
+    private val chooseButton = JButton("Choose agents to install")
+    private val installButton = JButton("Install / Update")
+    private val removeButton = JButton("Remove from installed agents")
+    private val tableModel = ListTableModel<AgentSkillRow>(
+        object : ColumnInfo<AgentSkillRow, String>("Agent") {
+            override fun valueOf(item: AgentSkillRow): String = item.status.label
+            override fun getPreferredStringValue(): String = "GitHub Copilot"
+        },
+        object : ColumnInfo<AgentSkillRow, String>("Installed") {
+            override fun valueOf(item: AgentSkillRow): String = installedLabel(item.status)
+            override fun getPreferredStringValue(): String = "2 (newer than bundle)"
+        },
+    )
+    private val table = TableView(tableModel).apply {
+        visibleRowCount = 5
+        rowHeight = JBUI.scale(24)
+        tableHeader.reorderingAllowed = false
+        setShowGrid(false)
+        intercellSpacing = Dimension(0, 0)
+        setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+        setStriped(true)
+        emptyText.text = "The skill is not installed for any agent"
     }
-    private val checkboxes = mutableMapOf<String, JBCheckBox>()
 
     init {
         title = "Code Trace Tree — Agent Skill"
@@ -76,7 +102,7 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
 
     override fun createCenterPanel(): JComponent {
         val wrap = JPanel(BorderLayout())
-        wrap.preferredSize = Dimension(560, 380)
+        wrap.preferredSize = Dimension(640, 420)
 
         val north = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -88,7 +114,7 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
             add(Box.createVerticalStrut(8))
             bundledLabel.alignmentX = JComponent.LEFT_ALIGNMENT
             add(bundledLabel)
-            add(Box.createVerticalStrut(8))
+            add(Box.createVerticalStrut(16))
             add(JBLabel("Python 3").apply {
                 font = font.deriveFont(font.style or java.awt.Font.BOLD)
                 alignmentX = JComponent.LEFT_ALIGNMENT
@@ -111,9 +137,14 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
         val south = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
             border = JBUI.Borders.empty(8)
-            add(JButton("Install / Update").apply {
-                addActionListener { installSelected() }
-            })
+            chooseButton.addActionListener { chooseAgentsToInstall() }
+            installButton.addActionListener { installForTableAgents() }
+            removeButton.addActionListener { removeFromInstalledAgents() }
+            add(chooseButton)
+            add(Box.createHorizontalStrut(8))
+            add(installButton)
+            add(Box.createHorizontalStrut(8))
+            add(removeButton)
             add(Box.createHorizontalStrut(8))
             add(JButton("Refresh").apply {
                 addActionListener { refresh() }
@@ -122,7 +153,7 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
         }
 
         wrap.add(north, BorderLayout.NORTH)
-        wrap.add(JBScrollPane(agentsPanel), BorderLayout.CENTER)
+        wrap.add(JBScrollPane(table), BorderLayout.CENTER)
         wrap.add(south, BorderLayout.SOUTH)
         return wrap
     }
@@ -142,41 +173,102 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
         } else {
             "Python 3 not found on PATH. Skill ops will fail until python3 or python is available."
         }
-        pythonLabel.foreground = if (python.ready) JBColor.foreground() else JBColor.GRAY
+        pythonLabel.foreground = if (python.ready) PYTHON_READY else PYTHON_MISSING
 
         val statuses = AgentSkill.scanAgentStatuses(bundled ?: "0")
-        agentsPanel.removeAll()
-        checkboxes.clear()
-        statuses.forEach { status ->
-            val box = JBCheckBox(rowLabel(status)).apply {
-                isSelected = status.detected &&
-                    (status.state == AgentSkillState.MISSING || status.state == AgentSkillState.OUTDATED)
-            }
-            checkboxes[status.id] = box
-            agentsPanel.add(box)
-        }
-        agentsPanel.revalidate()
-        agentsPanel.repaint()
+        val installed = AgentSkill.agentsWithInstalledSkill(statuses)
+        tableModel.items = installed.map { AgentSkillRow(it) }.toMutableList()
+        chooseButton.isEnabled = statuses.any { it.state == AgentSkillState.MISSING }
+        installButton.isEnabled = installed.isNotEmpty()
+        removeButton.isEnabled = installed.isNotEmpty()
     }
 
-    private fun rowLabel(status: AgentSkillStatus): String {
-        val detected = if (status.detected) "detected" else "not detected"
-        val installed = status.installedVersion ?: "—"
-        val state = when (status.state) {
-            AgentSkillState.MISSING -> "not installed"
-            AgentSkillState.OUTDATED -> "outdated"
-            AgentSkillState.NEWER -> "newer than bundle"
-            AgentSkillState.LATEST -> "latest"
-        }
-        return "${status.label}  ·  $detected  ·  $installed  ·  $state"
+    private fun installedLabel(status: AgentSkillStatus): String {
+        val version = status.installedVersion
+        if (status.state == AgentSkillState.MISSING || version.isNullOrBlank()) return "—"
+        return "$version (${statusLabel(status.state)})"
     }
 
-    private fun installSelected() {
-        val ids = checkboxes.filter { it.value.isSelected }.keys.toList()
+    private fun statusLabel(state: AgentSkillState): String = when (state) {
+        AgentSkillState.MISSING -> "not installed"
+        AgentSkillState.OUTDATED -> "outdated"
+        AgentSkillState.NEWER -> "newer than bundle"
+        AgentSkillState.LATEST -> "latest"
+    }
+
+    private fun installForTableAgents() {
+        val ids = tableModel.items.map { it.status.id }
+        if (ids.isEmpty()) {
+            Messages.showWarningDialog(
+                project,
+                "No agents are listed. Use Choose agents to install.",
+                "Agent Skill",
+            )
+            return
+        }
+        installForAgents(ids)
+    }
+
+    private fun chooseAgentsToInstall() {
+        val bundled = try {
+            BundledSkill.bundledVersion()
+        } catch (_: Exception) {
+            null
+        }
+        val extra = AgentSkill.scanAgentStatuses(bundled ?: "0").filter { it.state == AgentSkillState.MISSING }
+        if (extra.isEmpty()) {
+            Messages.showInfoMessage(project, "The skill is already installed for all known agents.", "Agent Skill")
+            return
+        }
+        val chooser = ChooseAgentsToInstallDialog(project, extra)
+        if (!chooser.showAndGet()) return
+        val ids = chooser.selectedIds()
         if (ids.isEmpty()) {
             Messages.showWarningDialog(project, "Select at least one agent.", "Agent Skill")
             return
         }
+        installForAgents(ids)
+    }
+
+    private fun removeFromInstalledAgents() {
+        val bundled = try {
+            BundledSkill.bundledVersion()
+        } catch (_: Exception) {
+            null
+        }
+        val installed = AgentSkill.agentsWithInstalledSkill(AgentSkill.scanAgentStatuses(bundled ?: "0"))
+        if (installed.isEmpty()) {
+            Messages.showInfoMessage(project, "The skill is not installed for any known agent.", "Agent Skill")
+            return
+        }
+        val names = installed.joinToString(", ") { it.label }
+        val choice = Messages.showYesNoDialog(
+            project,
+            "Remove the code-trace-tree skill from $names? This deletes each agent's global code-trace-tree folder.",
+            "Remove Agent Skill",
+            "Remove",
+            "Cancel",
+            Messages.getWarningIcon(),
+        )
+        if (choice != Messages.YES) return
+        try {
+            val removed = AgentSkill.removeSkillForAgents(installed.map { it.id })
+            Messages.showInfoMessage(
+                project,
+                "Removed code-trace-tree from ${
+                    removed.joinToString(", ") { id ->
+                        AgentSkill.AGENTS.find { it.id == id.first }?.label ?: id.first
+                    }
+                }.",
+                "Agent Skill",
+            )
+            refresh()
+        } catch (e: Exception) {
+            Messages.showErrorDialog(project, "Failed to remove the agent skill: ${e.message}", "Agent Skill")
+        }
+    }
+
+    private fun installForAgents(ids: List<String>) {
         val bundledVersion = try {
             BundledSkill.bundledVersion()
         } catch (e: Exception) {
@@ -214,4 +306,45 @@ class AgentSkillDialog(private val project: Project) : DialogWrapper(project) {
             Messages.showErrorDialog(project, "Failed to install the agent skill: ${e.message}", "Agent Skill")
         }
     }
+
+    companion object {
+        // Match VS Code Agent Skill: testing-iconPassed / error-like missing state
+        private val PYTHON_READY = JBColor(0x2E7D32, 0x4CAF50)
+        private val PYTHON_MISSING = JBColor(0xC62828, 0xF07178)
+    }
+}
+
+private class ChooseAgentsToInstallDialog(
+    project: Project,
+    agents: List<AgentSkillStatus>,
+) : DialogWrapper(project) {
+    private val checkboxes = agents.associate { status ->
+        status.id to JBCheckBox(status.label)
+    }
+
+    init {
+        title = "Choose agents to install"
+        init()
+    }
+
+    override fun createCenterPanel(): JComponent {
+        val list = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = JBUI.Borders.empty(8)
+            add(JBLabel("Copy the bundled skill into the selected agents' global skills folders.").apply {
+                foreground = JBColor.GRAY
+                alignmentX = JComponent.LEFT_ALIGNMENT
+            })
+            add(Box.createVerticalStrut(8))
+        }
+        checkboxes.values.forEach { box ->
+            box.alignmentX = JComponent.LEFT_ALIGNMENT
+            list.add(box)
+        }
+        return JBScrollPane(list).apply {
+            preferredSize = Dimension(420, 360)
+        }
+    }
+
+    fun selectedIds(): List<String> = checkboxes.filter { it.value.isSelected }.keys.toList()
 }

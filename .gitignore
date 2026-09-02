@@ -5,3 +5,6 @@
 build
 .kotlin
 dist/
+
+# Bundled skill is copied from skills/code-trace-tree/ during processResources
+/main/src/main/resources/skills/
