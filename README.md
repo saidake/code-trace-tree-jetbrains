@@ -38,7 +38,7 @@
 <h1>How to use</h1>
 <ol>
   <li>Open the <b>Code Trace Tree</b> tool window (right side of the IDE).</li>
-  <li>Use the <b>Profile</b> selector under the toolbar to switch trees, add a profile (+), or delete one from the dropdown.</li>
+  <li>Use the <b>Profile</b> selector under the toolbar to switch trees, add a profile (+), rename one, or delete one from the dropdown.</li>
   <li>In the editor, right-click a line in a <b>project file</b> and choose:
     <ul>
       <li><b>Create a Root Trace Point</b> — start a new line-level trace tree (selects the new node; does not jump)</li>

@@ -82,4 +82,43 @@ class TreeOpsTest {
         assertTrue(flags.descriptionAreaOpened)
         assertFalse(flags.highlightingEnabled)
     }
+
+    // A
+    //   B
+    //     D
+    //   C
+    // E
+    //   F
+    //   G
+    // H
+    private val parents = mapOf(
+        "A" to null,
+        "B" to "A",
+        "C" to "A",
+        "D" to "B",
+        "E" to null,
+        "F" to "E",
+        "G" to "E",
+        "H" to null,
+    )
+
+    @Test
+    fun `selectionRoots keeps only topmost nodes when a whole subtree is selected`() {
+        val roots = TreeOps.selectionRoots(
+            listOf("A", "B", "C", "D", "E", "F", "G"),
+        ) { parents[it] }
+        assertEquals(listOf("A", "E"), roots.sorted())
+    }
+
+    @Test
+    fun `selectionRoots excludes a deep selection when an ancestor is also selected`() {
+        val roots = TreeOps.selectionRoots(listOf("A", "D")) { parents[it] }
+        assertEquals(listOf("A"), roots)
+    }
+
+    @Test
+    fun `selectionRoots keeps disjoint selections`() {
+        val roots = TreeOps.selectionRoots(listOf("B", "E")) { parents[it] }
+        assertEquals(listOf("B", "E"), roots.sorted())
+    }
 }

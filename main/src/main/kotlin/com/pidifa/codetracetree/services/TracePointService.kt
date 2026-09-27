@@ -1566,6 +1566,24 @@ class TracePointService(private val project: Project) {
         return true
     }
 
+    fun renameProfile(oldName: String, newName: String): Boolean {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return false
+        val profile = profiles.find { it.name == oldName } ?: return false
+        if (trimmed == oldName) return true
+        if (profiles.any { it.name != oldName && it.name.equals(trimmed, ignoreCase = true) }) {
+            return false
+        }
+        ensureStorage()
+        profile.name = trimmed
+        if (activeProfileName == oldName) {
+            activeProfileName = trimmed
+        }
+        notifyProfileListeners()
+        scheduleFullPeerPersist()
+        return true
+    }
+
     fun replaceActiveProfileTree(
         nodes: MutableList<TracePointNode>,
         expandedIds: MutableSet<String>

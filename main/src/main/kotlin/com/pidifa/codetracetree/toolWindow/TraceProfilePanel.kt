@@ -16,6 +16,7 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Cursor
 import java.awt.Dimension
+import java.awt.FlowLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
@@ -34,7 +35,7 @@ import javax.swing.plaf.basic.ComboPopup
 
 /**
  * Profile selector shown under the toolbar: ComboBox + Add button.
- * Expanded list items show a delete control (except when only one profile remains).
+ * Expanded list items show rename and delete controls (delete hidden when only one profile remains).
  */
 class TraceProfilePanel(
     private val project: Project,
@@ -42,7 +43,11 @@ class TraceProfilePanel(
 ) : JPanel(GridBagLayout()) {
 
     private val comboModel = DefaultComboBoxModel<String>()
-    private val comboBox = ProfileComboBox(comboModel) { name -> deleteProfile(name) }
+    private val comboBox = ProfileComboBox(
+        comboModel,
+        onRename = { name -> renameProfile(name) },
+        onDelete = { name -> deleteProfile(name) }
+    )
     private var updatingUi = false
 
     init {
@@ -136,6 +141,31 @@ class TraceProfilePanel(
         }
     }
 
+    private fun renameProfile(oldName: String) {
+        comboBox.hidePopup()
+        val name = Messages.showInputDialog(
+            project,
+            "Enter a new name for this trace profile:",
+            "Rename Trace Profile",
+            null,
+            oldName,
+            null
+        )?.trim() ?: return
+
+        if (name.isEmpty()) {
+            Messages.showWarningDialog(project, "Profile name cannot be empty.", "Rename Trace Profile")
+            return
+        }
+        if (name == oldName) return
+        if (!service.renameProfile(oldName, name)) {
+            Messages.showWarningDialog(
+                project,
+                "A profile named \"$name\" already exists.",
+                "Rename Trace Profile"
+            )
+        }
+    }
+
     private fun deleteProfile(name: String) {
         if (service.getProfileNames().size <= 1) return
         comboBox.hidePopup()
@@ -160,8 +190,11 @@ class TraceProfilePanel(
         }
     }
 
+    private enum class CellAction { RENAME, DELETE }
+
     private class ProfileComboBox(
         model: DefaultComboBoxModel<String>,
+        private val onRename: (String) -> Unit,
         private val onDelete: (String) -> Unit
     ) : ComboBox<String>(model) {
         private var mouseHandler: CellButtonsMouseListener? = null
@@ -184,6 +217,8 @@ class TraceProfilePanel(
             val child = (this as Accessible).accessibleContext.getAccessibleChild(0)
             return (child as? ComboPopup)?.list
         }
+
+        fun requestRename(name: String) = onRename(name)
 
         fun requestDelete(name: String) = onDelete(name)
 
@@ -227,6 +262,16 @@ class TraceProfilePanel(
     private class ProfileListCellRenderer : ListCellRenderer<String> {
         private val labelRenderer = DefaultListCellRenderer()
         private var rolloverIndex = -1
+        private var rolloverAction: CellAction? = null
+
+        private val renameButton = JButton(AllIcons.Actions.Edit).apply {
+            isBorderPainted = false
+            isContentAreaFilled = false
+            isFocusable = false
+            isOpaque = false
+            preferredSize = Dimension(JBUI.scale(16), JBUI.scale(16))
+            toolTipText = "Rename profile"
+        }
 
         private val deleteButton = JButton(AllIcons.General.Remove).apply {
             isBorderPainted = false
@@ -237,24 +282,38 @@ class TraceProfilePanel(
             toolTipText = "Delete profile"
         }
 
+        private val actionsPanel = JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(2), 0)).apply {
+            isOpaque = false
+        }
+
         private val panel = JPanel(BorderLayout()).apply {
             isOpaque = true
             border = JBUI.Borders.empty(2, 8, 2, 6)
         }
 
-        fun setRolloverIndex(index: Int, list: JList<*>?) {
-            if (rolloverIndex != index) {
+        fun setRollover(index: Int, action: CellAction?, list: JList<*>?) {
+            if (rolloverIndex != index || rolloverAction != action) {
                 rolloverIndex = index
+                rolloverAction = action
                 list?.repaint()
             }
         }
 
-        fun isHitDeleteButton(list: JList<*>, point: Point): Boolean {
+        fun hitAction(list: JList<*>, point: Point): CellAction? {
             val index = list.locationToIndex(point)
-            if (index < 0 || list.model.size <= 1) return false
-            val bounds = list.getCellBounds(index, index) ?: return false
-            val buttonWidth = deleteButton.preferredSize.width + JBUI.scale(10)
-            return point.x >= bounds.x + bounds.width - buttonWidth
+            if (index < 0) return null
+            val bounds = list.getCellBounds(index, index) ?: return null
+            val canDelete = list.model.size > 1
+            val buttonWidth = renameButton.preferredSize.width + JBUI.scale(4)
+            val deleteWidth = if (canDelete) deleteButton.preferredSize.width + JBUI.scale(4) else 0
+            val actionsWidth = buttonWidth + deleteWidth + JBUI.scale(8)
+            val actionsLeft = bounds.x + bounds.width - actionsWidth
+            if (point.x < actionsLeft) return null
+            if (canDelete) {
+                val deleteLeft = bounds.x + bounds.width - deleteWidth - JBUI.scale(4)
+                if (point.x >= deleteLeft) return CellAction.DELETE
+            }
+            return CellAction.RENAME
         }
 
         override fun getListCellRendererComponent(
@@ -270,7 +329,7 @@ class TraceProfilePanel(
             label.isOpaque = false
             label.border = JBUI.Borders.empty()
 
-            // Closed combo (selected value shown in the field) — no delete button
+            // Closed combo (selected value shown in the field) — no action buttons
             if (index < 0) {
                 return label
             }
@@ -278,14 +337,23 @@ class TraceProfilePanel(
             panel.removeAll()
             panel.add(label, BorderLayout.CENTER)
 
+            actionsPanel.removeAll()
+            renameButton.isVisible = true
+            val renameModel = renameButton.model
+            renameModel.isRollover = index == rolloverIndex && rolloverAction == CellAction.RENAME
+            renameModel.isArmed = renameModel.isRollover
+            actionsPanel.add(renameButton)
+
             val canDelete = (list?.model?.size ?: 0) > 1
             if (canDelete) {
                 deleteButton.isVisible = true
-                val model = deleteButton.model
-                model.isRollover = index == rolloverIndex
-                model.isArmed = index == rolloverIndex
-                panel.add(deleteButton, BorderLayout.EAST)
+                val deleteModel = deleteButton.model
+                deleteModel.isRollover = index == rolloverIndex && rolloverAction == CellAction.DELETE
+                deleteModel.isArmed = deleteModel.isRollover
+                actionsPanel.add(deleteButton)
             }
+
+            panel.add(actionsPanel, BorderLayout.EAST)
 
             panel.background = if (isSelected) list?.selectionBackground else list?.background
             panel.foreground = if (isSelected) list?.selectionForeground else list?.foreground
@@ -300,9 +368,9 @@ class TraceProfilePanel(
             val list = e.component as? JList<*> ?: return
             val r = comboBox.cellRenderer()
             val index = list.locationToIndex(e.point)
-            val hit = index >= 0 && r.isHitDeleteButton(list, e.point)
-            r.setRolloverIndex(if (hit) index else -1, list)
-            list.cursor = if (hit) {
+            val action = if (index >= 0) r.hitAction(list, e.point) else null
+            r.setRollover(if (action != null) index else -1, action, list)
+            list.cursor = if (action != null) {
                 Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             } else {
                 Cursor.getDefaultCursor()
@@ -311,24 +379,27 @@ class TraceProfilePanel(
 
         override fun mouseExited(e: MouseEvent) {
             val list = e.component as? JList<*>
-            comboBox.cellRenderer().setRolloverIndex(-1, list)
+            comboBox.cellRenderer().setRollover(-1, null, list)
             list?.cursor = Cursor.getDefaultCursor()
         }
 
         override fun mousePressed(e: MouseEvent) {
             val list = e.component as? JList<*> ?: return
             val r = comboBox.cellRenderer()
-            if (!r.isHitDeleteButton(list, e.point)) return
+            val action = r.hitAction(list, e.point) ?: return
             val index = list.locationToIndex(e.point)
             if (index < 0) return
             val name = list.model.getElementAt(index) as? String ?: return
             e.consume()
-            comboBox.requestDelete(name)
+            when (action) {
+                CellAction.RENAME -> comboBox.requestRename(name)
+                CellAction.DELETE -> comboBox.requestDelete(name)
+            }
         }
 
         override fun mouseReleased(e: MouseEvent) {
             val list = e.component as? JList<*> ?: return
-            if (comboBox.cellRenderer().isHitDeleteButton(list, e.point)) {
+            if (comboBox.cellRenderer().hitAction(list, e.point) != null) {
                 e.consume()
             }
         }

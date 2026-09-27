@@ -1,3 +1,8 @@
+## v1.3.7
+
+- Rename profiles from the Profile dropdown (edit control next to delete)
+- Multi-select drag-and-drop moves only selection roots (nested selections stay under their parent)
+
 ## v1.3.6
 
 - Bundle the Agent Skill in the plugin; toolbar **Agent Skill** opens a status page to install or update it per coding agent

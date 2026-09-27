@@ -13,6 +13,7 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
 import com.pidifa.codetracetree.services.TracePointService
+import com.pidifa.codetracetree.domain.TreeOps
 import com.pidifa.codetracetree.domain.enums.TraceType
 import com.pidifa.codetracetree.actions.MoveUpTracePointAction
 import com.pidifa.codetracetree.actions.MoveDownTracePointAction
@@ -215,29 +216,30 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         @Suppress("UNCHECKED_CAST")
                         val draggedTracePointIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
 
-                        // Skip if multiple trace points are selected
-                        if(draggedTracePointIds.size!=1)return true;
-
-                        // Skip if trying to drop inside itself or its descendant
-                        val draggedTreeNode = getTreeNodeById(draggedTracePointIds.first())
-                        val draggedTracePointNode = (draggedTreeNode?.userObject as? TracePointService.TracePointNode) ?: return false
-                        var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
-                        var invalid = false
-                        while (ancestorTreeNode != null && ancestorTreeNode != rootTreeNode) {
-                            val ancestorTracePoint = ancestorTreeNode.userObject as? TracePointService.TracePointNode
-                            if (ancestorTracePoint?.id == draggedTracePointNode.id) {
-                                invalid = true
-                                break
-                            }
-                            ancestorTreeNode = ancestorTreeNode.parent as? DefaultMutableTreeNode
+                        // Only validate selection roots (nested selections move with their parent).
+                        val rootIds = TreeOps.selectionRoots(draggedTracePointIds) { id ->
+                            service.getTracePointNodeById(id)?.parentId
                         }
-                        if (invalid) return false
+                        if (rootIds.isEmpty()) return false
 
-                        // Prevent dropping on the same node
-                        if (dropTracePointNode.id == draggedTracePointNode.id) return false
-                        // Prevent dropping on the current parent
-                        if (draggedTracePointNode.parentId==dropTracePointNode.id) return false
-//                        (support.component as? JTree)?.repaint()
+                        for (rootId in rootIds) {
+                            val draggedTreeNode = getTreeNodeById(rootId)
+                            val draggedTracePointNode =
+                                (draggedTreeNode?.userObject as? TracePointService.TracePointNode) ?: continue
+
+                            // Skip if trying to drop inside itself or its descendant
+                            var ancestorTreeNode: DefaultMutableTreeNode? = dropTreeNode
+                            while (ancestorTreeNode != null && ancestorTreeNode != rootTreeNode) {
+                                val ancestorTracePoint = ancestorTreeNode.userObject as? TracePointService.TracePointNode
+                                if (ancestorTracePoint?.id == draggedTracePointNode.id) {
+                                    return false
+                                }
+                                ancestorTreeNode = ancestorTreeNode.parent as? DefaultMutableTreeNode
+                            }
+
+                            // Prevent dropping on the same node
+                            if (dropTracePointNode.id == draggedTracePointNode.id) return false
+                        }
                         return true
                     }
 
@@ -248,14 +250,18 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
 
 
                         val transferable = support.transferable
-                        val draggedIds = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
+                        val draggedIdsRaw = transferable.getTransferData(tracePointDataFlavor) as? Set<String> ?: return false
+                        // Only move selection roots (no selected ancestor); nested picks move with their parent.
+                        val draggedIds = TreeOps.selectionRoots(draggedIdsRaw) { id ->
+                            service.getTracePointNodeById(id)?.parentId
+                        }
 
                         val tree = support.component as? JTree ?: return false
 
                         try {
 //                            tree.repaint()
                             val parentsToExpand = mutableSetOf<String>()
-                            // For each dragged trace point, move if valid
+                            // For each dragged selection-root trace point, move if valid
                             for (tracePointId in draggedIds) {
                                 val draggedTreeNode = getTreeNodeById(tracePointId) ?: continue
                                 val draggedTracePointNode = (draggedTreeNode.userObject as? TracePointService.TracePointNode) ?: continue

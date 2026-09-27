@@ -78,6 +78,31 @@ object TreeOps {
         return removed
     }
 
+    /**
+     * Drag-and-drop: keep only selection roots — selected nodes with no selected ancestor.
+     * Moving a parent already moves its descendants; re-moving nested selections would flatten the tree.
+     */
+    fun selectionRoots(
+        selectedIds: Collection<String>,
+        parentIdOf: (String) -> String?,
+    ): List<String> {
+        val selected = selectedIds.toSet()
+        val roots = mutableListOf<String>()
+        for (id in selected) {
+            var parentId = parentIdOf(id)
+            var hasSelectedAncestor = false
+            while (parentId != null) {
+                if (selected.contains(parentId)) {
+                    hasSelectedAncestor = true
+                    break
+                }
+                parentId = parentIdOf(parentId)
+            }
+            if (!hasSelectedAncestor) roots.add(id)
+        }
+        return roots
+    }
+
     fun toggleToolbarFlag(flags: ToolbarFlags, key: ToolbarFlagKey): ToolbarFlags = when (key) {
         ToolbarFlagKey.HIGHLIGHTING -> flags.copy(highlightingEnabled = !flags.highlightingEnabled)
         ToolbarFlagKey.NAME_PROMPT -> flags.copy(namePromptEnabled = !flags.namePromptEnabled)
