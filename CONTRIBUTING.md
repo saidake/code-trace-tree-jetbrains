@@ -31,14 +31,16 @@ For release preparation branches:
 - Prefer this repository's commit style:
 
 ```text
-[Component] type: Short summary
+type: short summary
 ```
+
+The summary starts with a lowercase letter (do not capitalize the first word).
 
 **Examples**:
 
-- `[Global] feat: Reorder editor menu and add go-to-tree action`
-- `[TreeView] fix: Selection is lost after renaming a trace point`
-- `[README] docs: Add Preview section and update How to use`
+- `feat: reorder editor menu and add go-to-tree action`
+- `fix: selection is lost after renaming a trace point`
+- `docs: add Preview section and update How to use`
 
 Common types: `feat`, `fix`, `docs`/`doc`, `style`, `refactor`, `chore`, `ci`.
 
