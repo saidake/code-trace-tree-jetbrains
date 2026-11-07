@@ -1,3 +1,7 @@
+## v1.3.8
+
+- Optimize empty trace point tips: improve the empty-state hint to guide creating your first trace point
+
 ## v1.3.7
 
 - Rename profiles from the Profile dropdown (edit control next to delete)

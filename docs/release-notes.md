@@ -6,9 +6,7 @@
 
 # What's New
 
-* **Project Binding Optimization**: Improved project binding preference to use `.idea/code-trace-tree.project.id` when present (read-only), falling back to workspace matching against global XML by `<path>`.
-* **Empty-Tree Recover UI**: The "Import stored data" recovery UI now appears exclusively when another stored project contains trace points, and is automatically hidden after deletion or when nothing is importable.
-* **Agent Skill Integration**: Refined toolbar integration, version synchronization, and status checks for seamless coding agent collaboration.
+* **Empty trace point tips**: Improved the empty-state hint to guide you in creating your first trace point.
 
 ---
 
@@ -61,9 +59,11 @@ The agent loads global or project-local skills (including the installed `code-tr
 Use it in your agent chat:
 
 ```
+skill: code-trace-tree
 Help me generate some simple trace points related to the current topic.
 ```
 
 ```
+skill: code-trace-tree
 Add simple trace points along the call path of method `test`.
 ```
