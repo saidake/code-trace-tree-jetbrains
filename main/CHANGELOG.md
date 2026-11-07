@@ -1,3 +1,7 @@
+## v1.3.9
+
+- Transfer repository to pidifa (github.com/pidifa/code-trace-tree-jetbrains)
+
 ## v1.3.8
 
 - Optimize empty trace point tips: improve the empty-state hint to guide creating your first trace point

@@ -5,6 +5,10 @@
 </p>
 
 # What's New
+* **v1.3.9**: Repository transferred to pidifa (github.com/pidifa/code-trace-tree-jetbrains).
+
+---
+
 
 * **Empty trace point tips**: Improved the empty-state hint to guide you in creating your first trace point.
 
