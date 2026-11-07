@@ -55,6 +55,7 @@ import javax.swing.event.DocumentListener
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.JBSplitter
+import com.intellij.ui.components.JBLabel
 import com.pidifa.codetracetree.domain.enums.NodeListenerEventType
 import java.awt.Component
 import java.awt.Dimension
@@ -129,6 +130,23 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
             setAndLoadSplitterProportionKey("CodeTraceTree.DescriptionTreeSplitter")
         }
         private lateinit var treeScrollPane: JBScrollPane
+        /** Shown in place of the tree when the current profile has no trace points. */
+        private val emptyStatePanel: JComponent = JBPanel<JBPanel<*>>().apply {
+            layout = java.awt.BorderLayout()
+            val label = JBLabel(
+                "<html><body style='text-align:center;'>" +
+                        "<p style='margin:4px 0;'><strong>No trace points yet.</strong></p>" +
+                        "<p style='margin:4px 0; color: gray;'>" +
+                        "Place the caret on a line in the editor, right-click to open the context menu, and select " +
+                        "\"Create a Root Trace Point\" to create your first trace point." +
+                        "</p>" +
+                        "</body></html>"
+            ).apply {
+                horizontalAlignment = javax.swing.SwingConstants.CENTER
+                horizontalTextPosition = javax.swing.SwingConstants.CENTER
+            }
+            add(label, java.awt.BorderLayout.CENTER)
+        }
         /** When true, the tree is hidden and the description fills the content area. */
         private var descriptionMaximized = false
 
@@ -159,6 +177,8 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                         // Profile switch (and other full reloads) clear selection; refresh the
                         // description pane so it does not keep the previous profile's text.
                         updateDescriptionArea()
+                        // Show the empty-state placeholder when the profile has no trace points.
+                        applyContentLayout()
                     }
                 }
                 service.addNodeListener(NodeListenerEventType.PARTIAL_UPDATE) { nodes, restoreSelection ->
@@ -718,11 +738,11 @@ class MyToolWindowFactory : com.intellij.openapi.wm.ToolWindowFactory {
                 }
                 service.isDescriptionAreaOpened() -> {
                     contentSplitter.firstComponent = descriptionScrollPane
-                    contentSplitter.secondComponent = treeScrollPane
+                    contentSplitter.secondComponent = if (service.getTracePoints().isEmpty()) emptyStatePanel else treeScrollPane
                 }
                 else -> {
                     contentSplitter.firstComponent = null
-                    contentSplitter.secondComponent = treeScrollPane
+                    contentSplitter.secondComponent = if (service.getTracePoints().isEmpty()) emptyStatePanel else treeScrollPane
                 }
             }
             contentSplitter.revalidate()
