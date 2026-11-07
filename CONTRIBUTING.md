@@ -4,7 +4,7 @@ Welcome! This short guide explains how to contribute effectively to **Code Trace
 
 ## Submitting an issue
 
-- If you find a bug, please submit an issue to our GitHub [repository](https://github.com/saidake/code-trace-tree-jetbrains/issues).
+- If you find a bug, please submit an issue to our GitHub [repository](https://github.com/pidifa/code-trace-tree-jetbrains/issues).
 - Before submitting, search the issue tracker to see if your problem already exists. Existing issues may already have workarounds or ongoing fixes.
 - Include the plugin version, IDE version (e.g. IntelliJ IDEA 2025.1), OS, and enough detail to reproduce the problem (steps, screenshots, and logs help a lot).
 

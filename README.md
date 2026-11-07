@@ -1,9 +1,9 @@
 # Code Trace Tree
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saidake/code-trace-tree-jetbrains?sort=semver)](https://github.com/saidake/code-trace-tree-jetbrains/releases/latest)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saidake/code-trace-tree-jetbrains?sort=semver)](https://github.com/pidifa/code-trace-tree-jetbrains/releases/latest)
 [![Version](https://img.shields.io/jetbrains/plugin/v/33246.svg)](https://plugins.jetbrains.com/plugin/33246)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/33246.svg)](https://plugins.jetbrains.com/plugin/33246)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-![Build](https://github.com/saidake/code-trace-tree-jetbrains/actions/workflows/release.yml/badge.svg)
+![Build](https://github.com/pidifa/code-trace-tree-jetbrains/actions/workflows/release.yml/badge.svg)
 
 <img src="docs/assets/logo.png" width="100" alt="Code Trace Tree logo">
 
@@ -120,11 +120,6 @@
   version, the plugin shows a notification (once per skill version; <b>Dismiss</b> or
   opening the status page is remembered in global <code>settings.xml</code>).
 </p>
-<p>
-  ZIP and <code>npx skills</code> (including a project-local copy) remain on
-  <a href="https://github.com/saidake/code-trace-tree-skill">code-trace-tree-skill</a>
-  if you need them.
-</p>
 
 <h2>How to use the skill</h2>
 <p>Once the skill is installed, use it in your agent chat:</p>
@@ -147,7 +142,7 @@
 - JDK 21
 - Open the project root in IntelliJ IDEA and import as a Gradle project
 - Run the **Run Plugin** configuration (or `:main:runIde`) to launch a sandbox IDE
-- Shared agent skill: `https://github.com/saidake/code-trace-tree-skill` (copy in `skills/code-trace-tree/` for zip packaging)
+- Shared agent skill: `https://github.com/pidifa/code-trace-tree-skill` (copy in `skills/code-trace-tree/` for zip packaging)
 
 # Contributing
 

@@ -40,18 +40,16 @@ The skill lets the agent:
 
 Open the **Code Trace Tree** tool window and click **Agent Skill** on the toolbar (download icon):
 
-![Click Agent Skill on the Code Trace Tree toolbar](https://raw.githubusercontent.com/saidake/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-1.png)
+![Click Agent Skill on the Code Trace Tree toolbar](https://raw.githubusercontent.com/pidifa/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-1.png)
 
 * The status page shows the bundled skill version, whether **Python 3** is on `PATH`, and which agents already have the skill.
 * **Choose agents to install** — pick agents that do not have it yet.
 * **Install / Update** — copy the bundled `code-trace-tree` skill into each listed agent's global skills folder (for example `~/.cursor/skills/code-trace-tree`).
 * **Remove from installed agents** — delete those copies.
 
-![Agent Skill status page](https://raw.githubusercontent.com/saidake/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-2.png)
+![Agent Skill status page](https://raw.githubusercontent.com/pidifa/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-2.png)
 
 On first project open, if a detected agent is missing the skill or is behind the bundled version, the plugin shows a notification (once per skill version; **Dismiss** or opening the status page is remembered in global `settings.xml`).
-
-ZIP and `npx skills` (including a project-local copy) remain on [code-trace-tree-skill](https://github.com/saidake/code-trace-tree-skill) if you need them.
 
 ## How to use the skill
 

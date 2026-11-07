@@ -15,9 +15,9 @@
 - Require Python 3 on PATH before copying the skill to agents; the status page links to python.org
 - README: install the skill from the toolbar; ZIP and `npx` stay on the skill repo
 
-![Click Agent Skill on the Code Trace Tree toolbar](https://raw.githubusercontent.com/saidake/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-1.png)
+![Click Agent Skill on the Code Trace Tree toolbar](https://raw.githubusercontent.com/pidifa/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-1.png)
 
-![Agent Skill status page](https://raw.githubusercontent.com/saidake/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-2.png)
+![Agent Skill status page](https://raw.githubusercontent.com/pidifa/code-trace-tree-jetbrains/main/docs/assets/jetbrains-install-skill-2.png)
 
 ## v1.3.5
 
